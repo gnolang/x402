@@ -34,7 +34,7 @@ const facilitatorSyncTimeout = 10 * time.Second
 const readHeaderTimeout = 5 * time.Second
 
 func main() {
-	listen := flag.String("listen", ":8080", "HTTP listen address")
+	listen := flag.String("listen", ":8401", "HTTP listen address")
 	facilitator := flag.String("facilitator", "http://localhost:8402", "gno facilitator base URL")
 	network := flag.String("network", "gno:dev", "CAIP-2 network name, gno:<chain-id>")
 	payTo := flag.String("pay-to", "", "gno address paid for each request (required)")

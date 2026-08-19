@@ -53,7 +53,7 @@ carries them there, not in the body:
 ```json
 { "x402Version": 2,
   "error": "Payment required",
-  "resource": { "url": "http://localhost:8080/weather", "description": "Weather data",
+  "resource": { "url": "http://localhost:8401/weather", "description": "Weather data",
                 "mimeType": "application/json" },
   "accepts": [{
     "scheme": "exact", "network": "gno:dev", "asset": "ugnot", "amount": "250000",

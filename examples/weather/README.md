@@ -28,6 +28,25 @@ The middleware, the route matching, the 402 and the header encoding are all the 
 
 ## Run it
 
+From this directory, one command per terminal:
+
+```sh
+gnodev              # a local node (chain id "dev", RPC :26657)
+make facilitator    # the facilitator, on :8402
+make run            # the seller, on :8401
+make pay            # buy.mjs pays it
+```
+
+Every knob is a variable. Against a live testnet, point the three services at it and pay with
+your own funded key ([faucet.gno.land](https://faucet.gno.land) funds the public testnets):
+
+```sh
+make run NETWORK=gno:<chain-id> FACILITATOR=<facilitator URL> PAY_TO=g1...
+make pay RPC=<RPC URL> MNEMONIC="<funded mnemonic>"
+```
+
+## Run it yourself, piece by piece
+
 Three processes. The facilitator talks to the chain; the seller never does.
 
 **1. A gno node**, with its RPC reachable. Any node works — a local dev chain or a testnet.
@@ -36,13 +55,13 @@ Three processes. The facilitator talks to the chain; the seller never does.
 and exits rather than blame payers for an operator's mismatch.
 
 ```sh
-cd go && go run ./cmd/gnofacilitator -rpc <RPC URL> -chain-id <CHAIN ID> -listen :8402
+go run ./cmd/gnofacilitator -rpc <RPC URL> -chain-id <CHAIN ID> -listen :8402
 ```
 
 **3. The seller.** `-network` is `gno:` plus that same chain id.
 
 ```sh
-cd go && go run ./examples/weather \
+go run ./examples/weather \
   -pay-to g1u7y667z64x2h7vc6fmpcprgey4ck233jaww9zq \
   -network gno:<CHAIN ID> \
   -price 250000ugnot \
@@ -54,7 +73,7 @@ cd go && go run ./examples/weather \
 ## What you get
 
 ```sh
-curl -i http://localhost:8080/weather
+curl -i http://localhost:8401/weather
 ```
 
 `402`, with the terms in the `PAYMENT-REQUIRED` header as base64 JSON — that is where v2 puts them,
@@ -65,7 +84,7 @@ not in the body:
   "x402Version": 2,
   "error": "Payment required",
   "resource": {
-    "url": "http://localhost:8080/weather",
+    "url": "http://localhost:8401/weather",
     "description": "Weather data",
     "mimeType": "application/json"
   },
@@ -88,22 +107,21 @@ omitted.
 
 ## Paying it
 
-There is no Go client mechanism yet, so a Go buyer cannot pay this. The JS buyer the payment test
-drives can, and it is the same buyer either way:
+There is no Go client mechanism yet, so a Go buyer cannot pay this. `buy.mjs` in this directory
+can:
 
 ```sh
-make js                     # install and build the client mechanism
-X402_SELLER_URL=http://localhost:8080/weather X402_GNO_RPC=<RPC URL> node e2e/buyer.mjs
+X402_GNO_RPC=<RPC URL> node buy.mjs http://localhost:8401/weather
 ```
 
 It registers `ExactGnoScheme` with a stock `@x402/fetch` client — that one `register("gno:*", …)`
-call is the only gno-aware line — and signs with the well-known test1 mnemonic. **Fund that account
-first**, and point `X402_GNO_RPC` at the same node the facilitator uses: the buyer reads its account
+call is the only gno-aware line — and signs with the mnemonic in `X402_MNEMONIC`: a **funded**
+account on the chain the offer names ([faucet.gno.land](https://faucet.gno.land) funds the public
+testnets). Point `X402_GNO_RPC` at the same node the facilitator uses: the buyer reads its account
 sequence from the chain, so this leg needs a real node rather than the unreachable one a 402 tolerates.
 
-The paid loop is covered: `e2e` runs this exact configuration — the same middleware, the
-same `accepts[]` entry, the same 250000ugnot price, this same `buyer.mjs` — against an in-process
-node on every pull request, and asserts the seller's balance moved.
+The loop is covered: the e2e suite runs this seller configuration and this same `buy.mjs` against
+an in-process node on every pull request, and asserts the seller's balance moved.
 
 ## What happens when you pay
 

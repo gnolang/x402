@@ -42,10 +42,13 @@ const (
 func TestAStockClientPaysAGnoSeller(t *testing.T) {
 	buyer := buyerScript(t)
 
+	exampleBuyer := exampleBuyerScript(t)
+
 	params := testscript.Params{
 		Dir: "testdata",
 		Setup: func(env *testscript.Env) error {
 			env.Setenv("X402_BUYER", buyer)
+			env.Setenv("X402_EXAMPLE_BUYER", exampleBuyer)
 			return nil
 		},
 		Cmds: map[string]func(ts *testscript.TestScript, neg bool, args []string){
@@ -101,6 +104,22 @@ func buyerScript(t *testing.T) string {
 	if _, err := os.Stat(filepath.Join(wd, "..", "client", "dist", "client.mjs")); err != nil {
 		t.Skipf("the JS mechanism is not built (%v); run `make js`", err)
 	}
+	return buyer
+}
+
+// exampleBuyerScript is the buyer shipped with the weather example. The happy-path
+// scenario drives it instead of the harness buyer, so the file a reader lands on
+// first is the one CI proves — the example depends on nothing, and this test is
+// what may depend on the example.
+func exampleBuyerScript(t *testing.T) string {
+	t.Helper()
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+
+	buyer := filepath.Join(wd, "..", "examples", "weather", "buy.mjs")
+	_, err = os.Stat(buyer)
+	require.NoError(t, err, "the example buyer is committed, so this path is wrong")
 	return buyer
 }
 
