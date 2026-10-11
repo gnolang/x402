@@ -20,6 +20,7 @@ import (
 
 	"github.com/gnolang/gno/gno.land/pkg/gnoclient"
 	"github.com/gnolang/gno/gno.land/pkg/integration"
+	"github.com/gnolang/gno/gnovm/pkg/gnoenv"
 	rpcclient "github.com/gnolang/gno/tm2/pkg/bft/rpc/client"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/require"
@@ -53,9 +54,28 @@ func TestAStockClientPaysAGnoSeller(t *testing.T) {
 		},
 	}
 
+	writableGnoRoot(t)
 	// Wraps our Setup and merges our Cmds rather than replacing either.
 	require.NoError(t, integration.SetupGnolandTestscript(t, &params))
 	testscript.Run(t, params)
+}
+
+// writableGnoRoot points GNOROOT at a mirror of the gno module made of symlinks.
+// A node writes its peer address book under <GNOROOT>/config, and the module
+// cache GNOROOT otherwise resolves to is read-only.
+func writableGnoRoot(t *testing.T) {
+	t.Helper()
+
+	root, err := gnoenv.GuessRootDir()
+	require.NoError(t, err)
+	entries, err := os.ReadDir(root)
+	require.NoError(t, err)
+
+	mirror := t.TempDir()
+	for _, e := range entries {
+		require.NoError(t, os.Symlink(filepath.Join(root, e.Name()), filepath.Join(mirror, e.Name())))
+	}
+	t.Setenv("GNOROOT", mirror)
 }
 
 // buyerScript is the buyer this harness drives, a sibling of this file: the whole

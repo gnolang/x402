@@ -79,3 +79,20 @@ func TestVerifyStaticAcceptsJSSignedPayment(t *testing.T) {
 	assert.NotEmpty(t, tx.Signatures[0].Signature, "signature absent")
 	assert.NotNil(t, tx.Signatures[0].PubKey, "public key absent, so no account can verify the signature")
 }
+
+// TestVerifyAccountChecksAcceptsJSSignedPayment checks the JS SDK's signature
+// against the account it was signed for (number 0, sequence 0, no stored key).
+// The SDK signs the fee as gas_wanted/gas_fee, a rendering the chain still
+// accepts, so refusing it would refuse every payment such a buyer makes.
+func TestVerifyAccountChecksAcceptsJSSignedPayment(t *testing.T) {
+	tx, _, reason := VerifyStatic(interopRequirements(), interopPayload(t))
+	require.Empty(t, reason)
+
+	t.Run("at the signed sequence", func(t *testing.T) {
+		assert.Empty(t, accountReason(t, tx, &fakeNode{account: accountWithKey(nil, 0, 0)}))
+	})
+
+	t.Run("one sequence later is reported stale", func(t *testing.T) {
+		assert.Equal(t, ReasonSequenceMismatch, accountReason(t, tx, &fakeNode{account: accountWithKey(nil, 0, 1)}))
+	})
+}

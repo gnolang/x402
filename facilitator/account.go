@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"github.com/gnolang/gno/tm2/pkg/crypto"
-	"github.com/gnolang/gno/tm2/pkg/sdk/auth"
 	"github.com/gnolang/gno/tm2/pkg/std"
 )
 
@@ -13,7 +12,7 @@ import (
 // against.
 //
 // It carries the account itself rather than a copy of the fields a sign doc needs,
-// so the sign bytes come from upstream's own auth.GetSignBytes: which account
+// so the sign doc and the renderings that verify come from upstream: which account
 // fields enter the document is a decision the chain makes, and re-deriving it here
 // would be a drift channel on the one check where a silent accept is catastrophic.
 type SignerAccount struct {
@@ -101,25 +100,21 @@ func verifySignature(tx *std.Tx, acc SignerAccount, signer crypto.Address, chain
 	if key == nil {
 		return signatureUnverifiable
 	}
-	verifies := func(signBytes []byte, err error) bool {
-		if err != nil {
-			// A signing payload amino cannot produce is a payload no signature
-			// covers, so no sequence verifies.
-			return false
-		}
-		return key.VerifyBytes(signBytes, tx.Signatures[0].Signature)
+	// Upstream decides both what the sign doc covers (tx.SignDoc) and which
+	// renderings of it verify (std.VerifySignaturePayload, the rule the ante
+	// applies), so neither can drift from the chain.
+	verifies := func(sequence uint64) bool {
+		doc := tx.SignDoc(chainID, acc.number(), sequence)
+		rendering, err := std.VerifySignaturePayload(key, doc, tx.Signatures[0].Signature)
+		// A sign doc amino cannot render is one no signature covers.
+		return err == nil && rendering != std.PayloadRenderingNone
 	}
-	// The fresh check is upstream's own: auth.GetSignBytes builds the document the
-	// ante verifies against, from the same account, so the two cannot disagree
-	// about which fields it covers. (The genesis flag is false — a facilitator
-	// serves a running chain, and the genesis document is tx.GetSignBytes at
-	// account 0, sequence 0.)
-	if verifies(auth.GetSignBytes(chainID, *tx, acc.Account, false)) {
+	if verifies(acc.sequence()) {
 		return signatureFresh
 	}
 	// The staleness probe has no upstream equivalent, because no account holds the
-	// previous sequence: it is asked explicitly, at the level below.
-	if seq := acc.sequence(); seq > 0 && verifies(tx.GetSignBytes(chainID, acc.number(), seq-1)) {
+	// previous sequence.
+	if seq := acc.sequence(); seq > 0 && verifies(seq-1) {
 		return signatureConsumed
 	}
 	return signatureUnverifiable
