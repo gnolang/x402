@@ -16,6 +16,7 @@ import (
 	nethttpmw "github.com/x402-foundation/x402/go/v2/http/nethttp"
 
 	"github.com/gnoverse/x402/facilitator"
+	facilitatorexact "github.com/gnoverse/x402/facilitator/exact"
 	gnoexact "github.com/gnoverse/x402/server/exact"
 )
 
@@ -24,7 +25,7 @@ import (
 // a method called here means the middleware went somewhere it should not.
 type keylessNode struct{}
 
-func (keylessNode) SignerAccount(context.Context, *std.Tx) (facilitator.SignerAccount, error) {
+func (keylessNode) SignerAccount(context.Context, *std.Tx) (facilitatorexact.SignerAccount, error) {
 	panic("an unpaid request must be answered without reading an account")
 }
 
@@ -32,7 +33,7 @@ func (keylessNode) Simulate(*std.Tx) error {
 	panic("an unpaid request must be answered without simulating")
 }
 
-func (keylessNode) Broadcast(*std.Tx) (string, int64, error) {
+func (keylessNode) Broadcast(*std.Tx) (string, error) {
 	panic("an unpaid request must be answered without broadcasting")
 }
 

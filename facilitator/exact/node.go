@@ -1,4 +1,4 @@
-package facilitator
+package exact
 
 import (
 	"context"
@@ -115,15 +115,15 @@ func (n *GnoclientNode) NodeChainID(ctx context.Context) (string, error) {
 // chain's own abci.Error makes it a verdict on the transaction, and chainRefused
 // reads that off the type.
 //
-// A result travels with it when there is one. Upstream answers the CheckTx and
-// DeliverTx paths with both, and a delivery the chain committed and then aborted
-// charged the payer its fee — so that transaction's hash is a real record, and
-// the only one an operator can reconcile the charge against. A transport failure
-// carries no result and leaves nothing to report.
-func (n *GnoclientNode) Broadcast(tx *std.Tx) (string, int64, error) {
+// A hash travels with it when there is a result. Upstream answers the CheckTx
+// and DeliverTx paths with one, and a delivery the chain committed and then
+// aborted charged the payer its fee — so that transaction's hash is a real
+// record, and the only one an operator can reconcile the charge against. A
+// transport failure carries no result and leaves nothing to report.
+func (n *GnoclientNode) Broadcast(tx *std.Tx) (string, error) {
 	res, err := n.cli.BroadcastTxCommit(tx)
 	if res == nil {
-		return "", 0, err
+		return "", err
 	}
-	return hex.EncodeToString(res.Hash), res.Height, err
+	return hex.EncodeToString(res.Hash), err
 }

@@ -1,4 +1,4 @@
-package facilitator
+package exact
 
 import (
 	"encoding/base64"
@@ -7,6 +7,7 @@ import (
 	"github.com/gnolang/gno/tm2/pkg/crypto/multisig"
 	"github.com/gnolang/gno/tm2/pkg/sdk/bank"
 	"github.com/gnolang/gno/tm2/pkg/std"
+	"github.com/x402-foundation/x402/go/v2/types"
 )
 
 // Scheme-level invalid-reason codes, reported when the gno exact scheme's own
@@ -76,9 +77,10 @@ const (
 	ReasonUnexpectedSettleError = "unexpected_settle_error"
 )
 
-// VerifyStatic checks every spec rule decidable without chain state and
-// returns the decoded tx and the payer (bech32 master address funds move
-// from) on success, or a non-empty invalidReason code on failure.
+// VerifyStatic checks every spec rule decidable without chain state against
+// transaction, the base64 signed std.Tx a payload carries, and returns the
+// decoded tx and the payer (bech32 master address funds move from) on success,
+// or a non-empty invalidReason code on failure.
 //
 // Session scope, spend limit and balance are checked by simulating against a
 // node. Neither this function nor simulation decides the signature or the
@@ -86,8 +88,8 @@ const (
 // verification under simulate. Both are verified against the signer's on-chain
 // account — verifyAccountChecks, run on the transaction this function returns and
 // ahead of any simulation — and CheckTx verifies them once more at settle.
-func VerifyStatic(req PaymentRequirements, payload SchemePayload) (tx *std.Tx, payer, reason string) {
-	raw, err := base64.StdEncoding.DecodeString(payload.Transaction)
+func VerifyStatic(req types.PaymentRequirements, transaction string) (tx *std.Tx, payer, reason string) {
+	raw, err := base64.StdEncoding.DecodeString(transaction)
 	if err != nil {
 		return nil, "", ReasonMalformedTransaction
 	}
@@ -124,11 +126,11 @@ func VerifyStatic(req PaymentRequirements, payload SchemePayload) (tx *std.Tx, p
 	if err != nil || len(want) != 1 || len(send.Amount) != 1 || send.Amount[0] != want[0] {
 		return nil, "", ReasonAmountMismatch
 	}
-	memo, err := req.Memo()
+	bound, err := memo(req.Extra)
 	if err != nil {
 		return nil, "", ReasonInvalidRequirements
 	}
-	if memo != "" && decoded.Memo != memo {
+	if bound != "" && decoded.Memo != bound {
 		return nil, "", ReasonMemoMismatch
 	}
 	return &decoded, send.FromAddress.String(), ""

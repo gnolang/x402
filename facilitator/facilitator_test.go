@@ -3,7 +3,6 @@ package facilitator
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -21,84 +20,35 @@ import (
 	"github.com/gnolang/gno/tm2/pkg/std"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	x402 "github.com/x402-foundation/x402/go/v2"
+	"github.com/x402-foundation/x402/go/v2/types"
+
+	"github.com/gnoverse/x402/facilitator/exact"
+	"github.com/gnoverse/x402/facilitator/exact/exacttest"
 )
 
-type fakeNode struct {
-	simulateErr  error
-	broadcastErr error
-	hash         string
-	height       int64
-	simulates    int
-	broadcasts   int
-	account      SignerAccount
-	accountErr   error
-	onAccount    func() // runs during the account read, when set
+// requestBody is the body a seller posts to /verify and /settle.
+type requestBody struct {
+	X402Version         int                       `json:"x402Version,omitempty"`
+	PaymentPayload      types.PaymentPayload      `json:"paymentPayload"`
+	PaymentRequirements types.PaymentRequirements `json:"paymentRequirements"`
 }
 
-func (n *fakeNode) SignerAccount(context.Context, *std.Tx) (SignerAccount, error) {
-	if n.onAccount != nil {
-		n.onAccount()
-	}
-	return n.account, n.accountErr
-}
-
-func (n *fakeNode) Simulate(tx *std.Tx) error {
-	n.simulates++
-	return n.simulateErr
-}
-
-func (n *fakeNode) Broadcast(tx *std.Tx) (string, int64, error) {
-	n.broadcasts++
-	return n.hash, n.height, n.broadcastErr
-}
-
-// signedFixture is the payment reqFixture prices, signed for real against the
-// sign-doc inputs gno's auth ante would use, encoded the way a payload carries
-// it, together with the on-chain account its signature verifies against.
-// mutate, when non-nil, alters the transaction after it is signed.
-//
-// A request that must reach simulation needs this rather than txFixture: the
-// facilitator verifies the signature against the signer's account, which
-// txFixture's placeholder bytes cannot satisfy. The payer stays txFixture's
-// address, since the account a payment is checked against is whichever one the
-// node answers with.
-func signedFixture(t *testing.T, mutate func(*std.Tx)) (txB64 string, account SignerAccount) {
+func facilitatorRequestBody(t *testing.T, req types.PaymentRequirements, txB64 string) []byte {
 	t.Helper()
-	const (
-		number   = 7
-		sequence = 3
-	)
-	key := masterKey(t)
-	tx := signedPayment{
-		key:      key,
-		chainID:  accountChainID,
-		number:   number,
-		sequence: sequence,
-		from:     crypto.MustAddressFromString("g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5"),
-	}.tx(t)
-	if mutate != nil {
-		mutate(tx)
-	}
-	raw, err := amino.Marshal(*tx)
-	require.NoError(t, err)
-	return base64.StdEncoding.EncodeToString(raw), accountAt(key, number, sequence)
-}
-
-func facilitatorRequestBody(t *testing.T, req PaymentRequirements, txB64 string) []byte {
-	t.Helper()
-	body, err := json.Marshal(Request{
+	body, err := json.Marshal(requestBody{
 		PaymentRequirements: req,
-		PaymentPayload: PaymentPayload{
+		PaymentPayload: types.PaymentPayload{
 			X402Version: 2,
 			Accepted:    req,
-			Payload:     SchemePayload{Transaction: txB64},
+			Payload:     transactionPayload(txB64),
 		},
 	})
 	require.NoError(t, err)
 	return body
 }
 
-func facilitatorRequest(t *testing.T, handler http.Handler, path string, req PaymentRequirements, txB64 string) *httptest.ResponseRecorder {
+func facilitatorRequest(t *testing.T, handler http.Handler, path string, req types.PaymentRequirements, txB64 string) *httptest.ResponseRecorder {
 	t.Helper()
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, path, bytes.NewReader(facilitatorRequestBody(t, req, txB64))))
@@ -115,45 +65,45 @@ func postFacilitatorBody(t *testing.T, handler http.Handler, path, body string) 
 }
 
 func TestFacilitator_VerifyValid(t *testing.T) {
-	txB64, account := signedFixture(t, nil)
-	h := New(&fakeNode{account: account}, "dev").Handler()
-	rec := facilitatorRequest(t, h, "/verify", reqFixture(), txB64)
+	txB64, account := exacttest.SignedTx(t, nil)
+	h := New(&exacttest.Node{Account: account}, "dev").Handler()
+	rec := facilitatorRequest(t, h, "/verify", exacttest.Requirements(), txB64)
 	require.Equal(t, http.StatusOK, rec.Code)
-	var resp VerifyResponse
+	var resp x402.VerifyResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.True(t, resp.IsValid)
 	assert.Equal(t, "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5", resp.Payer)
 }
 
 func TestFacilitator_VerifyWrongNetwork(t *testing.T) {
-	h := New(&fakeNode{}, "other-chain").Handler()
-	rec := facilitatorRequest(t, h, "/verify", reqFixture(), txFixture(t, nil)) // req says gno:dev
+	h := New(&exacttest.Node{}, "other-chain").Handler()
+	rec := facilitatorRequest(t, h, "/verify", exacttest.Requirements(), exacttest.PlaceholderTx(t, nil)) // req says gno:dev
 	require.Equal(t, http.StatusOK, rec.Code)
-	var resp VerifyResponse
+	var resp x402.VerifyResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.False(t, resp.IsValid)
-	assert.Equal(t, ReasonInvalidNetwork, resp.InvalidReason)
+	assert.Equal(t, exact.ReasonInvalidNetwork, resp.InvalidReason)
 }
 
 // TestFacilitator_VerifySimulationFailure covers a chain that answered and
 // refused. The node reports every refusal it decides as an ABCI error, which is
 // what tells a refusal apart from a query that never reached it.
 func TestFacilitator_VerifySimulationFailure(t *testing.T) {
-	txB64, account := signedFixture(t, nil)
-	h := New(&fakeNode{account: account, simulateErr: std.ErrSessionExpired("session expired")}, "dev").Handler()
-	rec := facilitatorRequest(t, h, "/verify", reqFixture(), txB64)
+	txB64, account := exacttest.SignedTx(t, nil)
+	h := New(&exacttest.Node{Account: account, SimulateErr: std.ErrSessionExpired("session expired")}, "dev").Handler()
+	rec := facilitatorRequest(t, h, "/verify", exacttest.Requirements(), txB64)
 	require.Equal(t, http.StatusOK, rec.Code)
-	var resp VerifyResponse
+	var resp x402.VerifyResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.False(t, resp.IsValid)
-	assert.Equal(t, ReasonSimulationFailed, resp.InvalidReason)
+	assert.Equal(t, exact.ReasonSimulationFailed, resp.InvalidReason)
 }
 
 func TestFacilitator_VerifyLogsValidPayment(t *testing.T) {
 	logs := captureLogs(t)
-	txB64, account := signedFixture(t, nil)
-	h := New(&fakeNode{account: account}, "dev").Handler()
-	facilitatorRequest(t, h, "/verify", reqFixture(), txB64)
+	txB64, account := exacttest.SignedTx(t, nil)
+	h := New(&exacttest.Node{Account: account}, "dev").Handler()
+	facilitatorRequest(t, h, "/verify", exacttest.Requirements(), txB64)
 
 	record := logRecord(t, logs, "x402 verify: payment valid")
 	assert.Equal(t, "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5", record["payer"])
@@ -162,22 +112,22 @@ func TestFacilitator_VerifyLogsValidPayment(t *testing.T) {
 func TestFacilitator_VerifyLogsInvalidPayment(t *testing.T) {
 	t.Run("static rejection has no known payer", func(t *testing.T) {
 		logs := captureLogs(t)
-		h := New(&fakeNode{}, "dev").Handler()
-		facilitatorRequest(t, h, "/verify", reqFixture(), "AAAA")
+		h := New(&exacttest.Node{}, "dev").Handler()
+		facilitatorRequest(t, h, "/verify", exacttest.Requirements(), "AAAA")
 
 		record := logRecord(t, logs, "x402 verify: payment invalid")
-		assert.Equal(t, ReasonMalformedTransaction, record["reason"])
+		assert.Equal(t, exact.ReasonMalformedTransaction, record["reason"])
 		assert.NotContains(t, record, "payer")
 	})
 
 	t.Run("simulation rejection names the payer and the chain error", func(t *testing.T) {
 		logs := captureLogs(t)
-		txB64, account := signedFixture(t, nil)
-		h := New(&fakeNode{account: account, simulateErr: std.ErrSessionExpired("session expired")}, "dev").Handler()
-		facilitatorRequest(t, h, "/verify", reqFixture(), txB64)
+		txB64, account := exacttest.SignedTx(t, nil)
+		h := New(&exacttest.Node{Account: account, SimulateErr: std.ErrSessionExpired("session expired")}, "dev").Handler()
+		facilitatorRequest(t, h, "/verify", exacttest.Requirements(), txB64)
 
 		record := logRecord(t, logs, "x402 verify: payment invalid")
-		assert.Equal(t, ReasonSimulationFailed, record["reason"])
+		assert.Equal(t, exact.ReasonSimulationFailed, record["reason"])
 		assert.Equal(t, "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5", record["payer"])
 		assert.Contains(t, record["err"], "session expired")
 		assert.NotContains(t, logs.String(), "simulation rejected", "one rejection is one log record")
@@ -187,23 +137,23 @@ func TestFacilitator_VerifyLogsInvalidPayment(t *testing.T) {
 func TestFacilitator_SettleLogsInvalidPaymentUnderTheSettlePhase(t *testing.T) {
 	t.Run("static rejection", func(t *testing.T) {
 		logs := captureLogs(t)
-		h := New(&fakeNode{}, "dev").Handler()
-		facilitatorRequest(t, h, "/settle", reqFixture(), "AAAA")
+		h := New(&exacttest.Node{}, "dev").Handler()
+		facilitatorRequest(t, h, "/settle", exacttest.Requirements(), "AAAA")
 
 		record := logRecord(t, logs, "x402 settle: payment invalid")
-		assert.Equal(t, ReasonMalformedTransaction, record["reason"])
+		assert.Equal(t, exact.ReasonMalformedTransaction, record["reason"])
 		assert.NotContains(t, record, "payer")
 		assert.NotContains(t, logs.String(), "x402 verify", "a settle must not narrate itself as a verify")
 	})
 
 	t.Run("simulation rejection", func(t *testing.T) {
 		logs := captureLogs(t)
-		txB64, account := signedFixture(t, nil)
-		h := New(&fakeNode{account: account, simulateErr: std.ErrInsufficientFunds("insufficient funds")}, "dev").Handler()
-		facilitatorRequest(t, h, "/settle", reqFixture(), txB64)
+		txB64, account := exacttest.SignedTx(t, nil)
+		h := New(&exacttest.Node{Account: account, SimulateErr: std.ErrInsufficientFunds("insufficient funds")}, "dev").Handler()
+		facilitatorRequest(t, h, "/settle", exacttest.Requirements(), txB64)
 
 		record := logRecord(t, logs, "x402 settle: payment invalid")
-		assert.Equal(t, ReasonSimulationFailed, record["reason"])
+		assert.Equal(t, exact.ReasonSimulationFailed, record["reason"])
 		assert.Equal(t, "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5", record["payer"])
 		assert.Contains(t, record["err"], "insufficient funds")
 		assert.NotContains(t, logs.String(), "x402 verify", "a settle must not narrate itself as a verify")
@@ -211,45 +161,45 @@ func TestFacilitator_SettleLogsInvalidPaymentUnderTheSettlePhase(t *testing.T) {
 }
 
 func TestFacilitator_SettleBroadcasts(t *testing.T) {
-	txB64, account := signedFixture(t, nil)
-	node := &fakeNode{hash: "abc123", height: 42, account: account}
+	txB64, account := exacttest.SignedTx(t, nil)
+	node := &exacttest.Node{Hash: "abc123", Account: account}
 	h := New(node, "dev").Handler()
-	rec := facilitatorRequest(t, h, "/settle", reqFixture(), txB64)
+	rec := facilitatorRequest(t, h, "/settle", exacttest.Requirements(), txB64)
 	require.Equal(t, http.StatusOK, rec.Code)
-	var resp SettleResponse
+	var resp x402.SettleResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.True(t, resp.Success)
 	assert.Equal(t, "abc123", resp.Transaction)
-	assert.Equal(t, "gno:dev", resp.Network)
-	assert.Equal(t, 1, node.broadcasts)
+	assert.Equal(t, x402.Network("gno:dev"), resp.Network)
+	assert.Equal(t, 1, node.Broadcasts)
 }
 
 func TestFacilitator_SettleRejectsInvalidWithoutBroadcast(t *testing.T) {
-	node := &fakeNode{}
+	node := &exacttest.Node{}
 	h := New(node, "dev").Handler()
-	rec := facilitatorRequest(t, h, "/settle", reqFixture(), "AAAA")
-	var resp SettleResponse
+	rec := facilitatorRequest(t, h, "/settle", exacttest.Requirements(), "AAAA")
+	var resp x402.SettleResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.False(t, resp.Success)
-	assert.Equal(t, ReasonMalformedTransaction, resp.ErrorReason)
-	assert.Equal(t, 0, node.broadcasts)
+	assert.Equal(t, exact.ReasonMalformedTransaction, resp.ErrorReason)
+	assert.Equal(t, 0, node.Broadcasts)
 }
 
 // TestFacilitator_SettleBroadcastFailure covers a broadcast the chain itself
 // refused. The node reports every refusal it decides as an ABCI error, and only
 // that makes the failed payment a verdict this endpoint may publish.
 func TestFacilitator_SettleBroadcastFailure(t *testing.T) {
-	txB64, account := signedFixture(t, nil)
-	node := &fakeNode{broadcastErr: std.ErrSessionExpired("session expired"), account: account}
+	txB64, account := exacttest.SignedTx(t, nil)
+	node := &exacttest.Node{BroadcastErr: std.ErrSessionExpired("session expired"), Account: account}
 	h := New(node, "dev").Handler()
-	rec := facilitatorRequest(t, h, "/settle", reqFixture(), txB64)
+	rec := facilitatorRequest(t, h, "/settle", exacttest.Requirements(), txB64)
 	require.Equal(t, http.StatusOK, rec.Code)
-	var resp SettleResponse
+	var resp x402.SettleResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.False(t, resp.Success)
-	assert.Equal(t, ReasonBroadcastFailed, resp.ErrorReason)
+	assert.Equal(t, exact.ReasonBroadcastFailed, resp.ErrorReason)
 	assert.Equal(t, "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5", resp.Payer)
-	assert.Equal(t, 1, node.broadcasts)
+	assert.Equal(t, 1, node.Broadcasts)
 }
 
 // TestFacilitator_SettleBroadcastUnreachableReportsNoVerdict pins the answer for
@@ -263,14 +213,14 @@ func TestFacilitator_SettleBroadcastFailure(t *testing.T) {
 // while the payer's funds move anyway, and the seller discards the response the
 // payer paid for. 503 states what is actually known, and a client retries it.
 func TestFacilitator_SettleBroadcastUnreachableReportsNoVerdict(t *testing.T) {
-	txB64, account := signedFixture(t, nil)
-	node := &fakeNode{broadcastErr: errors.New("connection refused"), account: account}
+	txB64, account := exacttest.SignedTx(t, nil)
+	node := &exacttest.Node{BroadcastErr: errors.New("connection refused"), Account: account}
 	h := New(node, "dev").Handler()
 
-	rec := facilitatorRequest(t, h, "/settle", reqFixture(), txB64)
+	rec := facilitatorRequest(t, h, "/settle", exacttest.Requirements(), txB64)
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
-	assert.NotContains(t, rec.Body.String(), ReasonBroadcastFailed, "no reason code names an unknown outcome")
-	assert.Equal(t, 1, node.broadcasts)
+	assert.NotContains(t, rec.Body.String(), exact.ReasonBroadcastFailed, "no reason code names an unknown outcome")
+	assert.Equal(t, 1, node.Broadcasts)
 }
 
 // TestFacilitator_SettleLogsTheTxOfAnAbortedDelivery pins the operator's record
@@ -279,12 +229,12 @@ func TestFacilitator_SettleBroadcastUnreachableReportsNoVerdict(t *testing.T) {
 // though the wire answer carries an empty transaction.
 func TestFacilitator_SettleLogsTheTxOfAnAbortedDelivery(t *testing.T) {
 	logs := captureLogs(t)
-	txB64, account := signedFixture(t, nil)
-	node := &fakeNode{hash: "abc123", height: 42, broadcastErr: std.ErrSessionExpired("session expired"), account: account}
+	txB64, account := exacttest.SignedTx(t, nil)
+	node := &exacttest.Node{Hash: "abc123", BroadcastErr: std.ErrSessionExpired("session expired"), Account: account}
 	h := New(node, "dev").Handler()
 
-	rec := facilitatorRequest(t, h, "/settle", reqFixture(), txB64)
-	var resp SettleResponse
+	rec := facilitatorRequest(t, h, "/settle", exacttest.Requirements(), txB64)
+	var resp x402.SettleResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Empty(t, resp.Transaction, "the spec's failed settlement carries an empty transaction")
 
@@ -298,15 +248,15 @@ func TestFacilitator_SettleLogsTheTxOfAnAbortedDelivery(t *testing.T) {
 // a forged signature simulates cleanly and would otherwise be reported valid,
 // leaving a payer to discover at settle that the payment was never spendable.
 func TestFacilitator_VerifyRefusesATamperedSignature(t *testing.T) {
-	txB64, account := signedFixture(t, func(tx *std.Tx) { tx.Signatures[0].Signature[0] ^= 0xff })
-	h := New(&fakeNode{account: account}, "dev").Handler()
+	txB64, account := exacttest.SignedTx(t, func(tx *std.Tx) { tx.Signatures[0].Signature[0] ^= 0xff })
+	h := New(&exacttest.Node{Account: account}, "dev").Handler()
 
-	rec := facilitatorRequest(t, h, "/verify", reqFixture(), txB64)
+	rec := facilitatorRequest(t, h, "/verify", exacttest.Requirements(), txB64)
 	require.Equal(t, http.StatusOK, rec.Code)
-	var resp VerifyResponse
+	var resp x402.VerifyResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.False(t, resp.IsValid)
-	assert.Equal(t, ReasonSignatureInvalid, resp.InvalidReason)
+	assert.Equal(t, exact.ReasonSignatureInvalid, resp.InvalidReason)
 }
 
 // TestFacilitator_VerifyRefusesAPayloadAcceptingADifferentOffer pins that the
@@ -319,30 +269,30 @@ func TestFacilitator_VerifyRefusesATamperedSignature(t *testing.T) {
 // chain-id — so nothing mis-settles, but the facilitator would be asserting
 // agreement about an offer the payload contradicts.
 func TestFacilitator_VerifyRefusesAPayloadAcceptingADifferentOffer(t *testing.T) {
-	txB64, account := signedFixture(t, nil)
+	txB64, account := exacttest.SignedTx(t, nil)
 
-	for name, accepted := range map[string]PaymentRequirements{
-		"another scheme":  {Scheme: "upto", Network: "gno:dev", Amount: "250000", Asset: "ugnot", PayTo: reqFixture().PayTo},
-		"another network": {Scheme: "exact", Network: "eip155:8453", Amount: "250000", Asset: "ugnot", PayTo: reqFixture().PayTo},
+	for name, accepted := range map[string]types.PaymentRequirements{
+		"another scheme":  {Scheme: "upto", Network: "gno:dev", Amount: "250000", Asset: "ugnot", PayTo: exacttest.Requirements().PayTo},
+		"another network": {Scheme: "exact", Network: "eip155:8453", Amount: "250000", Asset: "ugnot", PayTo: exacttest.Requirements().PayTo},
 	} {
 		t.Run(name, func(t *testing.T) {
-			body, err := json.Marshal(Request{
-				PaymentRequirements: reqFixture(),
-				PaymentPayload: PaymentPayload{
+			body, err := json.Marshal(requestBody{
+				PaymentRequirements: exacttest.Requirements(),
+				PaymentPayload: types.PaymentPayload{
 					X402Version: 2,
 					Accepted:    accepted,
-					Payload:     SchemePayload{Transaction: txB64},
+					Payload:     transactionPayload(txB64),
 				},
 			})
 			require.NoError(t, err)
 
-			h := New(&fakeNode{account: account}, "dev").Handler()
+			h := New(&exacttest.Node{Account: account}, "dev").Handler()
 			rec := postFacilitatorBody(t, h, "/verify", string(body))
 			require.Equal(t, http.StatusOK, rec.Code)
-			var resp VerifyResponse
+			var resp x402.VerifyResponse
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.False(t, resp.IsValid)
-			assert.Equal(t, ReasonInvalidPayload, resp.InvalidReason)
+			assert.Equal(t, exact.ReasonInvalidPayload, resp.InvalidReason)
 		})
 	}
 }
@@ -353,15 +303,15 @@ func TestFacilitator_VerifyRefusesAPayloadAcceptingADifferentOffer(t *testing.T)
 // seller reading only the refusal would otherwise have no idea whose payment it
 // was.
 func TestFacilitator_SettleRefusalNamesThePayer(t *testing.T) {
-	txB64, account := signedFixture(t, func(tx *std.Tx) { tx.Signatures[0].Signature[0] ^= 0xff })
-	h := New(&fakeNode{account: account}, "dev").Handler()
+	txB64, account := exacttest.SignedTx(t, func(tx *std.Tx) { tx.Signatures[0].Signature[0] ^= 0xff })
+	h := New(&exacttest.Node{Account: account}, "dev").Handler()
 
-	rec := facilitatorRequest(t, h, "/settle", reqFixture(), txB64)
+	rec := facilitatorRequest(t, h, "/settle", exacttest.Requirements(), txB64)
 	require.Equal(t, http.StatusOK, rec.Code)
-	var resp SettleResponse
+	var resp x402.SettleResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.False(t, resp.Success)
-	assert.Equal(t, ReasonSignatureInvalid, resp.ErrorReason)
+	assert.Equal(t, exact.ReasonSignatureInvalid, resp.ErrorReason)
 	assert.Equal(t, "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5", resp.Payer)
 }
 
@@ -369,13 +319,13 @@ func TestFacilitator_SettleRefusalNamesThePayer(t *testing.T) {
 // payload refused before the transaction decoded establishes no payer, and
 // inventing one would name an address nothing verified.
 func TestFacilitator_SettleRefusalBeforeDecodingNamesNoPayer(t *testing.T) {
-	h := New(&fakeNode{}, "dev").Handler()
+	h := New(&exacttest.Node{}, "dev").Handler()
 
-	rec := facilitatorRequest(t, h, "/settle", reqFixture(), "AAAA")
-	var resp SettleResponse
+	rec := facilitatorRequest(t, h, "/settle", exacttest.Requirements(), "AAAA")
+	var resp x402.SettleResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.False(t, resp.Success)
-	assert.Equal(t, ReasonMalformedTransaction, resp.ErrorReason)
+	assert.Equal(t, exact.ReasonMalformedTransaction, resp.ErrorReason)
 	assert.Empty(t, resp.Payer)
 }
 
@@ -396,7 +346,7 @@ func TestFacilitator_VerifyRefusesAThresholdKeyWithoutVerifyingIt(t *testing.T) 
 	bits.SetIndex(0, true)
 	sig := amino.MustMarshal(&multisig.Multisignature{BitArray: bits})
 
-	txB64 := txFixture(t, func(tx *std.Tx) {
+	txB64 := exacttest.PlaceholderTx(t, func(tx *std.Tx) {
 		send := tx.Msgs[0].(bank.MsgSend)
 		// The signer is the address the crafted key derives, so the account read
 		// resolves to it and the signature's own key is the one adopted.
@@ -406,11 +356,11 @@ func TestFacilitator_VerifyRefusesAThresholdKeyWithoutVerifyingIt(t *testing.T) 
 	})
 	// An account that exists and has never signed: it stores no key, so the ante
 	// adopts the signature's.
-	h := New(&fakeNode{account: accountWithKey(nil, 7, 3)}, "dev").Handler()
+	h := New(&exacttest.Node{Account: exacttest.AccountWithKey(nil, 7, 3)}, "dev").Handler()
 
 	for _, path := range []string{"/verify", "/settle"} {
 		t.Run(path, func(t *testing.T) {
-			rec := facilitatorRequest(t, h, path, reqFixture(), txB64)
+			rec := facilitatorRequest(t, h, path, exacttest.Requirements(), txB64)
 			require.Equal(t, http.StatusOK, rec.Code)
 			var resp struct {
 				IsValid       bool   `json:"isValid"`
@@ -421,7 +371,7 @@ func TestFacilitator_VerifyRefusesAThresholdKeyWithoutVerifyingIt(t *testing.T) 
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.False(t, resp.IsValid)
 			assert.False(t, resp.Success)
-			assert.Equal(t, ReasonSignatureCount, resp.InvalidReason+resp.ErrorReason)
+			assert.Equal(t, exact.ReasonSignatureCount, resp.InvalidReason+resp.ErrorReason)
 		})
 	}
 }
@@ -431,16 +381,16 @@ func TestFacilitator_VerifyRefusesAThresholdKeyWithoutVerifyingIt(t *testing.T) 
 // signature valid over a sequence already consumed can only be a replay — and
 // simulate passes it, verifying no signature at all.
 func TestFacilitator_VerifyRefusesAReplayedPayment(t *testing.T) {
-	txB64, account := signedFixture(t, nil)
+	txB64, account := exacttest.SignedTx(t, nil)
 	// The chain consumed the sequence this payment signed over.
-	consumed := accountWithKey(account.pubKey(), account.number(), account.sequence()+1)
-	h := New(&fakeNode{account: consumed}, "dev").Handler()
+	consumed := exacttest.AccountWithKey(account.Account.GetPubKey(), account.Account.GetAccountNumber(), account.Account.GetSequence()+1)
+	h := New(&exacttest.Node{Account: consumed}, "dev").Handler()
 
-	rec := facilitatorRequest(t, h, "/verify", reqFixture(), txB64)
-	var resp VerifyResponse
+	rec := facilitatorRequest(t, h, "/verify", exacttest.Requirements(), txB64)
+	var resp x402.VerifyResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.False(t, resp.IsValid)
-	assert.Equal(t, ReasonSequenceMismatch, resp.InvalidReason)
+	assert.Equal(t, exact.ReasonSequenceMismatch, resp.InvalidReason)
 }
 
 // TestFacilitator_AccountRejectionCostsNoSimulation pins the order of the two
@@ -450,17 +400,17 @@ func TestFacilitator_VerifyRefusesAReplayedPayment(t *testing.T) {
 // satisfied by never simulating at all.
 func TestFacilitator_AccountRejectionCostsNoSimulation(t *testing.T) {
 	t.Run("a refused signature never reaches simulation", func(t *testing.T) {
-		txB64, account := signedFixture(t, func(tx *std.Tx) { tx.Signatures[0].Signature[0] ^= 0xff })
-		node := &fakeNode{account: account}
-		facilitatorRequest(t, New(node, "dev").Handler(), "/verify", reqFixture(), txB64)
-		assert.Zero(t, node.simulates)
+		txB64, account := exacttest.SignedTx(t, func(tx *std.Tx) { tx.Signatures[0].Signature[0] ^= 0xff })
+		node := &exacttest.Node{Account: account}
+		facilitatorRequest(t, New(node, "dev").Handler(), "/verify", exacttest.Requirements(), txB64)
+		assert.Zero(t, node.Simulates)
 	})
 
 	t.Run("an accepted signature reaches it", func(t *testing.T) {
-		txB64, account := signedFixture(t, nil)
-		node := &fakeNode{account: account}
-		facilitatorRequest(t, New(node, "dev").Handler(), "/verify", reqFixture(), txB64)
-		assert.Equal(t, 1, node.simulates)
+		txB64, account := exacttest.SignedTx(t, nil)
+		node := &exacttest.Node{Account: account}
+		facilitatorRequest(t, New(node, "dev").Handler(), "/verify", exacttest.Requirements(), txB64)
+		assert.Equal(t, 1, node.Simulates)
 	})
 }
 
@@ -477,25 +427,25 @@ func TestFacilitator_SettleRefusesWhatTheAccountRefuses(t *testing.T) {
 	}{
 		"tampered signature": {
 			mutate:     func(tx *std.Tx) { tx.Signatures[0].Signature[0] ^= 0xff },
-			wantReason: ReasonSignatureInvalid,
+			wantReason: exact.ReasonSignatureInvalid,
 		},
 		"consumed sequence": {
 			spent:      1,
-			wantReason: ReasonSequenceMismatch,
+			wantReason: exact.ReasonSequenceMismatch,
 		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			txB64, account := signedFixture(t, tc.mutate)
-			node := &fakeNode{account: accountWithKey(
-				account.pubKey(), account.number(), account.sequence()+tc.spent)}
-			rec := facilitatorRequest(t, New(node, "dev").Handler(), "/settle", reqFixture(), txB64)
+			txB64, account := exacttest.SignedTx(t, tc.mutate)
+			node := &exacttest.Node{Account: exacttest.AccountWithKey(
+				account.Account.GetPubKey(), account.Account.GetAccountNumber(), account.Account.GetSequence()+tc.spent)}
+			rec := facilitatorRequest(t, New(node, "dev").Handler(), "/settle", exacttest.Requirements(), txB64)
 
-			var resp SettleResponse
+			var resp x402.SettleResponse
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.False(t, resp.Success)
 			assert.Equal(t, tc.wantReason, resp.ErrorReason)
-			assert.Zero(t, node.broadcasts, "a payment CheckTx would reject must never be broadcast")
+			assert.Zero(t, node.Broadcasts, "a payment CheckTx would reject must never be broadcast")
 		})
 	}
 }
@@ -508,21 +458,21 @@ func TestFacilitator_SettleRefusesWhatTheAccountRefuses(t *testing.T) {
 // code, so the rejection carries the cause an operator needs to tell them apart.
 func TestFacilitator_AbsentAccountIsAPaymentVerdict(t *testing.T) {
 	logs := captureLogs(t)
-	txB64, account := signedFixture(t, nil)
-	node := &fakeNode{account: account, accountErr: std.ErrUnknownAddress("unknown address: g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5")}
-	rec := facilitatorRequest(t, New(node, "dev").Handler(), "/verify", reqFixture(), txB64)
+	txB64, account := exacttest.SignedTx(t, nil)
+	node := &exacttest.Node{Account: account, AccountErr: std.ErrUnknownAddress("unknown address: g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5")}
+	rec := facilitatorRequest(t, New(node, "dev").Handler(), "/verify", exacttest.Requirements(), txB64)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	var resp VerifyResponse
+	var resp x402.VerifyResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.False(t, resp.IsValid)
-	assert.Equal(t, ReasonSimulationFailed, resp.InvalidReason)
+	assert.Equal(t, exact.ReasonSimulationFailed, resp.InvalidReason)
 
 	record := logRecord(t, logs, "x402 verify: payment invalid")
-	assert.Equal(t, ReasonSimulationFailed, record["reason"])
+	assert.Equal(t, exact.ReasonSimulationFailed, record["reason"])
 	assert.Contains(t, record["err"], "unknown address")
 	assert.Equal(t, "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5", record["payer"])
-	assert.Zero(t, node.simulates, "an account the chain refuses is answered without simulating")
+	assert.Zero(t, node.Simulates, "an account the chain refuses is answered without simulating")
 }
 
 // TestFacilitator_UnreachableChainIsNotAPaymentVerdict pins that a facilitator
@@ -539,13 +489,13 @@ func TestFacilitator_UnreachableChainIsNotAPaymentVerdict(t *testing.T) {
 
 	t.Run("verify answers no verdict", func(t *testing.T) {
 		logs := captureLogs(t)
-		txB64, account := signedFixture(t, nil)
-		node := &fakeNode{account: account, accountErr: unreachable}
-		rec := facilitatorRequest(t, New(node, "dev").Handler(), "/verify", reqFixture(), txB64)
+		txB64, account := exacttest.SignedTx(t, nil)
+		node := &exacttest.Node{Account: account, AccountErr: unreachable}
+		rec := facilitatorRequest(t, New(node, "dev").Handler(), "/verify", exacttest.Requirements(), txB64)
 
 		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 		assert.NotContains(t, rec.Body.String(), "isValid", "a 503 carries no verdict to believe")
-		assert.Zero(t, node.simulates)
+		assert.Zero(t, node.Simulates)
 
 		record := logRecord(t, logs, "x402 verify: chain unreachable, reporting no verdict")
 		assert.Contains(t, record["err"], "connection refused")
@@ -554,12 +504,12 @@ func TestFacilitator_UnreachableChainIsNotAPaymentVerdict(t *testing.T) {
 
 	t.Run("settle answers the same and broadcasts nothing", func(t *testing.T) {
 		logs := captureLogs(t)
-		txB64, account := signedFixture(t, nil)
-		node := &fakeNode{account: account, accountErr: unreachable}
-		rec := facilitatorRequest(t, New(node, "dev").Handler(), "/settle", reqFixture(), txB64)
+		txB64, account := exacttest.SignedTx(t, nil)
+		node := &exacttest.Node{Account: account, AccountErr: unreachable}
+		rec := facilitatorRequest(t, New(node, "dev").Handler(), "/settle", exacttest.Requirements(), txB64)
 
 		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
-		assert.Zero(t, node.broadcasts, "a payment the facilitator could not check must not be broadcast")
+		assert.Zero(t, node.Broadcasts, "a payment the facilitator could not check must not be broadcast")
 		logRecord(t, logs, "x402 settle: chain unreachable, reporting no verdict")
 	})
 }
@@ -569,41 +519,42 @@ func TestFacilitator_UnreachableChainIsNotAPaymentVerdict(t *testing.T) {
 // query that never reached the node through one error return, and only the first
 // says anything about the payment.
 func TestFacilitator_UnreachableChainAtSimulationIsNotAPaymentVerdict(t *testing.T) {
-	txB64, account := signedFixture(t, nil)
-	node := &fakeNode{account: account, simulateErr: errors.New("unable to perform ABCI query: connection refused")}
-	rec := facilitatorRequest(t, New(node, "dev").Handler(), "/settle", reqFixture(), txB64)
+	txB64, account := exacttest.SignedTx(t, nil)
+	node := &exacttest.Node{Account: account, SimulateErr: errors.New("unable to perform ABCI query: connection refused")}
+	rec := facilitatorRequest(t, New(node, "dev").Handler(), "/settle", exacttest.Requirements(), txB64)
 
 	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
-	assert.Equal(t, 1, node.simulates)
-	assert.Zero(t, node.broadcasts, "a simulation that never reached the node refuses nothing")
+	assert.Equal(t, 1, node.Simulates)
+	assert.Zero(t, node.Broadcasts, "a simulation that never reached the node refuses nothing")
 }
 
-// TestFacilitator_Supported pins all three required keys. extensions and
-// signers are answered as empty rather than omitted: this facilitator is
-// keyless, and "no signers" is a property worth stating.
+// TestFacilitator_Supported pins all three required keys. extensions is
+// answered as empty rather than omitted, and signers names gno's family with no
+// address: the engine lists every registered family, and this facilitator is
+// keyless.
 func TestFacilitator_Supported(t *testing.T) {
-	h := New(&fakeNode{}, "topaz-1").Handler()
+	h := New(&exacttest.Node{}, "topaz-1").Handler()
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/supported", nil))
 	require.Equal(t, http.StatusOK, rec.Code)
 
-	var resp SupportedResponse
+	var resp x402.SupportedResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Len(t, resp.Kinds, 1)
-	assert.Equal(t, SupportedKind{X402Version: 2, Scheme: "exact", Network: "gno:topaz-1"}, resp.Kinds[0])
+	assert.Equal(t, x402.SupportedKind{X402Version: 2, Scheme: "exact", Network: "gno:topaz-1"}, resp.Kinds[0])
 	assert.NotNil(t, resp.Extensions, "extensions is required, and empty is not absent")
 	assert.Empty(t, resp.Extensions)
-	assert.NotNil(t, resp.Signers, "signers is required, and a keyless facilitator publishes none")
-	assert.Empty(t, resp.Signers)
+	assert.Equal(t, map[string][]string{"gno:*": {}}, resp.Signers,
+		"signers is required, and a keyless facilitator publishes no address")
 
-	for _, field := range []string{`"kinds"`, `"extensions":[]`, `"signers":{}`} {
+	for _, field := range []string{`"kinds"`, `"extensions":[]`, `"signers":{"gno:*":[]}`} {
 		assert.Contains(t, rec.Body.String(), field)
 	}
 }
 
 // postFacilitatorRequest settles an arbitrary request body, for the cases the
 // facilitatorRequest helper's well-formed shape cannot express.
-func postFacilitatorRequest(t *testing.T, handler http.Handler, path string, fr Request) *httptest.ResponseRecorder {
+func postFacilitatorRequest(t *testing.T, handler http.Handler, path string, fr requestBody) *httptest.ResponseRecorder {
 	t.Helper()
 	body, err := json.Marshal(fr)
 	require.NoError(t, err)
@@ -618,23 +569,23 @@ func postFacilitatorRequest(t *testing.T, handler http.Handler, path string, fr 
 func TestFacilitator_RejectsUnsupportedVersion(t *testing.T) {
 	for _, version := range []int{0, 1, 3, 99} {
 		t.Run(strconv.Itoa(version), func(t *testing.T) {
-			node := &fakeNode{}
+			node := &exacttest.Node{}
 			h := New(node, "dev").Handler()
-			req := reqFixture()
-			rec := postFacilitatorRequest(t, h, "/settle", Request{
-				PaymentPayload: PaymentPayload{
+			req := exacttest.Requirements()
+			rec := postFacilitatorRequest(t, h, "/settle", requestBody{
+				PaymentPayload: types.PaymentPayload{
 					X402Version: version,
 					Accepted:    req,
-					Payload:     SchemePayload{Transaction: txFixture(t, nil)},
+					Payload:     transactionPayload(exacttest.PlaceholderTx(t, nil)),
 				},
 				PaymentRequirements: req,
 			})
 
-			var resp SettleResponse
+			var resp x402.SettleResponse
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.False(t, resp.Success)
-			assert.Equal(t, ReasonInvalidVersion, resp.ErrorReason)
-			assert.Zero(t, node.broadcasts, "an unsupported version must never settle")
+			assert.Equal(t, exact.ReasonInvalidVersion, resp.ErrorReason)
+			assert.Zero(t, node.Broadcasts, "an unsupported version must never settle")
 		})
 	}
 }
@@ -643,19 +594,19 @@ func TestFacilitator_RejectsUnsupportedVersion(t *testing.T) {
 // version is enforced: a client that sets the payload version and omits the
 // request's own must not be rejected for it.
 func TestFacilitator_IgnoresAbsentTopLevelVersion(t *testing.T) {
-	txB64, account := signedFixture(t, nil)
-	h := New(&fakeNode{account: account}, "dev").Handler()
-	req := reqFixture()
-	rec := postFacilitatorRequest(t, h, "/verify", Request{
-		PaymentPayload: PaymentPayload{
+	txB64, account := exacttest.SignedTx(t, nil)
+	h := New(&exacttest.Node{Account: account}, "dev").Handler()
+	req := exacttest.Requirements()
+	rec := postFacilitatorRequest(t, h, "/verify", requestBody{
+		PaymentPayload: types.PaymentPayload{
 			X402Version: 2,
 			Accepted:    req,
-			Payload:     SchemePayload{Transaction: txB64},
+			Payload:     transactionPayload(txB64),
 		},
 		PaymentRequirements: req,
 	})
 
-	var resp VerifyResponse
+	var resp x402.VerifyResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.True(t, resp.IsValid, "reason=%q", resp.InvalidReason)
 }
@@ -665,17 +616,17 @@ func TestFacilitator_IgnoresAbsentTopLevelVersion(t *testing.T) {
 func TestFacilitator_RejectsUnsupportedScheme(t *testing.T) {
 	for _, scheme := range []string{"upto", "", "EXACT", "permit"} {
 		t.Run(scheme, func(t *testing.T) {
-			node := &fakeNode{}
+			node := &exacttest.Node{}
 			h := New(node, "dev").Handler()
-			req := reqFixture()
+			req := exacttest.Requirements()
 			req.Scheme = scheme
-			rec := facilitatorRequest(t, h, "/settle", req, txFixture(t, nil))
+			rec := facilitatorRequest(t, h, "/settle", req, exacttest.PlaceholderTx(t, nil))
 
-			var resp SettleResponse
+			var resp x402.SettleResponse
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.False(t, resp.Success)
-			assert.Equal(t, ReasonUnsupportedScheme, resp.ErrorReason)
-			assert.Zero(t, node.broadcasts, "an unsupported scheme must never settle")
+			assert.Equal(t, exact.ReasonUnsupportedScheme, resp.ErrorReason)
+			assert.Zero(t, node.Broadcasts, "an unsupported scheme must never settle")
 		})
 	}
 }
@@ -686,34 +637,34 @@ func TestFacilitator_RejectsUnsupportedScheme(t *testing.T) {
 // but a client and a seller that disagree about the price must be told so
 // rather than have the disagreement silently resolved.
 func TestFacilitator_RejectsAcceptedMismatch(t *testing.T) {
-	cases := map[string]func(*PaymentRequirements){
-		"payTo":  func(r *PaymentRequirements) { r.PayTo = "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5" },
-		"amount": func(r *PaymentRequirements) { r.Amount = "1" },
-		"asset":  func(r *PaymentRequirements) { r.Asset = "uatom" },
+	cases := map[string]func(*types.PaymentRequirements){
+		"payTo":  func(r *types.PaymentRequirements) { r.PayTo = "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5" },
+		"amount": func(r *types.PaymentRequirements) { r.Amount = "1" },
+		"asset":  func(r *types.PaymentRequirements) { r.Asset = "uatom" },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
-			node := &fakeNode{}
+			node := &exacttest.Node{}
 			h := New(node, "dev").Handler()
 
-			served := reqFixture()
-			claimed := reqFixture()
+			served := exacttest.Requirements()
+			claimed := exacttest.Requirements()
 			mutate(&claimed)
 
-			rec := postFacilitatorRequest(t, h, "/settle", Request{
-				PaymentPayload: PaymentPayload{
+			rec := postFacilitatorRequest(t, h, "/settle", requestBody{
+				PaymentPayload: types.PaymentPayload{
 					X402Version: 2,
 					Accepted:    claimed,
-					Payload:     SchemePayload{Transaction: txFixture(t, nil)},
+					Payload:     transactionPayload(exacttest.PlaceholderTx(t, nil)),
 				},
 				PaymentRequirements: served,
 			})
 
-			var resp SettleResponse
+			var resp x402.SettleResponse
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.False(t, resp.Success)
-			assert.Equal(t, ReasonInvalidPayload, resp.ErrorReason)
-			assert.Zero(t, node.broadcasts, "a disputed offer must never settle")
+			assert.Equal(t, exact.ReasonInvalidPayload, resp.ErrorReason)
+			assert.Zero(t, node.Broadcasts, "a disputed offer must never settle")
 		})
 	}
 }
@@ -721,25 +672,25 @@ func TestFacilitator_RejectsAcceptedMismatch(t *testing.T) {
 // TestFacilitator_AcceptsMatchingAccepted proves the cross-check passes for a
 // client that echoes the offer it was given, extra keys and all.
 func TestFacilitator_AcceptsMatchingAccepted(t *testing.T) {
-	txB64, account := signedFixture(t, nil)
-	h := New(&fakeNode{account: account}, "dev").Handler()
-	served := reqFixture()
+	txB64, account := exacttest.SignedTx(t, nil)
+	h := New(&exacttest.Node{Account: account}, "dev").Handler()
+	served := exacttest.Requirements()
 	served.MaxTimeoutSeconds = 60
 
-	echoed := reqFixture()
+	echoed := exacttest.Requirements()
 	echoed.MaxTimeoutSeconds = 120                              // advisory, not part of the offer's identity
 	echoed.Extra = map[string]any{"unknown": "echoed verbatim"} // ditto
 
-	rec := postFacilitatorRequest(t, h, "/verify", Request{
-		PaymentPayload: PaymentPayload{
+	rec := postFacilitatorRequest(t, h, "/verify", requestBody{
+		PaymentPayload: types.PaymentPayload{
 			X402Version: 2,
 			Accepted:    echoed,
-			Payload:     SchemePayload{Transaction: txB64},
+			Payload:     transactionPayload(txB64),
 		},
 		PaymentRequirements: served,
 	})
 
-	var resp VerifyResponse
+	var resp x402.VerifyResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.True(t, resp.IsValid, "reason=%q", resp.InvalidReason)
 }
@@ -759,28 +710,28 @@ func TestFacilitator_LogsWhichRequirementsMemoFailed(t *testing.T) {
 			wantCause: "want string",
 		},
 		"memo is over the cap": {
-			extra:     map[string]any{"memo": strings.Repeat("a", MaxMemoBytes+1)},
+			extra:     map[string]any{"memo": strings.Repeat("a", exact.MaxMemoBytes+1)},
 			wantCause: "exceeding the 256-byte maximum",
 		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			logs := captureLogs(t)
-			node := &fakeNode{}
+			node := &exacttest.Node{}
 			h := New(node, "dev").Handler()
 
-			req := reqFixture()
+			req := exacttest.Requirements()
 			req.Extra = tc.extra
-			rec := facilitatorRequest(t, h, "/settle", req, txFixture(t, nil))
+			rec := facilitatorRequest(t, h, "/settle", req, exacttest.PlaceholderTx(t, nil))
 
-			var resp SettleResponse
+			var resp x402.SettleResponse
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.False(t, resp.Success)
-			assert.Equal(t, ReasonInvalidRequirements, resp.ErrorReason)
-			assert.Zero(t, node.broadcasts, "unusable requirements must never settle")
+			assert.Equal(t, exact.ReasonInvalidRequirements, resp.ErrorReason)
+			assert.Zero(t, node.Broadcasts, "unusable requirements must never settle")
 
 			record := logRecord(t, logs, "x402 settle: payment invalid")
-			assert.Equal(t, ReasonInvalidRequirements, record["reason"])
+			assert.Equal(t, exact.ReasonInvalidRequirements, record["reason"])
 			cause, _ := record["err"].(string)
 			assert.Contains(t, cause, tc.wantCause,
 				"one wire reason covers both memo failures, so the log must name which one refused")
@@ -789,7 +740,7 @@ func TestFacilitator_LogsWhichRequirementsMemoFailed(t *testing.T) {
 }
 
 func TestFacilitator_RejectsMalformedBody(t *testing.T) {
-	h := New(&fakeNode{}, "dev").Handler()
+	h := New(&exacttest.Node{}, "dev").Handler()
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/verify", bytes.NewReader([]byte("not json"))))
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -801,7 +752,7 @@ func TestFacilitator_RejectsMalformedBody(t *testing.T) {
 const decodeMarker = "987654321987654321987654321987654321"
 
 func TestFacilitator_MalformedBodyRejectionEchoesNothing(t *testing.T) {
-	h := New(&fakeNode{}, "dev").Handler()
+	h := New(&exacttest.Node{}, "dev").Handler()
 	rec := postFacilitatorBody(t, h, "/verify", `{"x402Version":`+decodeMarker+`}`)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
@@ -813,7 +764,7 @@ func TestFacilitator_MalformedBodyRejectionEchoesNothing(t *testing.T) {
 
 func TestFacilitator_MalformedBodyIsLoggedWithoutEchoingIt(t *testing.T) {
 	logs := captureLogs(t)
-	h := New(&fakeNode{}, "dev").Handler()
+	h := New(&exacttest.Node{}, "dev").Handler()
 	postFacilitatorBody(t, h, "/verify", `{"x402Version":`+decodeMarker+`}`)
 
 	record := logRecord(t, logs, "x402: reject request body")
@@ -836,14 +787,14 @@ func TestFacilitator_RejectsTrailingContent(t *testing.T) {
 			for _, endpoint := range []string{"verify", "settle"} {
 				t.Run(endpoint, func(t *testing.T) {
 					logs := captureLogs(t)
-					node := &fakeNode{}
+					node := &exacttest.Node{}
 					h := New(node, "dev").Handler()
-					body := string(facilitatorRequestBody(t, reqFixture(), txFixture(t, nil))) + suffix
+					body := string(facilitatorRequestBody(t, exacttest.Requirements(), exacttest.PlaceholderTx(t, nil))) + suffix
 
 					rec := postFacilitatorBody(t, h, "/"+endpoint, body)
 					require.Equal(t, http.StatusBadRequest, rec.Code)
 					assert.Equal(t, "invalid request body", strings.TrimSpace(rec.Body.String()))
-					assert.Zero(t, node.broadcasts, "an ambiguous body must never settle")
+					assert.Zero(t, node.Broadcasts, "an ambiguous body must never settle")
 
 					record := logRecord(t, logs, "x402: reject request body")
 					assert.Equal(t, "trailing_content", record["detail"])
@@ -858,18 +809,18 @@ func TestFacilitator_RejectsTrailingContent(t *testing.T) {
 // protocol requires a field the facilitator does not know to be ignored, not
 // refused, so the ambiguity check must reject only content outside the object.
 func TestFacilitator_AcceptsUnknownBodyFields(t *testing.T) {
-	txB64, account := signedFixture(t, nil)
-	h := New(&fakeNode{account: account}, "dev").Handler()
+	txB64, account := exacttest.SignedTx(t, nil)
+	h := New(&exacttest.Node{Account: account}, "dev").Handler()
 
 	var fields map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal(facilitatorRequestBody(t, reqFixture(), txB64), &fields))
+	require.NoError(t, json.Unmarshal(facilitatorRequestBody(t, exacttest.Requirements(), txB64), &fields))
 	fields["futureExtension"] = json.RawMessage(`{"unknown":true}`)
 	body, err := json.Marshal(fields)
 	require.NoError(t, err)
 
 	rec := postFacilitatorBody(t, h, "/verify", string(body))
 	require.Equal(t, http.StatusOK, rec.Code)
-	var resp VerifyResponse
+	var resp x402.VerifyResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.True(t, resp.IsValid, "reason=%q", resp.InvalidReason)
 }
@@ -881,18 +832,60 @@ func TestFacilitator_AcceptsUnknownBodyFields(t *testing.T) {
 // broadcast now would charge the payer for nothing.
 func TestFacilitator_SettleAbandonedBeforeBroadcastBroadcastsNothing(t *testing.T) {
 	logs := captureLogs(t)
-	txB64, account := signedFixture(t, nil)
+	txB64, account := exacttest.SignedTx(t, nil)
 	ctx, abandon := context.WithCancel(context.Background())
 	defer abandon()
-	node := &fakeNode{account: account, onAccount: abandon}
+	node := &exacttest.Node{Account: account, OnAccount: abandon}
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/settle",
-		bytes.NewReader(facilitatorRequestBody(t, reqFixture(), txB64)))
+		bytes.NewReader(facilitatorRequestBody(t, exacttest.Requirements(), txB64)))
 	New(node, "dev").Handler().ServeHTTP(rec, req)
 
-	assert.Zero(t, node.broadcasts, "an abandoned settle must not broadcast")
+	assert.Zero(t, node.Broadcasts, "an abandoned settle must not broadcast")
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	assert.NotContains(t, rec.Body.String(), "success", "an abandoned settle carries no verdict")
 	assert.Contains(t, logs.String(), "x402 settle")
+}
+
+// transactionPayload is the gno exact scheme's payload carrying transaction.
+func transactionPayload(transaction string) map[string]any {
+	return map[string]any{"transaction": transaction}
+}
+
+// TestFacilitator_RefusesWhatTheEngineCannotParseAsAVerdict pins that a body
+// which is one JSON request, but whose payment the engine cannot parse, gets a
+// reason in the specification's words rather than a 400: the body was read, and
+// what it carries is a payment that cannot settle.
+func TestFacilitator_RefusesWhatTheEngineCannotParseAsAVerdict(t *testing.T) {
+	requirements := `{"scheme":"exact","network":"gno:dev","amount":"250000","asset":"ugnot","payTo":"` + exacttest.PayTo + `","maxTimeoutSeconds":60}`
+	cases := map[string]struct {
+		body       string
+		wantReason string
+	}{
+		"a transaction that is not a string": {
+			body: `{"x402Version":2,"paymentPayload":{"x402Version":2,"accepted":` + requirements +
+				`,"payload":{"transaction":123}},"paymentRequirements":` + requirements + `}`,
+			wantReason: exact.ReasonMalformedTransaction,
+		},
+		"requirements whose amount is a number": {
+			body: `{"x402Version":2,"paymentPayload":{"x402Version":2,"accepted":` + requirements +
+				`,"payload":{"transaction":"AAAA"}},"paymentRequirements":{"scheme":"exact","network":"gno:dev","amount":250000}}`,
+			wantReason: exact.ReasonInvalidRequirements,
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			node := &exacttest.Node{}
+			rec := postFacilitatorBody(t, New(node, "dev").Handler(), "/settle", tc.body)
+
+			require.Equal(t, http.StatusOK, rec.Code)
+			var resp x402.SettleResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.False(t, resp.Success)
+			assert.Equal(t, tc.wantReason, resp.ErrorReason)
+			assert.Contains(t, rec.Body.String(), `"transaction":""`, "a failed settlement carries an empty transaction, never an absent one")
+			assert.Zero(t, node.Broadcasts)
+		})
+	}
 }

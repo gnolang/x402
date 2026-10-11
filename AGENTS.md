@@ -27,7 +27,8 @@ names a language.
 
 | Path | What |
 |---|---|
-| `facilitator/` | verification, settlement, the `/verify` `/settle` `/supported` service, and the wire types + reason vocabulary the other roles import |
+| `facilitator/` | the `/verify` `/settle` `/supported` HTTP service: upstream's facilitator engine with the gno mechanism registered, plus the rate limit, body caps, §9 reason names and the 503 that carries no verdict |
+| `facilitator/exact/` | the gno mechanism: upstream's `SchemeNetworkFacilitator`, verification, settlement and the reason vocabulary. `exacttest/` holds the fixtures both packages' tests share |
 | `server/exact/` | upstream's `SchemeNetworkServer` implemented for gno (package `exact`) |
 | `client/src/` | upstream's `SchemeNetworkClient`, TypeScript; emits to `client/dist/` |
 | `cmd/gnofacilitator/` | the binary |
@@ -59,8 +60,9 @@ accident and needs no build tag to stay out of the way.
 
 - **The facilitator holds no key.** It verifies offline and broadcasts a transaction the
   payer already signed, so it cannot move funds anywhere the payer did not sign for.
-- **A scheme payload is relayed verbatim.** `SchemePayload` is re-emitted byte-for-byte;
-  never re-encode a `transaction` field on the way through.
+- **A scheme payload is relayed verbatim.** The transport hands the engine the payload's
+  bytes as received, and what is broadcast is the transaction decoded from the payer's own
+  base64; never re-encode a `transaction` on the way through.
 - **Everything decidable offline is decided before the node is touched**, so a payment
   that cannot settle costs the facilitator nothing.
 - **A reason code names something established about the payment.** A facilitator's own
@@ -76,12 +78,12 @@ accident and needs no build tag to stay out of the way.
 
 | When you… | Update |
 |---|---|
-| Add or rename a reason code | `facilitator/verify.go` · `TestReasonVocabulary` |
-| Change the payload or the wire types | `facilitator/types.go` and its test · the client's payload builder in `client/src/exact/client.ts` — both halves sign the same bytes |
+| Add or rename a reason code | `facilitator/exact/verify.go` · `TestReasonVocabulary` |
+| Change the payload | `facilitator/exact` (`transactionOf`, `VerifyStatic`) · the client's payload builder in `client/src/exact/client.ts` — both halves sign the same bytes |
 | Rename `.github/workflows/release.yml` | the npm **trusted publisher** on npmjs.com, which matches the filename exactly. Publishing breaks until it does |
 | Change the release flow or a tag scheme | `docs/releasing.md` |
 | Change a flag, default, timeout, limit or exit code in `cmd/gnofacilitator` | `docs/deploying.md` |
-| Follow the target testnet to a new `gnolang/gno` chain tag | `github.com/gnolang/gno` in `go.mod` and `e2e/go.mod` · re-record `facilitator/testdata/onyx_simulate_send.json` |
+| Follow the target testnet to a new `gnolang/gno` chain tag | `github.com/gnolang/gno` in `go.mod` and `e2e/go.mod` · re-record `facilitator/exact/testdata/onyx_simulate_send.json` |
 | Release the client | bump `package.json`'s version — the workflow refuses a dispatch that disagrees with it. The facilitator's version is its git tag alone, so it needs no bump |
 | Add a make target | this file (Commands) |
 

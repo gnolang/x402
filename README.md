@@ -107,7 +107,7 @@ implementation detail of the role, so no directory names one.
 | Role | Path | What |
 |------|------|------|
 | server | `server/exact/` | upstream's `SchemeNetworkServer`, implemented for gno |
-| facilitator | `facilitator/` | verification, settlement, and the `/verify` `/settle` `/supported` service |
+| facilitator | `facilitator/exact/`, `facilitator/` | upstream's `SchemeNetworkFacilitator` for gno, and the `/verify` `/settle` `/supported` service built on upstream's engine |
 | client | `client/src/exact/client.ts` | upstream's `SchemeNetworkClient`, TypeScript |
 
 Plus `cmd/gnofacilitator/` (the binary), `examples/weather/` (a seller and a buyer that make one

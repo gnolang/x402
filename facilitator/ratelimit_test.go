@@ -14,6 +14,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/gnoverse/x402/facilitator/exact/exacttest"
 )
 
 // handClock is a clock the test advances itself, so a throttle decision is a
@@ -42,7 +44,7 @@ func (c *handClock) advance(d time.Duration) {
 
 // throttledFacilitator builds a facilitator whose throttle is driven by clock.
 func throttledFacilitator(clock *handClock, burst int) http.Handler {
-	return New(&fakeNode{}, "dev", WithRateLimit(RateLimit{
+	return New(&exacttest.Node{}, "dev", WithRateLimit(RateLimit{
 		PerSecond: DefaultRatePerSecond,
 		Burst:     burst,
 		Now:       clock.now,
@@ -54,7 +56,7 @@ func throttledFacilitator(clock *handClock, burst int) http.Handler {
 func verifyFrom(t *testing.T, h http.Handler, remoteAddr string, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/verify",
-		bytes.NewReader(facilitatorRequestBody(t, reqFixture(), txFixture(t, nil))))
+		bytes.NewReader(facilitatorRequestBody(t, exacttest.Requirements(), exacttest.PlaceholderTx(t, nil))))
 	req.RemoteAddr = remoteAddr
 	for name, value := range headers {
 		req.Header.Set(name, value)
@@ -80,7 +82,7 @@ func TestFacilitator_RateLimitSpendsBurstThenRefuses(t *testing.T) {
 			for i := range burst {
 				rec := httptest.NewRecorder()
 				req := httptest.NewRequest(http.MethodPost, endpoint,
-					bytes.NewReader(facilitatorRequestBody(t, reqFixture(), txFixture(t, nil))))
+					bytes.NewReader(facilitatorRequestBody(t, exacttest.Requirements(), exacttest.PlaceholderTx(t, nil))))
 				req.RemoteAddr = testPeer
 				h.ServeHTTP(rec, req)
 				require.Equal(t, http.StatusOK, rec.Code, "request %d is inside the burst", i+1)
@@ -88,7 +90,7 @@ func TestFacilitator_RateLimitSpendsBurstThenRefuses(t *testing.T) {
 
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodPost, endpoint,
-				bytes.NewReader(facilitatorRequestBody(t, reqFixture(), txFixture(t, nil))))
+				bytes.NewReader(facilitatorRequestBody(t, exacttest.Requirements(), exacttest.PlaceholderTx(t, nil))))
 			req.RemoteAddr = testPeer
 			h.ServeHTTP(rec, req)
 			assert.Equal(t, http.StatusTooManyRequests, rec.Code, "the burst is spent")
@@ -386,7 +388,7 @@ func TestRateLimiter_ConcurrentAllow(t *testing.T) {
 // by omission: Handler hands out a public endpoint, and a caller that passes no
 // option still gets the documented defaults.
 func TestNewFacilitator_ThrottlesByDefault(t *testing.T) {
-	f := New(&fakeNode{}, "dev")
+	f := New(&exacttest.Node{}, "dev")
 	require.NotNil(t, f.limiter)
 	assert.Equal(t, float64(DefaultRatePerSecond), f.limiter.ratePerSecond)
 	assert.Equal(t, float64(DefaultRateBurst), f.limiter.burst)

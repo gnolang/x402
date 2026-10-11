@@ -1,13 +1,11 @@
-package facilitator
+package exact_test
 
 import (
-	"encoding/base64"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/gnolang/gno/gno.land/pkg/sdk/vm"
-	"github.com/gnolang/gno/tm2/pkg/amino"
 	"github.com/gnolang/gno/tm2/pkg/crypto"
 	"github.com/gnolang/gno/tm2/pkg/crypto/ed25519"
 	"github.com/gnolang/gno/tm2/pkg/crypto/multisig"
@@ -15,65 +13,35 @@ import (
 	"github.com/gnolang/gno/tm2/pkg/std"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/x402-foundation/x402/go/v2/types"
+
+	"github.com/gnoverse/x402/facilitator/exact"
+	"github.com/gnoverse/x402/facilitator/exact/exacttest"
 )
-
-// txFixture builds a signed-shape send tx and returns its base64 amino encoding.
-// Signature content is not verified statically, so a placeholder byte slice is fine.
-func txFixture(t *testing.T, mutate func(*std.Tx)) string {
-	t.Helper()
-	from := crypto.MustAddressFromString("g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5")
-	to := crypto.MustAddressFromString("g1u7y667z64x2h7vc6fmpcprgey4ck233jaww9zq")
-	tx := std.Tx{
-		Msgs: []std.Msg{bank.MsgSend{
-			FromAddress: from,
-			ToAddress:   to,
-			Amount:      std.MustParseCoins("250000ugnot"),
-		}},
-		Fee:        std.NewFee(100000, std.MustParseCoin("1000000ugnot")),
-		Signatures: []std.Signature{{Signature: []byte("sig")}},
-		Memo:       "",
-	}
-	if mutate != nil {
-		mutate(&tx)
-	}
-	bz, err := amino.Marshal(tx)
-	require.NoError(t, err)
-	return base64.StdEncoding.EncodeToString(bz)
-}
-
-func reqFixture() PaymentRequirements {
-	return PaymentRequirements{
-		Scheme:  "exact",
-		Network: "gno:dev",
-		Amount:  "250000",
-		Asset:   "ugnot",
-		PayTo:   "g1u7y667z64x2h7vc6fmpcprgey4ck233jaww9zq",
-	}
-}
 
 // The reason vocabulary, partitioned by level. The partition is what the tests
 // below check each half against, so a new code joins one of these lists and is
 // held to that level's rules.
 var (
 	schemeLevelReasons = []string{
-		ReasonMalformedTransaction,
-		ReasonUnexpectedMessage,
-		ReasonSignatureCount,
-		ReasonRecipientMismatch,
-		ReasonAmountMismatch,
-		ReasonMemoMismatch,
-		ReasonSimulationFailed,
-		ReasonBroadcastFailed,
-		ReasonSignatureInvalid,
-		ReasonSequenceMismatch,
+		exact.ReasonMalformedTransaction,
+		exact.ReasonUnexpectedMessage,
+		exact.ReasonSignatureCount,
+		exact.ReasonRecipientMismatch,
+		exact.ReasonAmountMismatch,
+		exact.ReasonMemoMismatch,
+		exact.ReasonSimulationFailed,
+		exact.ReasonBroadcastFailed,
+		exact.ReasonSignatureInvalid,
+		exact.ReasonSequenceMismatch,
 	}
 	envelopeLevelReasons = []string{
-		ReasonInvalidPayload,
-		ReasonInvalidVersion,
-		ReasonInvalidNetwork,
-		ReasonInvalidRequirements,
-		ReasonUnsupportedScheme,
-		ReasonUnexpectedSettleError,
+		exact.ReasonInvalidPayload,
+		exact.ReasonInvalidVersion,
+		exact.ReasonInvalidNetwork,
+		exact.ReasonInvalidRequirements,
+		exact.ReasonUnsupportedScheme,
+		exact.ReasonUnexpectedSettleError,
 	}
 )
 
@@ -118,8 +86,8 @@ func TestVerifyStatic_SignatureCount(t *testing.T) {
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
-			tx, _, reason := VerifyStatic(reqFixture(), SchemePayload{Transaction: txFixture(t, mutate)})
-			assert.Equal(t, ReasonSignatureCount, reason)
+			tx, _, reason := exact.VerifyStatic(exacttest.Requirements(), exacttest.PlaceholderTx(t, mutate))
+			assert.Equal(t, exact.ReasonSignatureCount, reason)
 			assert.Nil(t, tx)
 		})
 	}
@@ -139,10 +107,10 @@ func TestVerifyStatic_SubKeyCount(t *testing.T) {
 	}
 	multi := multisig.NewPubKeyMultisigThreshold(1, subKeys)
 
-	tx, _, reason := VerifyStatic(reqFixture(), SchemePayload{Transaction: txFixture(t, func(tx *std.Tx) {
+	tx, _, reason := exact.VerifyStatic(exacttest.Requirements(), exacttest.PlaceholderTx(t, func(tx *std.Tx) {
 		tx.Signatures[0].PubKey = multi
-	})})
-	assert.Equal(t, ReasonSignatureCount, reason)
+	}))
+	assert.Equal(t, exact.ReasonSignatureCount, reason)
 	assert.Nil(t, tx)
 }
 
@@ -161,10 +129,10 @@ func TestVerifyStatic_ThresholdKeyBelowItsOwnSubKeyCount(t *testing.T) {
 	multi := multisig.PubKeyMultisigThreshold{K: 0, PubKeys: []crypto.PubKey{ed25519.GenPrivKey().PubKey()}}
 	require.Equal(t, 1, std.CountSubKeys(multi), "the cap cannot rest on the subkey count for this shape")
 
-	tx, _, reason := VerifyStatic(reqFixture(), SchemePayload{Transaction: txFixture(t, func(tx *std.Tx) {
+	tx, _, reason := exact.VerifyStatic(exacttest.Requirements(), exacttest.PlaceholderTx(t, func(tx *std.Tx) {
 		tx.Signatures[0].PubKey = multi
-	})})
-	assert.Equal(t, ReasonSignatureCount, reason)
+	}))
+	assert.Equal(t, exact.ReasonSignatureCount, reason)
 	assert.Nil(t, tx)
 }
 
@@ -179,9 +147,9 @@ func TestVerifyStatic_SingleKeyAndOmittedKeyAccepted(t *testing.T) {
 	}
 	for name, key := range cases {
 		t.Run(name, func(t *testing.T) {
-			tx, _, reason := VerifyStatic(reqFixture(), SchemePayload{Transaction: txFixture(t, func(tx *std.Tx) {
+			tx, _, reason := exact.VerifyStatic(exacttest.Requirements(), exacttest.PlaceholderTx(t, func(tx *std.Tx) {
 				tx.Signatures[0].PubKey = key
-			})})
+			}))
 			assert.Empty(t, reason)
 			assert.NotNil(t, tx)
 		})
@@ -198,7 +166,7 @@ func TestValidChainID(t *testing.T) {
 	valid := []string{"dev", "test14", "portal-loop", "staging.gno.land"}
 	for _, chainID := range valid {
 		t.Run(chainID, func(t *testing.T) {
-			assert.NoError(t, ValidChainID(chainID))
+			assert.NoError(t, exact.ValidChainID(chainID))
 		})
 	}
 
@@ -211,13 +179,13 @@ func TestValidChainID(t *testing.T) {
 	}
 	for name, chainID := range invalid {
 		t.Run(name, func(t *testing.T) {
-			assert.Error(t, ValidChainID(chainID))
+			assert.Error(t, exact.ValidChainID(chainID))
 		})
 	}
 }
 
 func TestVerifyStatic_ValidTx(t *testing.T) {
-	tx, payer, reason := VerifyStatic(reqFixture(), SchemePayload{Transaction: txFixture(t, nil)})
+	tx, payer, reason := exact.VerifyStatic(exacttest.Requirements(), exacttest.PlaceholderTx(t, nil))
 	assert.Empty(t, reason)
 	require.NotNil(t, tx)
 	assert.Equal(t, "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5", payer)
@@ -228,67 +196,67 @@ func TestVerifyStatic_Rejections(t *testing.T) {
 
 	cases := []struct {
 		name   string
-		req    PaymentRequirements
+		req    types.PaymentRequirements
 		txB64  string
 		reason string
 	}{
-		{"garbage bytes", reqFixture(), "AAAA", ReasonMalformedTransaction},
-		{"invalid base64", reqFixture(), "%%%", ReasonMalformedTransaction},
-		{"wrong recipient", reqFixture(), txFixture(t, func(tx *std.Tx) {
+		{"garbage bytes", exacttest.Requirements(), "AAAA", exact.ReasonMalformedTransaction},
+		{"invalid base64", exacttest.Requirements(), "%%%", exact.ReasonMalformedTransaction},
+		{"wrong recipient", exacttest.Requirements(), exacttest.PlaceholderTx(t, func(tx *std.Tx) {
 			msg := tx.Msgs[0].(bank.MsgSend)
 			msg.ToAddress = to
 			tx.Msgs[0] = msg
-		}), ReasonRecipientMismatch},
-		{"wrong amount", reqFixture(), txFixture(t, func(tx *std.Tx) {
+		}), exact.ReasonRecipientMismatch},
+		{"wrong amount", exacttest.Requirements(), exacttest.PlaceholderTx(t, func(tx *std.Tx) {
 			msg := tx.Msgs[0].(bank.MsgSend)
 			msg.Amount = std.MustParseCoins("1ugnot")
 			tx.Msgs[0] = msg
-		}), ReasonAmountMismatch},
-		{"wrong denom", reqFixture(), txFixture(t, func(tx *std.Tx) {
+		}), exact.ReasonAmountMismatch},
+		{"wrong denom", exacttest.Requirements(), exacttest.PlaceholderTx(t, func(tx *std.Tx) {
 			msg := tx.Msgs[0].(bank.MsgSend)
 			msg.Amount = std.MustParseCoins("250000uatom")
 			tx.Msgs[0] = msg
-		}), ReasonAmountMismatch},
-		{"two messages", reqFixture(), txFixture(t, func(tx *std.Tx) {
+		}), exact.ReasonAmountMismatch},
+		{"two messages", exacttest.Requirements(), exacttest.PlaceholderTx(t, func(tx *std.Tx) {
 			tx.Msgs = append(tx.Msgs, tx.Msgs[0])
-		}), ReasonUnexpectedMessage},
-		{"non-MsgSend message", reqFixture(), txFixture(t, func(tx *std.Tx) {
+		}), exact.ReasonUnexpectedMessage},
+		{"non-MsgSend message", exacttest.Requirements(), exacttest.PlaceholderTx(t, func(tx *std.Tx) {
 			tx.Msgs = []std.Msg{vm.MsgCall{
 				Caller:  crypto.MustAddressFromString("g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5"),
 				PkgPath: "gno.land/r/demo/foo",
 				Func:    "Bar",
 			}}
-		}), ReasonUnexpectedMessage},
-		{"memo required but missing", func() PaymentRequirements {
-			r := reqFixture()
+		}), exact.ReasonUnexpectedMessage},
+		{"memo required but missing", func() types.PaymentRequirements {
+			r := exacttest.Requirements()
 			r.Extra = map[string]any{"memo": "pay_1"}
 			return r
-		}(), txFixture(t, nil), ReasonMemoMismatch},
+		}(), exacttest.PlaceholderTx(t, nil), exact.ReasonMemoMismatch},
 		// A hostile requirements object must not verify as memo-less: an
 		// unusable memo requirement is a broken requirements object, and
 		// reporting it as satisfied would settle an unbound payment.
-		{"memo present but not a string", func() PaymentRequirements {
-			r := reqFixture()
+		{"memo present but not a string", func() types.PaymentRequirements {
+			r := exacttest.Requirements()
 			r.Extra = map[string]any{"memo": 123}
 			return r
-		}(), txFixture(t, nil), ReasonInvalidRequirements},
-		{"memo over the cap", func() PaymentRequirements {
-			r := reqFixture()
-			r.Extra = map[string]any{"memo": strings.Repeat("a", MaxMemoBytes+1)}
+		}(), exacttest.PlaceholderTx(t, nil), exact.ReasonInvalidRequirements},
+		{"memo over the cap", func() types.PaymentRequirements {
+			r := exacttest.Requirements()
+			r.Extra = map[string]any{"memo": strings.Repeat("a", exact.MaxMemoBytes+1)}
 			return r
-		}(), txFixture(t, func(tx *std.Tx) { tx.Memo = strings.Repeat("a", MaxMemoBytes+1) }), ReasonInvalidRequirements},
-		{"no signature", reqFixture(), txFixture(t, func(tx *std.Tx) {
+		}(), exacttest.PlaceholderTx(t, func(tx *std.Tx) { tx.Memo = strings.Repeat("a", exact.MaxMemoBytes+1) }), exact.ReasonInvalidRequirements},
+		{"no signature", exacttest.Requirements(), exacttest.PlaceholderTx(t, func(tx *std.Tx) {
 			tx.Signatures = nil
-		}), ReasonSignatureCount},
-		{"bad amount in requirements", func() PaymentRequirements {
-			r := reqFixture()
+		}), exact.ReasonSignatureCount},
+		{"bad amount in requirements", func() types.PaymentRequirements {
+			r := exacttest.Requirements()
 			r.Amount = "not-a-number"
 			return r
-		}(), txFixture(t, nil), ReasonAmountMismatch},
+		}(), exacttest.PlaceholderTx(t, nil), exact.ReasonAmountMismatch},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			tx, _, reason := VerifyStatic(tc.req, SchemePayload{Transaction: tc.txB64})
+			tx, _, reason := exact.VerifyStatic(tc.req, tc.txB64)
 			assert.Equal(t, tc.reason, reason)
 			assert.Nil(t, tx)
 		})
@@ -303,7 +271,7 @@ func TestVerifyStatic_Rejections(t *testing.T) {
 // surface as the second step passing.
 func TestVerifyStatic_MemoBindingHoldsAcrossVerifications(t *testing.T) {
 	const memo = "pay_bound"
-	req := reqFixture()
+	req := exacttest.Requirements()
 	req.Extra = map[string]any{"memo": memo}
 
 	steps := []struct {
@@ -311,12 +279,12 @@ func TestVerifyStatic_MemoBindingHoldsAcrossVerifications(t *testing.T) {
 		txB64  string
 		reason string
 	}{
-		{"bound memo accepted", txFixture(t, func(tx *std.Tx) { tx.Memo = memo }), ""},
-		{"memo-less rejected", txFixture(t, nil), ReasonMemoMismatch},
+		{"bound memo accepted", exacttest.PlaceholderTx(t, func(tx *std.Tx) { tx.Memo = memo }), ""},
+		{"memo-less rejected", exacttest.PlaceholderTx(t, nil), exact.ReasonMemoMismatch},
 	}
 	for _, st := range steps {
 		t.Run(st.name, func(t *testing.T) {
-			tx, _, reason := VerifyStatic(req, SchemePayload{Transaction: st.txB64})
+			tx, _, reason := exact.VerifyStatic(req, st.txB64)
 			require.Equal(t, st.reason, reason)
 			if st.reason == "" {
 				require.NotNil(t, tx)
@@ -328,9 +296,9 @@ func TestVerifyStatic_MemoBindingHoldsAcrossVerifications(t *testing.T) {
 }
 
 func TestVerifyStatic_MemoMatchAccepted(t *testing.T) {
-	req := reqFixture()
+	req := exacttest.Requirements()
 	req.Extra = map[string]any{"memo": "pay_1"}
-	tx, _, reason := VerifyStatic(req, SchemePayload{Transaction: txFixture(t, func(tx *std.Tx) { tx.Memo = "pay_1" })})
+	tx, _, reason := exact.VerifyStatic(req, exacttest.PlaceholderTx(t, func(tx *std.Tx) { tx.Memo = "pay_1" }))
 	assert.Empty(t, reason)
 	assert.NotNil(t, tx)
 }

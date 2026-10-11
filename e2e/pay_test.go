@@ -29,6 +29,7 @@ import (
 	nethttpmw "github.com/x402-foundation/x402/go/v2/http/nethttp"
 
 	"github.com/gnoverse/x402/facilitator"
+	"github.com/gnoverse/x402/facilitator/exact"
 	gnoexact "github.com/gnoverse/x402/server/exact"
 )
 
@@ -137,7 +138,7 @@ func facilitatorCmd(ts *testscript.TestScript, neg bool, args []string) {
 	rpc, err := rpcclient.NewHTTPClient(httpURL(rpcAddr))
 	ts.Check(err)
 
-	node := facilitator.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc})
+	node := exact.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc})
 	server := httptest.NewServer(facilitator.New(node, chainID).Handler())
 	ts.Defer(server.Close)
 

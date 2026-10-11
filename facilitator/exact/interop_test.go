@@ -1,4 +1,4 @@
-package facilitator
+package exact_test
 
 import (
 	"os"
@@ -9,6 +9,10 @@ import (
 	"github.com/gnolang/gno/tm2/pkg/sdk/bank"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/x402-foundation/x402/go/v2/types"
+
+	"github.com/gnoverse/x402/facilitator/exact"
+	"github.com/gnoverse/x402/facilitator/exact/exacttest"
 )
 
 // The interop fixture is a payment signed by @gnolang/gno-js-client, the
@@ -32,8 +36,8 @@ const (
 	interopMemo    = "x402-interop"
 )
 
-func interopRequirements() PaymentRequirements {
-	return PaymentRequirements{
+func interopRequirements() types.PaymentRequirements {
+	return types.PaymentRequirements{
 		Scheme:  "exact",
 		Network: "gno:dev",
 		Amount:  interopAmount,
@@ -43,11 +47,11 @@ func interopRequirements() PaymentRequirements {
 	}
 }
 
-func interopPayload(t *testing.T) SchemePayload {
+func interopTransaction(t *testing.T) string {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("testdata", interopFixture))
-	require.NoError(t, err, "interop fixture missing — regenerate with go generate ./facilitator")
-	return SchemePayload{Transaction: strings.TrimSpace(string(raw))}
+	require.NoError(t, err, "interop fixture missing — regenerate with go generate ./facilitator/exact")
+	return strings.TrimSpace(string(raw))
 }
 
 // TestVerifyStaticAcceptsJSSignedPayment is the cross-SDK wire check: a payment
@@ -62,7 +66,7 @@ func interopPayload(t *testing.T) SchemePayload {
 // direction is caught by make test-e2e, which signs with the installed client
 // against a real node.
 func TestVerifyStaticAcceptsJSSignedPayment(t *testing.T) {
-	tx, payer, reason := VerifyStatic(interopRequirements(), interopPayload(t))
+	tx, payer, reason := exact.VerifyStatic(interopRequirements(), interopTransaction(t))
 
 	require.Empty(t, reason, "JS-signed payment refused")
 	require.NotNil(t, tx)
@@ -85,14 +89,14 @@ func TestVerifyStaticAcceptsJSSignedPayment(t *testing.T) {
 // The SDK signs the fee as gas_wanted/gas_fee, a rendering the chain still
 // accepts, so refusing it would refuse every payment such a buyer makes.
 func TestVerifyAccountChecksAcceptsJSSignedPayment(t *testing.T) {
-	tx, _, reason := VerifyStatic(interopRequirements(), interopPayload(t))
+	tx, _, reason := exact.VerifyStatic(interopRequirements(), interopTransaction(t))
 	require.Empty(t, reason)
 
 	t.Run("at the signed sequence", func(t *testing.T) {
-		assert.Empty(t, accountReason(t, tx, &fakeNode{account: accountWithKey(nil, 0, 0)}))
+		assert.Empty(t, accountReason(t, tx, &exacttest.Node{Account: exacttest.AccountWithKey(nil, 0, 0)}))
 	})
 
 	t.Run("one sequence later is reported stale", func(t *testing.T) {
-		assert.Equal(t, ReasonSequenceMismatch, accountReason(t, tx, &fakeNode{account: accountWithKey(nil, 0, 1)}))
+		assert.Equal(t, exact.ReasonSequenceMismatch, accountReason(t, tx, &exacttest.Node{Account: exacttest.AccountWithKey(nil, 0, 1)}))
 	})
 }

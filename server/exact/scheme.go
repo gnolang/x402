@@ -11,9 +11,10 @@ import (
 	"fmt"
 
 	"github.com/gnolang/gno/tm2/pkg/std"
-	"github.com/gnoverse/x402/facilitator"
 	x402 "github.com/x402-foundation/x402/go/v2"
 	"github.com/x402-foundation/x402/go/v2/types"
+
+	facilitatorexact "github.com/gnoverse/x402/facilitator/exact"
 )
 
 // ExactGnoScheme is the seller half of the gno "exact" mechanism. It resolves a
@@ -174,9 +175,9 @@ func checkMemo(extra map[string]interface{}) error {
 	if !ok {
 		return fmt.Errorf("x402: gno extra.memo is %T, want string", raw)
 	}
-	if len(memo) > facilitator.MaxMemoBytes {
+	if len(memo) > facilitatorexact.MaxMemoBytes {
 		return fmt.Errorf("x402: gno extra.memo is %d bytes, over the %d-byte maximum a payment can carry",
-			len(memo), facilitator.MaxMemoBytes)
+			len(memo), facilitatorexact.MaxMemoBytes)
 	}
 	return nil
 }

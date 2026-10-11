@@ -80,7 +80,7 @@ Callers are **resource servers, server-to-server** — not browsers. No CORS hea
 `/supported` response shape, useful as a smoke test:
 
 ```json
-{"kinds":[{"x402Version":2,"scheme":"exact","network":"gno:onyx-1"}],"extensions":[],"signers":{}}
+{"kinds":[{"x402Version":2,"scheme":"exact","network":"gno:onyx-1"}],"extensions":[],"signers":{"gno:*":[]}}
 ```
 
 ## Health probes
