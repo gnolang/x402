@@ -24,15 +24,15 @@ stdout '1000000000ugnot'
 x402facilitator
 x402seller seller.json $seller_user_addr
 
-# A stock @x402/fetch client, taught about gno by one register() call.
+# A stock @x402/fetch client, taught about gno by its register() call and a
+# spend control that admits ugnot.
 exec node $X402_EXAMPLE_BUYER
 
 # The resource was served: the body seller.json names, verbatim.
 stdout 'sunny'
 
-# The payment settled, and the buyer names the transaction that did it.
-stdout 'paid: tx [0-9a-zA-Z]'
-stdout 'buying as g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5'
+# The payment settled, and the settlement names the transaction and the payer.
+stdout 'paid: tx [0-9a-zA-Z]+ by g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5'
 
 # And the money moved, by exactly the price above. This is the assertion nothing
 # else in the repo can make.

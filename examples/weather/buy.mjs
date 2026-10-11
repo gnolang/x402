@@ -32,8 +32,21 @@ const rpcURL = (process.env.X402_GNO_RPC ?? "http://127.0.0.1:26657").replace(
   "http://",
 );
 
+// Prints why nothing was paid, then exits. fetch reports every network failure
+// as "fetch failed" and keeps the reason in err.cause.
+function notPaid(err) {
+  const message = err instanceof Error ? err.message : String(err);
+  const cause = err instanceof Error && err.cause instanceof Error ? ` (${err.cause.message})` : "";
+  console.log(`not paid: ${message}${cause}`);
+  process.exit(1);
+}
+
 const wallet = await GnoWallet.fromMnemonic(mnemonic);
-wallet.connect(await GnoJSONRPCProvider.create(rpcURL));
+try {
+  wallet.connect(await GnoJSONRPCProvider.create(rpcURL));
+} catch (err) {
+  notPaid(err);
+}
 
 // A stock client only pays in USD-pegged assets until told otherwise, and ugnot
 // is not one.
@@ -44,9 +57,21 @@ const client = new x402Client()
   });
 const fetchWithPayment = wrapFetchWithPayment(fetch, client);
 
-console.log(`buying as ${await wallet.getAddress()}`);
+const address = await wallet.getAddress();
+console.log(
+  mnemonic === TEST1
+    ? `buying as ${address}, gno's public test1 key; set X402_MNEMONIC to pay from your own account`
+    : `buying as ${address}`,
+);
 
-const paid = await fetchWithPayment(sellerURL);
+let paid;
+try {
+  paid = await fetchWithPayment(sellerURL);
+} catch (err) {
+  // Thrown when the seller cannot be reached or no payment can be signed, such as
+  // for an account the chain has never funded.
+  notPaid(err);
+}
 const body = await paid.text();
 
 if (!paid.ok) {
@@ -57,6 +82,11 @@ if (!paid.ok) {
   process.exit(1);
 }
 
-const receipt = decodePaymentResponseHeader(paid.headers.get("PAYMENT-RESPONSE"));
-console.log(`paid: tx ${receipt.transaction}`);
+const settlement = paid.headers.get("PAYMENT-RESPONSE");
+if (settlement === null || settlement === "") {
+  console.log("served without payment");
+} else {
+  const receipt = decodePaymentResponseHeader(settlement);
+  console.log(`paid: tx ${receipt.transaction} by ${receipt.payer}`);
+}
 console.log(body.trim());
