@@ -32,9 +32,13 @@ type fakeNode struct {
 	broadcasts   int
 	account      SignerAccount
 	accountErr   error
+	onAccount    func() // runs during the account read, when set
 }
 
 func (n *fakeNode) SignerAccount(context.Context, *std.Tx) (SignerAccount, error) {
+	if n.onAccount != nil {
+		n.onAccount()
+	}
 	return n.account, n.accountErr
 }
 
@@ -868,4 +872,27 @@ func TestFacilitator_AcceptsUnknownBodyFields(t *testing.T) {
 	var resp VerifyResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.True(t, resp.IsValid, "reason=%q", resp.InvalidReason)
+}
+
+// TestFacilitator_SettleAbandonedBeforeBroadcastBroadcastsNothing pins that a
+// settle whose request ended while the node was being read, by the server's
+// answer deadline or by the seller hanging up, moves no funds: the seller has
+// already been answered without a verdict and may discard the response, so a
+// broadcast now would charge the payer for nothing.
+func TestFacilitator_SettleAbandonedBeforeBroadcastBroadcastsNothing(t *testing.T) {
+	logs := captureLogs(t)
+	txB64, account := signedFixture(t, nil)
+	ctx, abandon := context.WithCancel(context.Background())
+	defer abandon()
+	node := &fakeNode{account: account, onAccount: abandon}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/settle",
+		bytes.NewReader(facilitatorRequestBody(t, reqFixture(), txB64)))
+	New(node, "dev").Handler().ServeHTTP(rec, req)
+
+	assert.Zero(t, node.broadcasts, "an abandoned settle must not broadcast")
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.NotContains(t, rec.Body.String(), "success", "an abandoned settle carries no verdict")
+	assert.Contains(t, logs.String(), "x402 settle")
 }

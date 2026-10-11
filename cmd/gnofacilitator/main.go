@@ -5,11 +5,15 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	gnoclient "github.com/gnolang/gno/gno.land/pkg/gnoclient"
@@ -31,6 +35,10 @@ const (
 	readTimeout       = 10 * time.Second
 	writeTimeout      = 30 * time.Second
 	idleTimeout       = 60 * time.Second
+
+	// answerTimeout bounds a request's wait on the node. It stays below
+	// writeTimeout so the 503 it produces can still be written.
+	answerTimeout = 25 * time.Second
 )
 
 // How long the startup chain-id check waits for a node to answer, in total.
@@ -52,12 +60,9 @@ const (
 // nodeChainID asks the node which chain it serves, within chainIDCheckWindow
 // whatever the node does.
 //
-// The bound is a watchdog rather than a context deadline because a deadline would
-// not be honored: tm2's RPC transport builds its request with http.NewRequest,
-// gives its http.Client no timeout, and discards the context in its own dialer. A
-// node that accepts the connection and then never answers would otherwise hold
-// startup open forever — before anything is listening, which is the one state this
-// check must not be able to cause.
+// The bound is a watchdog because a single query waits up to tm2's own 60 s
+// request timeout. Startup would wait that long on a node that accepts the
+// connection and never answers, with nothing listening.
 //
 // The query is left running if the watchdog fires. It answers into a buffered
 // channel nobody reads, so it cannot block on the send, and the process is either
@@ -159,19 +164,58 @@ func main() {
 	f := facilitator.New(node, *chainID,
 		facilitator.WithRateLimit(facilitator.RateLimit{PerSecond: *ratePerSecond, Burst: *rateBurst}))
 
-	srv := &http.Server{
-		Addr:              *listen,
-		Handler:           f.Handler(),
+	ln, err := net.Listen("tcp", *listen)
+	if err != nil {
+		slog.Error("listen", "err", err)
+		os.Exit(1)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	slog.Info("gnofacilitator listening",
+		"version", version, "addr", ln.Addr().String(), "network", "gno:"+*chainID)
+	if err := serve(ctx, newServer(f.Handler(), answerTimeout), ln, writeTimeout); err != nil {
+		slog.Error("serve", "err", err)
+		os.Exit(1)
+	}
+	slog.Info("gnofacilitator stopped")
+}
+
+// newServer returns the HTTP server for h. A request still unanswered after
+// answerWithin gets a 503, never a payment verdict. The handler keeps running
+// behind that answer, so a /settle broadcast may still commit.
+func newServer(h http.Handler, answerWithin time.Duration) *http.Server {
+	return &http.Server{
+		Handler:           http.TimeoutHandler(h, answerWithin, "the chain did not answer in time"),
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readTimeout,
 		WriteTimeout:      writeTimeout,
 		IdleTimeout:       idleTimeout,
 	}
+}
 
-	slog.Info("gnofacilitator listening",
-		"version", version, "addr", *listen, "network", "gno:"+*chainID)
-	if err := srv.ListenAndServe(); err != nil {
-		slog.Error("serve", "err", err)
-		os.Exit(1)
+// serve runs srv on ln until ctx is done, then stops accepting connections and
+// waits up to drain for the requests in flight. A drain that runs out is an
+// error.
+func serve(ctx context.Context, srv *http.Server, ln net.Listener, drain time.Duration) error {
+	served := make(chan error, 1)
+	go func() { served <- srv.Serve(ln) }()
+
+	select {
+	case err := <-served:
+		return err
+	case <-ctx.Done():
 	}
+	slog.Info("gnofacilitator stopping: draining requests in flight", "within", drain)
+
+	drainCtx, cancel := context.WithTimeout(context.Background(), drain)
+	defer cancel()
+	if err := srv.Shutdown(drainCtx); err != nil {
+		return fmt.Errorf("drain: %w", err)
+	}
+	if err := <-served; !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
 }

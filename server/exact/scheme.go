@@ -27,6 +27,22 @@ func NewExactGnoScheme() *ExactGnoScheme { return &ExactGnoScheme{} }
 // Scheme names the x402 payment scheme this implements.
 func (s *ExactGnoScheme) Scheme() string { return "exact" }
 
+// DefaultAssetTransferMethod is the SDK's placeholder key: a gno payment is a
+// native bank send, so there is no transfer method to put on the wire.
+func (s *ExactGnoScheme) DefaultAssetTransferMethod() string {
+	return x402.SDKDefaultAssetTransferMethod
+}
+
+// PaymentFlows declares authorization only: verify, serve, then settle.
+func (s *ExactGnoScheme) PaymentFlows() map[string]x402.PaymentFlowConfig {
+	return map[string]x402.PaymentFlowConfig{
+		x402.SDKDefaultAssetTransferMethod: {
+			Supported: []x402.PaymentFlowName{x402.PaymentFlowAuthorization},
+			Default:   x402.PaymentFlowAuthorization,
+		},
+	}
+}
+
 // ParsePrice resolves a route's price into the gno denomination and amount the
 // requirements will publish.
 //

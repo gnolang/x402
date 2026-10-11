@@ -364,6 +364,13 @@ func (f *Server) handleSettle(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, SettleResponse{Success: false, Network: f.network(), Payer: check.payer, ErrorReason: check.reason})
 		return
 	}
+	// A request that ended while the node was read has had its answer, or lost
+	// its caller: broadcasting now would move funds behind a response with no
+	// verdict.
+	if err := r.Context().Err(); err != nil {
+		rejectNoVerdict(w, "x402 settle", check.payer, err)
+		return
+	}
 	hash, height, err := f.node.Broadcast(check.tx)
 	if err != nil {
 		// A broadcast that never reached the chain settles nothing and refuses

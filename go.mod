@@ -5,7 +5,7 @@ go 1.26.5
 require (
 	github.com/gnolang/gno v1.5.1-0.20260928125126-5cdbc25fcde0
 	github.com/stretchr/testify v1.11.1
-	github.com/x402-foundation/x402/go/v2 v2.22.0
+	github.com/x402-foundation/x402/go/v2 v2.28.0
 )
 
 require (

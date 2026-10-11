@@ -11,7 +11,7 @@
 #
 # -listen already defaults to all interfaces on :8402, so publishing the port is
 # enough — unlike a service that binds loopback for host safety.
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 # buildx provides TARGETOS/TARGETARCH; goreleaser lays each platform's binary
 # under <os>/<arch>/ in the build context for multi-platform images.
 ARG TARGETOS
