@@ -140,4 +140,6 @@ func TestTheCanonicalSellerSnippetOffersGno(t *testing.T) {
 
 	_, declaresFlow := offer.Extra["paymentFlow"]
 	assert.False(t, declaresFlow, "authorization is the default flow and is omitted")
+	_, declaresTransferMethod := offer.Extra["assetTransferMethod"]
+	assert.False(t, declaresTransferMethod, "a gno payment is a bank send, with no transfer method to name")
 }

@@ -21,7 +21,7 @@ require (
 	github.com/gnoverse/x402 v0.0.0
 	github.com/rogpeppe/go-internal v1.15.0
 	github.com/stretchr/testify v1.11.1
-	github.com/x402-foundation/x402/go/v2 v2.22.0
+	github.com/x402-foundation/x402/go/v2 v2.28.0
 )
 
 require (
