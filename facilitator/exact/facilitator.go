@@ -15,7 +15,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"strings"
+	"regexp"
 
 	abci "github.com/gnolang/gno/tm2/pkg/bft/abci/types"
 	"github.com/gnolang/gno/tm2/pkg/std"
@@ -163,23 +163,23 @@ func causeText(err error) string {
 	return err.Error()
 }
 
+// chainIDReference is CAIP-2's grammar for the reference half of a network.
+var chainIDReference = regexp.MustCompile(`^[-_a-zA-Z0-9]{1,32}$`)
+
 // ValidChainID reports whether a chain id can be published as the reference half
-// of this facilitator's network name.
+// of this facilitator's network name, "gno:<chain-id>".
 //
-// The name is built by concatenation, and a CAIP-2 identifier names exactly two
-// colon-separated parts, so a chain id carrying a colon yields a network string
-// that reads as three. Nothing downstream recovers from that: upstream's parser
-// refuses it and the JS buyer reads no chain from it, so every payment is refused
-// without anything naming the configuration as the cause. It is checked where a
-// chain id enters the process rather than per request, because it cannot change
-// while the process runs.
+// x402 names networks in CAIP-2, which limits the reference to
+// [-_a-zA-Z0-9]{1,32}, while tm2 accepts any non-empty chain id up to 50 bytes. A
+// colon makes the network read as three parts, which upstream's parser and the JS
+// buyer refuse, so every payment would fail without naming the configuration.
+// Any other chain id outside the grammar, such as one with a dot, both accept
+// today, but it names no CAIP-2 network and another implementation may refuse
+// it. It is checked where a chain id enters the process rather than per request,
+// because it cannot change while the process runs.
 func ValidChainID(chainID string) error {
-	if chainID == "" {
-		return errors.New("chain id is empty")
-	}
-	if strings.Contains(chainID, ":") {
-		return fmt.Errorf("chain id %q contains a colon, which would make the network name %q read as three CAIP-2 parts",
-			chainID, "gno:"+chainID)
+	if !chainIDReference.MatchString(chainID) {
+		return fmt.Errorf("chain id %q cannot name a CAIP-2 network: want 1 to 32 of [-_a-zA-Z0-9]", chainID)
 	}
 	return nil
 }

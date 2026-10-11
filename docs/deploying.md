@@ -44,7 +44,7 @@ Flags only — the binary reads no environment variables.
 | Flag | Required | Default | Meaning |
 |---|---|---|---|
 | `-rpc` | **yes** | — | gno chain RPC URL |
-| `-chain-id` | **yes** | — | chain id; the service advertises the network as `gno:<chain-id>` |
+| `-chain-id` | **yes** | — | chain id, 1 to 32 of `[-_a-zA-Z0-9]` (CAIP-2); the service advertises the network as `gno:<chain-id>` |
 | `-listen` | no | `:8402` | listen address, all interfaces |
 | `-rate-per-second` | no | `10` | sustained per-peer rate on `/verify` and `/settle` |
 | `-rate-burst` | no | `20` | largest tolerated per-peer spike |
@@ -131,7 +131,8 @@ The process queries the node for its chain id, retrying for up to 10 s:
 | match | start |
 
 So a chain/RPC mismatch is caught at boot whenever the node is reachable. A missing `-rpc` or
-`-chain-id`, a `-chain-id` containing `:`, or a negative rate flag exits 2 before listening.
+`-chain-id`, a `-chain-id` outside CAIP-2's reference grammar, or a negative rate flag exits 2
+before listening.
 An `-rpc` the RPC client rejects exits 1. A malformed one it accepts fails the chain-id query like
 an unreachable node, so the process warns and starts.
 

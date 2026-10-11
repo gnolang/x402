@@ -157,13 +157,10 @@ func TestVerifyStatic_SingleKeyAndOmittedKeyAccepted(t *testing.T) {
 }
 
 // TestValidChainID pins the rule the network name rests on. A network is
-// "gno:<chain-id>" built by concatenation, and CAIP-2 names exactly two
-// colon-separated parts — so a chain id carrying one produces a network string
-// that reads as three. Upstream's own parser refuses it and the JS buyer returns
-// null for it, which means every payment for such a facilitator is refused with
-// no indication that the configuration is what is wrong.
+// "gno:<chain-id>", and CAIP-2 limits its reference to [-_a-zA-Z0-9]{1,32}, so a
+// chain id outside it names no CAIP-2 network.
 func TestValidChainID(t *testing.T) {
-	valid := []string{"dev", "test14", "portal-loop", "staging.gno.land"}
+	valid := []string{"dev", "test14", "portal-loop", "onyx-1", "gnoland-1", "Under_Score", strings.Repeat("a", 32)}
 	for _, chainID := range valid {
 		t.Run(chainID, func(t *testing.T) {
 			assert.NoError(t, exact.ValidChainID(chainID))
@@ -176,6 +173,9 @@ func TestValidChainID(t *testing.T) {
 		"a leading colon":  ":dev",
 		"a trailing colon": "dev:",
 		"only a colon":     ":",
+		"a dot":            "staging.gno.land",
+		"a space":          "dev 1",
+		"33 characters":    strings.Repeat("a", 33),
 	}
 	for name, chainID := range invalid {
 		t.Run(name, func(t *testing.T) {

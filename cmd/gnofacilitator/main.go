@@ -127,9 +127,9 @@ func main() {
 		slog.Error("-rpc and -chain-id are required")
 		os.Exit(2)
 	}
-	// The network this serves is "gno:" + the flag, so a chain id the CAIP-2 form
-	// cannot carry has to be refused here: every payment would be refused instead,
-	// and none of those refusals would name the flag.
+	// The network this serves is "gno:" + the flag, and x402 names networks in
+	// CAIP-2, so a chain id outside its grammar is refused here, where the refusal
+	// names the flag.
 	if err := exact.ValidChainID(*chainID); err != nil {
 		slog.Error("-chain-id cannot be published as a network name", "err", err)
 		os.Exit(2)
