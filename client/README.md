@@ -1,6 +1,6 @@
 # The gno client mechanism
 
-Pay a gno.land chain with x402. One line on a stock client — no fork, no patch, no upstream change.
+Pay a gno.land chain with x402, from a stock client — no fork, no patch, no upstream change.
 
 Install it with `npm i @gnoverse/x402-gno`, or build it from the repository root with `make js`.
 [`e2e/buyer.mjs`](../e2e/buyer.mjs), the buyer the payment test drives, is a working example.
@@ -11,7 +11,10 @@ import { wrapFetchWithPayment } from "@x402/fetch";
 import { ExactGnoScheme } from "@gnoverse/x402-gno/exact/client";
 
 const client = new x402Client();
-client.register("gno:*", new ExactGnoScheme(wallet)); // ← the only gno-aware line
+client.register("gno:*", new ExactGnoScheme(wallet)); // ← teaches the client gno
+client.setSpendControls({
+  allowedAssets: [{ network: "gno:*", asset: "ugnot", maxAmountPerPayment: "1000000" }],
+});
 
 const paid = wrapFetchWithPayment(fetch, client);
 const res = await paid("https://api.example.com/weather");
@@ -19,6 +22,10 @@ const res = await paid("https://api.example.com/weather");
 
 `wallet` is a `GnoWallet` from `@gnolang/gno-js-client`, connected to a provider. The connection is
 required: a gno sequence is sequential, so only the chain knows the next one.
+
+`setSpendControls` admits ugnot. It exists from `@x402/core` 2.23, and from that version a stock
+client pays only in USD-pegged assets unless they are listed there; ugnot is not one. `maxAmountPerPayment` is the most one
+request may cost, in ugnot; the network fee is paid on top.
 
 `e2e/buyer.mjs` uses that same package-name import from inside this repository, resolving through the
 manifest's `exports` map rather than a built path — so the map is exercised by the payment test

@@ -23,7 +23,7 @@ middleware. This supplies the chain-specific parts:
 
 - **Seller mechanism** — list gno in a route's `accepts[]` and the middleware prices it, offers it and reads the payment.
 - **`gnofacilitator`** — verifies payments and broadcasts them. It holds no keys.
-- **Client mechanism** — one `register()` call lets a stock x402 client pay a gno chain.
+- **Client mechanism** — register it on a stock x402 client, list ugnot in the client's spend controls, and the client pays a gno chain.
 
 ## Sell something
 
@@ -78,12 +78,18 @@ npm i @gnoverse/x402-gno
 ```js
 import { ExactGnoScheme } from "@gnoverse/x402-gno/exact/client";
 
-const client = new x402Client().register("gno:*", new ExactGnoScheme(wallet));
+const client = new x402Client()
+  .register("gno:*", new ExactGnoScheme(wallet))
+  .setSpendControls({
+    allowedAssets: [{ network: "gno:*", asset: "ugnot", maxAmountPerPayment: "1000000" }],
+  });
 const paid = wrapFetchWithPayment(fetch, client);
 const res = await paid("https://api.example.com/weather");
 ```
 
-Recognising the 402, selecting an entry, encoding `PAYMENT-SIGNATURE` and retrying are
+A stock client pays only in USD-pegged assets unless an asset is listed in its spend controls, so
+the buyer lists ugnot. `maxAmountPerPayment` is the most one request may cost, in ugnot; the network
+fee is paid on top. Recognising the 402, selecting an entry, encoding `PAYMENT-SIGNATURE` and retrying are
 `@x402/fetch`'s own code, unmodified. The payment is signed against the chain id the **offer** names
 rather than the one the wallet's node reports — see [client/README.md](client/README.md) for what
 that does and does not buy you.

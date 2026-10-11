@@ -114,8 +114,8 @@ can:
 X402_GNO_RPC=<RPC URL> node buy.mjs http://localhost:8401/weather
 ```
 
-It registers `ExactGnoScheme` with a stock `@x402/fetch` client — that one `register("gno:*", …)`
-call is the only gno-aware line — and signs with the mnemonic in `X402_MNEMONIC`: a **funded**
+It registers `ExactGnoScheme` with a stock `@x402/fetch` client, admits ugnot to the client's spend
+controls with a 1 GNOT cap per request, and signs with the mnemonic in `X402_MNEMONIC`: a **funded**
 account on the chain the offer names ([faucet.gno.land](https://faucet.gno.land) funds the public
 testnets). Point `X402_GNO_RPC` at the same node the facilitator uses: the buyer reads its account
 sequence from the chain, so this leg needs a real node rather than the unreachable one a 402 tolerates.

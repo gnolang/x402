@@ -1,7 +1,7 @@
 // Buys the weather from the seller in this directory: one paid GET, printed for
 // a human. The x402 flow — recognising the 402, decoding the offer, signing,
-// retrying — is a stock @x402/fetch client; the single gno-aware line is the
-// register() call below.
+// retrying — is a stock @x402/fetch client; the gno-aware lines are the
+// register() call below and the spend control that admits ugnot.
 //
 //   node buy.mjs [seller URL]
 //
@@ -20,6 +20,10 @@ const TEST1 =
 
 const mnemonic = process.env.X402_MNEMONIC || TEST1;
 
+// The most this buyer pays for one request, in ugnot. The network fee is paid on
+// top of it.
+const MAX_PRICE = "1000000";
+
 const sellerURL = process.argv[2] ?? process.env.X402_SELLER_URL ?? "http://localhost:8401/weather";
 // The node reports its address in tm2's own form, which names the transport
 // rather than the scheme an HTTP client needs.
@@ -31,7 +35,13 @@ const rpcURL = (process.env.X402_GNO_RPC ?? "http://127.0.0.1:26657").replace(
 const wallet = await GnoWallet.fromMnemonic(mnemonic);
 wallet.connect(await GnoJSONRPCProvider.create(rpcURL));
 
-const client = new x402Client().register("gno:*", new ExactGnoScheme(wallet));
+// A stock client only pays in USD-pegged assets until told otherwise, and ugnot
+// is not one.
+const client = new x402Client()
+  .register("gno:*", new ExactGnoScheme(wallet))
+  .setSpendControls({
+    allowedAssets: [{ network: "gno:*", asset: "ugnot", maxAmountPerPayment: MAX_PRICE }],
+  });
 const fetchWithPayment = wrapFetchWithPayment(fetch, client);
 
 console.log(`buying as ${await wallet.getAddress()}`);
