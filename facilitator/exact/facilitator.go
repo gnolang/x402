@@ -60,8 +60,9 @@ type Node interface {
 // checks against could not be read, or the request ended before a broadcast. It
 // carries no reason code, because nothing was established about the payment.
 type NoVerdictError struct {
-	// Payer is the address the payment's transaction pays from, or empty when the
-	// transaction did not decode.
+	// Payer is the address the payment's transaction claims to pay from, whether
+	// or not its signature verified, or empty when the transaction did not decode.
+	// It is for the operator's log; no answer carries it.
 	Payer string
 	Err   error
 }
@@ -215,8 +216,9 @@ func refusePayment(payer, reason string, cause error) paymentCheck {
 }
 
 // check runs the full verification (network match, static rules, the signer's
-// account, simulate) and reports what it concluded. A payer is reported from the
-// point the transaction decodes; every rejection before that leaves it empty.
+// account, simulate) and reports what it concluded. A refusal names the payer
+// only once the signature verified: until then the sender is whatever the
+// transaction's bytes claim.
 //
 // The engine dispatches by scheme and by registered network, so neither needs
 // rechecking here, except that a registration under a wildcard pattern hands this
@@ -252,7 +254,12 @@ func (f *Facilitator) check(ctx context.Context, payload types.PaymentPayload, r
 	case noVerdict:
 		return paymentCheck{verdict: noVerdict, payer: payer, cause: cause}
 	case paymentRefused:
-		return refusePayment(payer, reason, cause)
+		// A signature over the consumed sequence verified, so the address it names
+		// is the payer's; every other account refusal verified no signature.
+		if reason == ReasonSequenceMismatch {
+			return refusePayment(payer, reason, cause)
+		}
+		return refusePayment("", reason, cause)
 	}
 	if err := f.node.Simulate(tx); err != nil {
 		// A simulation that never reached the node refuses nothing, so it is not

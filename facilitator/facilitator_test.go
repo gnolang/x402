@@ -300,22 +300,56 @@ func TestFacilitator_VerifyRefusesAPayloadAcceptingADifferentOffer(t *testing.T)
 	}
 }
 
-// TestFacilitator_SettleRefusalNamesThePayer pins that a refusal reports who the
-// payment came from once verification decoded it. The broadcast-failure answer
-// beside it already does, and the spec's own failure fixture carries a payer — a
-// seller reading only the refusal would otherwise have no idea whose payment it
-// was.
-func TestFacilitator_SettleRefusalNamesThePayer(t *testing.T) {
-	txB64, account := exacttest.SignedTx(t, func(tx *std.Tx) { tx.Signatures[0].Signature[0] ^= 0xff })
-	h := New(&exacttest.Node{Account: account}, "dev").Handler()
+// TestFacilitator_RefusalNamesOnlyAVerifiedPayer pins one rule for both
+// endpoints: a refusal names the payer once the signature has verified, and
+// never before. A transaction's sender is whatever its bytes claim until the
+// signature proves it, so naming it earlier would attribute a payment to an
+// address nothing verified; once proved, a seller reading the refusal learns
+// whose payment it was.
+func TestFacilitator_RefusalNamesOnlyAVerifiedPayer(t *testing.T) {
+	tampered := func(tx *std.Tx) { tx.Signatures[0].Signature[0] ^= 0xff }
+	cases := map[string]struct {
+		mutate    func(*std.Tx)
+		node      func(account exact.SignerAccount) *exacttest.Node
+		wantPayer string
+	}{
+		"a forged signature names nobody": {
+			mutate:    tampered,
+			node:      func(account exact.SignerAccount) *exacttest.Node { return &exacttest.Node{Account: account} },
+			wantPayer: "",
+		},
+		"a refusal after the signature verified names the payer": {
+			node: func(account exact.SignerAccount) *exacttest.Node {
+				return &exacttest.Node{Account: account, SimulateErr: std.ErrInsufficientFunds("insufficient funds")}
+			},
+			wantPayer: exacttest.Payer,
+		},
+		"a signature over a consumed sequence verified, so it names the payer": {
+			node: func(account exact.SignerAccount) *exacttest.Node {
+				return &exacttest.Node{Account: exacttest.AccountWithKey(account.Account.GetPubKey(),
+					account.Account.GetAccountNumber(), account.Account.GetSequence()+1)}
+			},
+			wantPayer: exacttest.Payer,
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			txB64, account := exacttest.SignedTx(t, tc.mutate)
+			h := New(tc.node(account), "dev").Handler()
 
-	rec := facilitatorRequest(t, h, "/settle", exacttest.Requirements(), txB64)
-	require.Equal(t, http.StatusOK, rec.Code)
-	var resp x402.SettleResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.False(t, resp.Success)
-	assert.Equal(t, exact.ReasonSignatureInvalid, resp.ErrorReason)
-	assert.Equal(t, "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5", resp.Payer)
+			var verified x402.VerifyResponse
+			rec := facilitatorRequest(t, h, "/verify", exacttest.Requirements(), txB64)
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &verified))
+			assert.False(t, verified.IsValid)
+			assert.Equal(t, tc.wantPayer, verified.Payer, "/verify")
+
+			var settled x402.SettleResponse
+			rec = facilitatorRequest(t, h, "/settle", exacttest.Requirements(), txB64)
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &settled))
+			assert.False(t, settled.Success)
+			assert.Equal(t, tc.wantPayer, settled.Payer, "/settle")
+		})
+	}
 }
 
 // TestFacilitator_SettleRefusalBeforeDecodingNamesNoPayer is the other half: a
@@ -474,7 +508,8 @@ func TestFacilitator_AbsentAccountIsAPaymentVerdict(t *testing.T) {
 	record := logRecord(t, logs, "x402 verify: payment invalid")
 	assert.Equal(t, exact.ReasonSimulationFailed, record["reason"])
 	assert.Contains(t, record["err"], "unknown address")
-	assert.Equal(t, "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5", record["payer"])
+	assert.NotContains(t, record, "payer", "no account means no signature was verified, so no payer is named")
+	assert.Empty(t, resp.Payer)
 	assert.Zero(t, node.Simulates, "an account the chain refuses is answered without simulating")
 }
 

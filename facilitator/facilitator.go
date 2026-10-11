@@ -131,11 +131,11 @@ func (s *Server) answerVerifyError(w http.ResponseWriter, req request, err error
 	refuseVerify(w, refusal.Payer, s.specReason(refusal.InvalidReason, req.requirementsScheme), refusal.InvalidMessage)
 }
 
-// refuseVerify answers a payment that will not settle. The payer is logged and
-// left out of the answer.
+// refuseVerify answers a payment that will not settle. payer is set only once
+// the payment's signature verified.
 func refuseVerify(w http.ResponseWriter, payer, reason, cause string) {
 	slog.Info("x402 verify: payment invalid", rejectionFields(payer, reason, cause)...)
-	writeJSON(w, x402.VerifyResponse{IsValid: false, InvalidReason: reason})
+	writeJSON(w, x402.VerifyResponse{IsValid: false, InvalidReason: reason, Payer: payer})
 }
 
 func (s *Server) handleSettle(w http.ResponseWriter, r *http.Request) {
@@ -181,10 +181,8 @@ func (s *Server) answerSettleError(w http.ResponseWriter, req request, err error
 	s.refuseSettle(w, refusal.Payer, reason, refusal.ErrorMessage)
 }
 
-// refuseSettle answers a payment that will not settle. The payer is reported
-// whenever verification decoded one: it is omitempty, so a refusal before the
-// transaction decoded still names nobody, and the spec's own failure fixture
-// carries the key.
+// refuseSettle answers a payment that will not settle. payer is set only once
+// the payment's signature verified.
 func (s *Server) refuseSettle(w http.ResponseWriter, payer, reason, cause string) {
 	slog.Info("x402 settle: payment invalid", rejectionFields(payer, reason, cause)...)
 	writeJSON(w, x402.SettleResponse{Success: false, Network: x402.Network(s.network), Payer: payer, ErrorReason: reason})
