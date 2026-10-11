@@ -121,7 +121,7 @@ the root Makefile's targets run from here. The demo's Makefile runs from `exampl
 
 - **The payer pays the network fee.** `std.Fee` names no payer and the chain charges the first signer, so the payer of the resource is also the payer of the gas. Offers state this as `extra.areFeesSponsored: false`.
 - **The facilitator holds no key.** It verifies offline and broadcasts a transaction the payer already signed, so it cannot move funds anywhere the payer did not sign for.
-- **A failed resource is not charged for.** The flow is `authorization`: verify, serve, then settle. The middleware buffers the response and skips settlement on any status ≥400.
+- **A failed resource is not charged for.** The flow is `authorization`: verify, serve, then settle. The middleware buffers the response and skips settlement on any status ≥400. Skipping it does not void the payment, which stays signed and valid (see below).
 - **A failed settlement withholds the response.** The buffered body is discarded.
 - **A payment no block executed in time is pending, not failed.** The facilitator answers
   `settlement_pending` with the transaction hash. The seller's SDK settles once more, which asks
@@ -135,6 +135,11 @@ the root Makefile's targets run from here. The demo's Makefile runs from `exampl
 **Accepted risk:** between `/verify` and `/settle` a payer can consume the signed-over account
 sequence with another transaction. gno has no pull-settlement primitive, so this is cooperative — the
 same exposure XRPL documents for its own `exact` mechanism.
+
+**A signed payment does not expire.** A gno transaction carries no expiry, and `maxTimeoutSeconds`
+binds nothing in it. Until the payer spends its sequence on another transaction, whoever holds the
+`PAYMENT-SIGNATURE` header, the seller included, can still broadcast it. A buyer refused service
+voids an unused payment by sending any other transaction from the paying account.
 
 ## Development
 
