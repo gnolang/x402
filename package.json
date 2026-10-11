@@ -50,8 +50,9 @@
     "@gnolang/gno-js-client": "3.1.0",
     "@gnolang/tm2-js-client": "3.3.0"
   },
+  "//peerDependencies": "2.23 is the first @x402/core with setSpendControls. From that version a stock client pays only in USD-pegged assets unless they are listed there, and ugnot is not one, so every buyer of this mechanism calls it.",
   "peerDependencies": {
-    "@x402/core": ">=2.21.0"
+    "@x402/core": ">=2.23.0"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
