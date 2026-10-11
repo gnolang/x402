@@ -141,12 +141,8 @@ an unreachable node, so the process warns and starts.
 30 s. A clean stop exits 0; a drain that runs out exits 1.
 
 A request waiting on the node is answered within the 25 s answer timeout, so the drain
-covers a `/settle` in flight. Give the orchestrator a stop grace period above 30 s so it does not kill the process
-mid-drain.
-
-A `/settle` answered `503` at the deadline may still commit on chain afterwards: the `503`
-carries no verdict, and the signed transaction carries the payer's account sequence, so a
-retry cannot pay twice.
+covers a `/settle` in flight. Give the orchestrator a stop grace period above 30 s so it
+does not kill the process mid-drain.
 
 ## Failure modes
 
@@ -160,6 +156,11 @@ retry cannot pay twice.
 
 The distinction in row 1 matters operationally: a `503` means "ask again", not "the buyer
 didn't pay".
+
+A `/settle` answered `503` starts no broadcast after that answer, but one already under way
+may still commit. Retrying the same payment then answers
+`invalid_exact_gno_payload_sequence_mismatch`: the payer's sequence is spent, possibly by
+that payment. Look the transaction up on chain before refusing the buyer.
 
 ## Security posture
 
