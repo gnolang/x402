@@ -47,8 +47,8 @@
   },
   "//dependencies": "Versions are exact so a signed payment changes only when a dependency is deliberately bumped. @x402/core is a peer: only its types are used, and a mechanism must not pull in a second copy of the client its consumer already has.",
   "dependencies": {
-    "@gnolang/gno-js-client": "2.0.3",
-    "@gnolang/tm2-js-client": "2.0.4"
+    "@gnolang/gno-js-client": "3.1.0",
+    "@gnolang/tm2-js-client": "3.3.0"
   },
   "peerDependencies": {
     "@x402/core": ">=2.21.0"

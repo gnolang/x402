@@ -3,8 +3,10 @@ import {
   PubKeySecp256k1,
   Secp256k1PubKeyType,
   type Tx,
+  type TxSignPayload,
   type Wallet,
   encodeCharacterSet,
+  parseSignCoin,
   sortedJsonStringify,
   stringToUTF8,
 } from "@gnolang/tm2-js-client";
@@ -60,21 +62,18 @@ export async function signForChain(
   const address = await wallet.getAddress();
   const account = await provider.getAccount(address);
 
-  const signBytes = stringToUTF8(
-    encodeCharacterSet(
-      sortedJsonStringify({
-        chain_id: chainId,
-        account_number: account.BaseAccount.account_number,
-        sequence: account.BaseAccount.sequence,
-        fee: {
-          gas_fee: fee.gas_fee,
-          gas_wanted: fee.gas_wanted.toString(10),
-        },
-        msgs: decodeTxMessages(tx.messages),
-        memo: tx.memo,
-      }),
-    ),
-  );
+  const payload: TxSignPayload = {
+    chain_id: chainId,
+    account_number: account.BaseAccount.account_number,
+    sequence: account.BaseAccount.sequence,
+    fee: {
+      amount: parseSignCoin(fee.gas_fee),
+      gas: fee.gas_wanted.toString(10),
+    },
+    msgs: decodeTxMessages(tx.messages),
+    memo: tx.memo,
+  };
+  const signBytes = stringToUTF8(encodeCharacterSet(sortedJsonStringify(payload)));
 
   const signer = wallet.getSigner();
   const publicKey = await signer.getPublicKey();
@@ -89,6 +88,7 @@ export async function signForChain(
           value: PubKeySecp256k1.encode({ key: publicKey }).finish(),
         },
         signature: await signer.signData(signBytes),
+        session_addr: "",
       },
     ],
   };

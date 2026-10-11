@@ -54,6 +54,9 @@ reports. That is worth stating because the obvious implementation cannot do it:
 This builds the sign doc itself instead, and a test holds the result byte-identical to the wallet's
 own signing.
 
+The sign doc renders the fee in the shape of gnolang/gno#6173, as `@gnolang/tm2-js-client` 3 does.
+A chain without that change refuses the signature; onyx-1 has it.
+
 The chain id is the only sign-doc field that comes from the offer. The account number and the
 sequence still come from the wallet's provider, because only a chain knows the next sequence for an
 account — so paying a second gno chain also means pointing the wallet at a node on it. A wallet
