@@ -65,6 +65,10 @@ carries them there, not in the body:
 
 Runnable, against a facilitator and a real chain → **[examples/weather](examples/weather)**.
 
+A public facilitator serves gno.land's testnet at `https://facilitator.onyx.testnets.gno.land`.
+Its network is `gno:onyx-1`, so a seller using it sets `Network` to that. You can also
+[run your own](docs/deploying.md).
+
 ## Pay for it
 
 ```sh
