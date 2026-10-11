@@ -169,11 +169,13 @@ func (s *Server) answerSettleError(w http.ResponseWriter, req request, err error
 	reason := s.specReason(refusal.ErrorReason, req.requirementsScheme)
 	if reason == exact.ReasonBroadcastFailed {
 		// A delivery the chain committed and then aborted charged the payer its
-		// fee, so its hash is a real record even though the answer carries an
-		// empty transaction. It reaches the operator's log, which is where the
-		// charge can be reconciled.
+		// fee, so its hash is reported and logged: it is the record the charge is
+		// reconciled against.
 		slog.Error("x402 settle: broadcast failed", "payer", refusal.Payer, "tx", refusal.Transaction, "err", refusal.ErrorMessage)
-		writeJSON(w, x402.SettleResponse{Success: false, Network: x402.Network(s.network), Payer: refusal.Payer, ErrorReason: reason})
+		writeJSON(w, x402.SettleResponse{
+			Success: false, Transaction: refusal.Transaction, Network: x402.Network(s.network),
+			Payer: refusal.Payer, ErrorReason: reason,
+		})
 		return
 	}
 	s.refuseSettle(w, refusal.Payer, reason, refusal.ErrorMessage)

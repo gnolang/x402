@@ -107,3 +107,20 @@ func TestGnoclientNode_BroadcastReportsNoTxWhenTheChainNeverAnswered(t *testing.
 	assert.False(t, exact.ChainRefused(err), "an unreachable node refuses nothing")
 	assert.Empty(t, hash)
 }
+
+// TestGnoclientNode_BroadcastReportsNoTxForACheckTxRefusal pins that only a
+// committed transaction reports its hash. A transaction CheckTx refused never
+// entered a mempool, so nothing was broadcast and nothing can be reconciled,
+// although the node answers with its hash all the same.
+func TestGnoclientNode_BroadcastReportsNoTxForACheckTxRefusal(t *testing.T) {
+	hash, err := broadcastThrough(t, &ctypes.ResultBroadcastTxCommit{
+		CheckTx: abci.ResponseCheckTx{
+			ResponseBase: abci.ResponseBase{Error: std.InsufficientFundsError{}},
+		},
+		Hash: []byte{0xde, 0xad, 0xbe, 0xef},
+	}, nil)
+
+	require.Error(t, err)
+	assert.True(t, exact.ChainRefused(err), "a CheckTx refusal is the chain's own answer")
+	assert.Empty(t, hash, "a transaction CheckTx refused was never broadcast")
+}

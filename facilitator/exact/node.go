@@ -115,14 +115,14 @@ func (n *GnoclientNode) NodeChainID(ctx context.Context) (string, error) {
 // chain's own abci.Error makes it a verdict on the transaction, and chainRefused
 // reads that off the type.
 //
-// A hash travels with it when there is a result. Upstream answers the CheckTx
-// and DeliverTx paths with one, and a delivery the chain committed and then
-// aborted charged the payer its fee — so that transaction's hash is a real
-// record, and the only one an operator can reconcile the charge against. A
-// transport failure carries no result and leaves nothing to report.
+// A hash travels with it only for a transaction the chain committed. A delivery
+// the chain committed and then aborted charged the payer its fee, so that hash
+// is a real record, and the only one a charge can be reconciled against. A
+// transaction CheckTx refused never entered a mempool, and a transport failure
+// carries no result: neither broadcast anything.
 func (n *GnoclientNode) Broadcast(tx *std.Tx) (string, error) {
 	res, err := n.cli.BroadcastTxCommit(tx)
-	if res == nil {
+	if res == nil || res.CheckTx.IsErr() {
 		return "", err
 	}
 	return hex.EncodeToString(res.Hash), err

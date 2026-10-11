@@ -223,11 +223,12 @@ func TestFacilitator_SettleBroadcastUnreachableReportsNoVerdict(t *testing.T) {
 	assert.Equal(t, 1, node.Broadcasts)
 }
 
-// TestFacilitator_SettleLogsTheTxOfAnAbortedDelivery pins the operator's record
-// for a delivery the chain committed and then refused: such a transaction is on
-// chain and charged the payer its fee, so its hash must reach the log even
-// though the wire answer carries an empty transaction.
-func TestFacilitator_SettleLogsTheTxOfAnAbortedDelivery(t *testing.T) {
+// TestFacilitator_SettleReportsTheTxOfAnAbortedDelivery pins the answer for a
+// delivery the chain committed and then refused: such a transaction is on chain
+// and charged the payer its fee, so its hash is carried with the refusal and
+// reaches the log. The specification leaves transaction empty only when nothing
+// was broadcast.
+func TestFacilitator_SettleReportsTheTxOfAnAbortedDelivery(t *testing.T) {
 	logs := captureLogs(t)
 	txB64, account := exacttest.SignedTx(t, nil)
 	node := &exacttest.Node{Hash: "abc123", BroadcastErr: std.ErrSessionExpired("session expired"), Account: account}
@@ -236,7 +237,9 @@ func TestFacilitator_SettleLogsTheTxOfAnAbortedDelivery(t *testing.T) {
 	rec := facilitatorRequest(t, h, "/settle", exacttest.Requirements(), txB64)
 	var resp x402.SettleResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Empty(t, resp.Transaction, "the spec's failed settlement carries an empty transaction")
+	assert.False(t, resp.Success)
+	assert.Equal(t, exact.ReasonBroadcastFailed, resp.ErrorReason)
+	assert.Equal(t, "abc123", resp.Transaction, "a committed delivery was broadcast, so its hash is reported")
 
 	record := logRecord(t, logs, "x402 settle: broadcast failed")
 	assert.Equal(t, "abc123", record["tx"])
