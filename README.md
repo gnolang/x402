@@ -87,9 +87,11 @@ const paid = wrapFetchWithPayment(fetch, client);
 const res = await paid("https://api.example.com/weather");
 ```
 
-A stock client pays only in USD-pegged assets unless an asset is listed in its spend controls, so
-the buyer lists ugnot. `maxAmountPerPayment` is the most one request may cost, in ugnot; the network
-fee is paid on top. Recognising the 402, selecting an entry, encoding `PAYMENT-SIGNATURE` and retrying are
+From `@x402/core` 2.23 a stock client pays only in USD-pegged assets unless an asset is listed in
+its spend controls, so the buyer lists ugnot. `maxAmountPerPayment` is the most one request may
+cost, in ugnot; the network fee is paid on top.
+
+Recognising the 402, selecting an entry, encoding `PAYMENT-SIGNATURE` and retrying are
 `@x402/fetch`'s own code, unmodified. The payment is signed against the chain id the **offer** names
 rather than the one the wallet's node reports — see [client/README.md](client/README.md) for what
 that does and does not buy you.
@@ -108,11 +110,12 @@ implementation detail of the role, so no directory names one.
 | facilitator | `facilitator/` | verification, settlement, and the `/verify` `/settle` `/supported` service |
 | client | `client/src/exact/client.ts` | upstream's `SchemeNetworkClient`, TypeScript |
 
-Plus `cmd/gnofacilitator/` (the binary), `examples/weather/` (a priced endpoint you can run and
-curl) and `e2e/` (one real payment through a real node — its own Go module).
+Plus `cmd/gnofacilitator/` (the binary), `examples/weather/` (a seller and a buyer that make one
+payment end to end, with a Makefile to run them) and `e2e/` (one real payment through a real node —
+its own Go module).
 
 Both manifests — `go.mod` and `package.json` — live at the root, so `go test ./...`, `npm test` and
-every `make` target run from here.
+the root Makefile's targets run from here. The demo's Makefile runs from `examples/weather`.
 
 ## Payment model
 

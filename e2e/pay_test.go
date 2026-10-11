@@ -81,9 +81,8 @@ func writableGnoRoot(t *testing.T) {
 	t.Setenv("GNOROOT", mirror)
 }
 
-// buyerScript is the buyer this harness drives, a sibling of this file: the whole
-// claim under test is that a stock client pays, so the buyer is part of the
-// harness rather than something borrowed from elsewhere in the tree.
+// buyerScript is the harness buyer. It reports what happened as JSON, which the
+// contract scenarios grep for status, payer, transaction and reason.
 //
 // A missing buyer.mjs FAILS rather than skips, because it is committed. Only the
 // built mechanism is allowed to be absent, since building it needs npm and a

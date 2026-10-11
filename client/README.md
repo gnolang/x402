@@ -3,7 +3,7 @@
 Pay a gno.land chain with x402, from a stock client — no fork, no patch, no upstream change.
 
 Install it with `npm i @gnoverse/x402-gno`, or build it from the repository root with `make js`.
-[`e2e/buyer.mjs`](../e2e/buyer.mjs), the buyer the payment test drives, is a working example.
+[`examples/weather/buy.mjs`](../examples/weather/buy.mjs) is a working buyer.
 
 ```js
 import { x402Client } from "@x402/core/client";

@@ -24,30 +24,48 @@ handler := nethttpmw.X402Payment(nethttpmw.Config{
 ```
 
 The middleware, the route matching, the 402 and the header encoding are all the ecosystem's. Only
-`gnoexact.NewExactGnoScheme()` is ours.
+`gnoexact.NewExactGnoScheme()` and the page a browser gets are ours.
 
 ## Run it
 
-From this directory, one command per terminal:
+Needs Go, Node 22.18+ or 24.11+, and `gnodev` (`make install.gnodev` in a
+[gnolang/gno](https://github.com/gnolang/gno) checkout). From this directory, one command per
+terminal:
 
 ```sh
 gnodev              # a local node (chain id "dev", RPC :26657)
 make facilitator    # the facilitator, on :8402
 make run            # the seller, on :8401
-make pay            # buy.mjs pays it
+make pay            # buy.mjs pays it, as gno's public test1 key
 ```
 
-Every knob is a variable. Against a live testnet, point the three services at it and pay with
-your own funded key ([faucet.gno.land](https://faucet.gno.land) funds the public testnets):
+`make pay` prints the payment and the weather it bought:
+
+```text
+buying as g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5, gno's public test1 key; set X402_MNEMONIC to pay from your own account
+paid: tx a0a66524832960c26ad3110d998f8ad87c3ee1166ca1faac145e7e1ee9ab8b8f by g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5
+{"celsius":24,"forecast":"sunny","location":"Paris"}
+```
+
+### On the onyx testnet
+
+The seller uses the public facilitator for `onyx-1`, so no local node or facilitator runs. The buyer
+pays from your own key, funded at [faucet.gno.land](https://faucet.gno.land). Use a throwaway key:
+the mnemonic stays in your shell history.
 
 ```sh
-make run NETWORK=gno:<chain-id> FACILITATOR=<facilitator URL> PAY_TO=g1...
-make pay RPC=<RPC URL> MNEMONIC="<funded mnemonic>"
+make run NETWORK=gno:onyx-1 FACILITATOR=https://facilitator.onyx.testnets.gno.land PAY_TO=g1...
+X402_MNEMONIC="<funded mnemonic>" make pay RPC=https://rpc.onyx.testnets.gno.land:443
 ```
+
+To settle through your own facilitator instead, start it with
+`make facilitator NETWORK=gno:onyx-1 RPC=https://rpc.onyx.testnets.gno.land:443` and leave
+`FACILITATOR` at its default.
 
 ## Run it yourself, piece by piece
 
-Three processes. The facilitator talks to the chain; the seller never does.
+Three processes, started from the repository root. The facilitator talks to the chain; the seller
+never does.
 
 **1. A gno node**, with its RPC reachable. Any node works — a local dev chain or a testnet.
 
@@ -105,20 +123,25 @@ the facilitator holds no key. The mechanism sets it, so no seller writes it. The
 `paymentFlow` key because the flow is `authorization`, the specification's default, which may be
 omitted.
 
+A browser gets an HTML page naming the price, the network and the payee, which `main.go` builds.
+The middleware's own paywall supports EVM and Solana chains only.
+
 ## Paying it
 
-There is no Go client mechanism yet, so a Go buyer cannot pay this. `buy.mjs` in this directory
-can:
+There is no Go client mechanism, so a Go buyer cannot pay this. `buy.mjs` can, from the repository
+root:
 
 ```sh
-X402_GNO_RPC=<RPC URL> node buy.mjs http://localhost:8401/weather
+make js               # build the client mechanism buy.mjs imports
+X402_GNO_RPC=<RPC URL> node examples/weather/buy.mjs http://localhost:8401/weather
 ```
 
 It registers `ExactGnoScheme` with a stock `@x402/fetch` client, admits ugnot to the client's spend
-controls with a 1 GNOT cap per request, and signs with the mnemonic in `X402_MNEMONIC`: a **funded**
-account on the chain the offer names ([faucet.gno.land](https://faucet.gno.land) funds the public
-testnets). Point `X402_GNO_RPC` at the same node the facilitator uses: the buyer reads its account
-sequence from the chain, so this leg needs a real node rather than the unreachable one a 402 tolerates.
+controls with a 1 GNOT cap per request, and signs with the mnemonic in `X402_MNEMONIC`, or as gno's
+public test1 key when that is unset. The account must be **funded** on the chain the offer names
+([faucet.gno.land](https://faucet.gno.land) funds the public testnets). Point `X402_GNO_RPC` at the
+same node the facilitator uses: the buyer reads its account sequence from the chain, so this leg
+needs a real node rather than the unreachable one a 402 tolerates.
 
 The loop is covered: the e2e suite runs this seller configuration and this same `buy.mjs` against
 an in-process node on every pull request, and asserts the seller's balance moved.

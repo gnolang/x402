@@ -1,5 +1,5 @@
-// A stock x402 client buys from a gno seller. This is the buyer the payment test
-// drives: pay_test.go hands it to the txtar scenarios as $X402_BUYER. Running it
+// A stock x402 client buys from a gno seller. This is the buyer the contract
+// scenarios drive: pay_test.go hands it to the txtar scenarios as $X402_BUYER. Running it
 // by hand against a live seller is the same path, with a real node.
 //
 // The gno-aware lines are the register() call and the spend control that admits
