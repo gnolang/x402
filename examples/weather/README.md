@@ -2,7 +2,7 @@
 
 The x402 seller example, with gno listed as a way to pay. The resource is weather data: it is not
 a realm, it makes no contract call, and it does not know a chain exists. Everything gno-specific is
-a network string and one registered scheme.
+a network string, one registered scheme and the page a browser gets.
 
 ```go
 routes := x402http.RoutesConfig{

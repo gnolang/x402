@@ -3,7 +3,8 @@
 //
 // It is the x402.org front-page example with a gno accepts[] entry. The resource
 // is weather data and knows nothing about the chain — no realm, no contract call.
-// Everything gno-specific is two strings and one registered scheme.
+// Everything gno-specific is two strings, one registered scheme, and the page a
+// browser gets in place of the resource.
 //
 //	weather -pay-to g1... -network gno:dev -price 250000ugnot
 //
@@ -14,9 +15,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html/template"
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gnolang/gno/tm2/pkg/std"
@@ -32,6 +35,21 @@ import (
 const facilitatorSyncTimeout = 10 * time.Second
 
 const readHeaderTimeout = 5 * time.Second
+
+// paywall is what a browser gets in place of the resource. The middleware's own
+// paywall supports EVM and Solana chains only.
+var paywall = template.Must(template.New("paywall").Parse(`<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Payment required</title>
+<h1>Payment required</h1>
+<p>Weather data costs <strong>{{.Price}}</strong> on <code>{{.Network}}</code>, paid to <code>{{.PayTo}}</code>.</p>
+<p>Pay it with an x402 client, such as
+<a href="https://github.com/gnoverse/x402/tree/main/examples/weather">buy.mjs</a>:</p>
+<pre>node buy.mjs &lt;this page's URL&gt;</pre>
+</html>
+`))
 
 func main() {
 	listen := flag.String("listen", ":8401", "HTTP listen address")
@@ -54,27 +72,74 @@ func main() {
 		os.Exit(2)
 	}
 
+	seller, err := newSeller(sellerConfig{
+		facilitatorURL: *facilitator,
+		network:        *network,
+		payTo:          *payTo,
+		price:          coin,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "weather: %v\n", err)
+		os.Exit(1)
+	}
+
+	srv := &http.Server{
+		Addr:              *listen,
+		Handler:           seller,
+		ReadHeaderTimeout: readHeaderTimeout,
+	}
+
+	slog.Info("weather seller listening",
+		"addr", *listen, "network", *network, "price", coin.String(), "payTo", *payTo)
+	if err := srv.ListenAndServe(); err != nil {
+		slog.Error("serve", "err", err)
+		os.Exit(1)
+	}
+}
+
+type sellerConfig struct {
+	facilitatorURL string
+	network        string // gno:<chain-id>
+	payTo          string
+	price          std.Coin
+}
+
+// newSeller returns the weather resource behind the x402 middleware. It asks the
+// facilitator what it supports before returning: an unreachable facilitator is
+// only warned about, and one without exact on cfg.network exits the process.
+func newSeller(cfg sellerConfig) (http.Handler, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /weather", serveWeather)
+
+	var page strings.Builder
+	err := paywall.Execute(&page, struct{ Price, Network, PayTo string }{
+		Price:   cfg.price.String(),
+		Network: cfg.network,
+		PayTo:   cfg.payTo,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("render the paywall: %w", err)
+	}
 
 	routes := x402http.RoutesConfig{
 		"GET /weather": {
 			Accepts: x402http.PaymentOptions{{
 				Scheme:  "exact",
-				PayTo:   *payTo,
-				Price:   x402.AssetAmount{Asset: coin.Denom, Amount: fmt.Sprint(coin.Amount)},
-				Network: x402.Network(*network),
+				PayTo:   cfg.payTo,
+				Price:   x402.AssetAmount{Asset: cfg.price.Denom, Amount: fmt.Sprint(cfg.price.Amount)},
+				Network: x402.Network(cfg.network),
 			}},
-			Description: "Weather data",
-			MimeType:    "application/json",
+			Description:       "Weather data",
+			MimeType:          "application/json",
+			CustomPaywallHTML: page.String(),
 		},
 	}
 
-	handler := nethttpmw.X402Payment(nethttpmw.Config{
+	return nethttpmw.X402Payment(nethttpmw.Config{
 		Routes:      routes,
-		Facilitator: x402http.NewHTTPFacilitatorClient(&x402http.FacilitatorConfig{URL: *facilitator}),
+		Facilitator: x402http.NewHTTPFacilitatorClient(&x402http.FacilitatorConfig{URL: cfg.facilitatorURL}),
 		Schemes: []nethttpmw.SchemeConfig{
-			{Network: x402.Network(*network), Server: gnoexact.NewExactGnoScheme()},
+			{Network: x402.Network(cfg.network), Server: gnoexact.NewExactGnoScheme()},
 		},
 		SyncFacilitatorOnStart: true,
 		Timeout:                facilitatorSyncTimeout,
@@ -92,20 +157,7 @@ func main() {
 			slog.Error("not paid; the response is withheld", "err", err)
 			w.WriteHeader(http.StatusPaymentRequired)
 		},
-	})(mux)
-
-	srv := &http.Server{
-		Addr:              *listen,
-		Handler:           handler,
-		ReadHeaderTimeout: readHeaderTimeout,
-	}
-
-	slog.Info("weather seller listening",
-		"addr", *listen, "network", *network, "price", coin.String(), "payTo", *payTo)
-	if err := srv.ListenAndServe(); err != nil {
-		slog.Error("serve", "err", err)
-		os.Exit(1)
-	}
+	})(mux), nil
 }
 
 func serveWeather(w http.ResponseWriter, _ *http.Request) {
