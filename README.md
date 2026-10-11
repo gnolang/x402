@@ -143,7 +143,7 @@ make help                # Every target
 `make test-e2e` starts a node via gno.land's txtar harness, stands up the facilitator and a priced
 endpoint, pays with the JS client, and asserts the seller's balance changed. It also hands one
 payment to two facilitators at once, through one node and through two peered nodes, and asserts how
-many report it settled.
+many report it settled, and it replays a settled payment and asserts it is refused as spent.
 
 Built against [`github.com/x402-foundation/x402/go/v2`](https://github.com/x402-foundation/x402) for
 the protocol and [`gnolang/gno`](https://github.com/gnolang/gno) for the chain.

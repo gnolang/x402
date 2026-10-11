@@ -33,7 +33,7 @@ names a language.
 | `client/src/` | upstream's `SchemeNetworkClient`, TypeScript; emits to `client/dist/` |
 | `cmd/gnofacilitator/` | the binary |
 | `examples/weather/` | the demo: a priced endpoint (`main.go`), the buyer that pays it (`buy.mjs`), and a Makefile that runs them and a facilitator |
-| `e2e/` | real payments through real nodes — its own Go module. `buyer.mjs` beside it is the buyer the contract scenarios drive; the happy path drives `examples/weather/buy.mjs`. `settle_test.go` hands one payment to two facilitators at once, through one node and through two peered nodes |
+| `e2e/` | real payments through real nodes — its own Go module. `buyer.mjs` beside it is the buyer the contract scenarios drive; the happy path drives `examples/weather/buy.mjs`. `settle_test.go` hands one payment to two facilitators at once, through one node and through two peered nodes, and replays a settled one |
 | `docs/releasing.md` | the two independent release lines |
 | `docs/deploying.md` | running the facilitator image: flags, endpoints, limits, failure modes |
 

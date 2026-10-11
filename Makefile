@@ -10,7 +10,7 @@
 #   test       the library. No network, no chain, no npm.
 #   js-test    the buyer mechanism, including the sign doc byte-equality check.
 #   test-e2e   real payments through real in-memory nodes: the JS buyer paying a
-#              seller, and one payment handed to two facilitators at once.
+#              seller, one payment handed to two facilitators at once, and a replay.
 #
 # e2e is its own Go module, so `test` cannot start a chain by accident and needs
 # no build tag to stay out of the way.

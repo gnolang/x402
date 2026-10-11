@@ -110,6 +110,37 @@ func TestDuplicateSettle_TwoNodesBothReportSuccess(t *testing.T) {
 	assert.Equal(t, before.payerSequence+1, after.payerSequence, "one transaction committed")
 }
 
+// TestAReplayedPaymentIsRefusedAsConsumed settles a payment, then hands the same
+// facilitator the same /settle body again.
+//
+// The chain consumed the sequence the payment was signed at, so the replay
+// cannot settle, and x402's exact scheme requires a consumed payment to fail at
+// settle. It is refused as a sequence mismatch rather than an invalid signature:
+// the signature still verifies over the sequence it was signed at, which is what
+// tells a spent payment from a forged one. Only a chain that ran the ante can
+// show it, since the unit tests read a scripted account.
+func TestAReplayedPaymentIsRefusedAsConsumed(t *testing.T) {
+	payer, payee := payerKey(t), payeeAddress()
+	validator := startValidator(t, payee)
+	facilitatorURL := startFacilitator(t, validator)
+	body := signedSettleRequest(t, validator, payer, payee)
+
+	first, err := postSettle(facilitatorURL, body)
+	require.NoError(t, err)
+	require.True(t, first.settled(), "first: %v", first)
+	paid := readAccounts(t, validator, payer, payee)
+
+	replay, err := postSettle(facilitatorURL, body)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusOK, replay.status, "replay: %v", replay)
+	assert.False(t, replay.response.Success)
+	assert.Equal(t, exact.ReasonSequenceMismatch, replay.response.ErrorReason)
+	assert.Equal(t, payer.PubKey().Address().String(), replay.response.Payer,
+		"the signature verified, so the refusal names the payer")
+	assert.Equal(t, paid, readAccounts(t, validator, payer, payee), "the replay moved nothing")
+}
+
 // ---- Chain
 
 // dupPrice is what every payment here sends, in ugnot.
