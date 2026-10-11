@@ -115,6 +115,7 @@ Over-limit callers get `429`.
 | read | 10 s |
 | write | 30 s |
 | idle | 60 s |
+| answer, a request waiting on the node | 25 s, then `503` |
 
 `/settle` waits on a chain broadcast, so proxy and load-balancer timeouts must exceed the
 30 s write timeout — otherwise the proxy cuts a settle the chain may still commit.
@@ -134,24 +135,25 @@ So a chain/RPC mismatch is caught at boot whenever the node is reachable. A miss
 An `-rpc` the RPC client rejects exits 1. A malformed one it accepts fails the chain-id query like
 an unreachable node, so the process warns and starts.
 
-## Shutdown — no graceful handler
+## Shutdown
 
-Verified: `SIGTERM` terminates the process in ~0.2 s, observed exit code **2**. There is no
-signal handler and no `http.Server.Shutdown`, so in-flight requests are cut.
+`SIGTERM` or `SIGINT` stops new connections and lets requests in flight finish, for up to
+30 s. A clean stop exits 0; a drain that runs out exits 1.
 
-Two consequences:
+A request waiting on the node is answered within the 25 s answer timeout, so the drain
+covers a `/settle` in flight. Give the orchestrator a stop grace period above 30 s so it does not kill the process
+mid-drain.
 
-- **A `/settle` cut mid-flight may already have broadcast.** The payment can land on chain
-  while the resource server sees a failed settle. Drain at the proxy before stopping.
-- A normal stop produces a **non-zero exit code**, which some orchestrators and dashboards
-  read as a crash. Expect it; don't chase it.
+A `/settle` answered `503` at the deadline may still commit on chain afterwards: the `503`
+carries no verdict, and the signed transaction carries the payer's account sequence, so a
+retry cannot pay twice.
 
 ## Failure modes
 
 | Condition | Response | Meaning |
 |---|---|---|
 | node unreachable | `503`, no reason code | deliberately *not* a payment verdict — the facilitator will not tell a seller a payment failed when it could not check |
-| node accepts the connection and never answers | no HTTP response; the connection closes at 60 s | the RPC client gives up at 60 s, past the 30 s write timeout, so the `503` is never delivered |
+| node accepts the connection and never answers | `503` after 25 s, no reason code | the answer timeout; no verdict, as for an unreachable node |
 | payment fails a check, or the chain refused the transaction | `200` with `isValid:false` (`/verify`) or `success:false` (`/settle`) and a reason code | an established outcome |
 | over rate limit | `429` | |
 | body is not one JSON request, or exceeds 1 MiB | `400`, plain text, no reason code | |
