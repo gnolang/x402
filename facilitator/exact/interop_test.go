@@ -1,6 +1,8 @@
 package exact_test
 
 import (
+	"context"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,4 +101,25 @@ func TestVerifyAccountChecksAcceptsJSSignedPayment(t *testing.T) {
 	t.Run("one sequence later is reported stale", func(t *testing.T) {
 		assert.Equal(t, exact.ReasonSequenceMismatch, accountReason(t, tx, &exacttest.Node{Account: exacttest.AccountWithKey(nil, 0, 1)}))
 	})
+}
+
+// TestSettleBroadcastsThePayersOwnBytes pins the relay invariant on the bytes a
+// foreign SDK produced. The chain's hash for a transaction is the hash of the
+// bytes it receives, so a re-encoding would record a payment under a hash the
+// payer cannot compute from what they signed, even though the signature, which
+// covers the sign doc rather than the bytes, still verifies. The JS encoding of
+// this fixture differs from amino's, so a re-encoding cannot pass here by
+// coincidence.
+func TestSettleBroadcastsThePayersOwnBytes(t *testing.T) {
+	transaction := interopTransaction(t)
+	payload, err := base64.StdEncoding.DecodeString(transaction)
+	require.NoError(t, err)
+	node := &exacttest.Node{Account: exacttest.AccountWithKey(nil, 0, 0), Hash: "abc123"}
+	requirements := interopRequirements()
+
+	_, err = exact.NewFacilitator(node, exacttest.ChainID).Settle(context.Background(),
+		exacttest.PaymentPayload(requirements, transaction), requirements, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, payload, node.Broadcasted, "the chain must receive the payer's bytes, not a re-encoding")
 }

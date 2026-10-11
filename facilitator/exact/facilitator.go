@@ -12,6 +12,7 @@ package exact
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -53,7 +54,10 @@ const MaxMemoBytes = 256
 type Node interface {
 	AccountReader
 	Simulate(tx *std.Tx) error
-	Broadcast(tx *std.Tx) (hash string, err error)
+
+	// Broadcast relays tx, the signed transaction's bytes exactly as the payer
+	// encoded them.
+	Broadcast(tx []byte) (hash string, err error)
 }
 
 // NoVerdictError reports a payment the facilitator could not decide: the chain it
@@ -137,7 +141,7 @@ func (f *Facilitator) Settle(ctx context.Context, payload types.PaymentPayload, 
 	if err := ctx.Err(); err != nil {
 		return nil, &NoVerdictError{Payer: check.payer, Err: err}
 	}
-	hash, err := f.node.Broadcast(check.tx)
+	hash, err := f.node.Broadcast(check.raw)
 	if err != nil {
 		// A broadcast that never reached the chain settles nothing and refuses
 		// nothing. Upstream errors this call both for a transaction CheckTx
@@ -199,12 +203,12 @@ const (
 )
 
 // paymentCheck is what a facilitator concluded about one payment: the verdict,
-// the decoded transaction when the payment is one to settle, the payer from the
-// point the transaction decodes, the wire reason when it is refused, and the
-// error behind a reason that covers several conditions or behind a failed read.
+// the transaction's bytes when the payment is one to settle, the payer, the wire
+// reason when it is refused, and the error behind a reason that covers several
+// conditions or behind a failed read.
 type paymentCheck struct {
 	verdict paymentVerdict
-	tx      *std.Tx
+	raw     []byte
 	payer   string
 	reason  string
 	cause   error
@@ -240,7 +244,11 @@ func (f *Facilitator) check(ctx context.Context, payload types.PaymentPayload, r
 	if err != nil {
 		return refusePayment("", ReasonMalformedTransaction, err)
 	}
-	tx, payer, reason := VerifyStatic(req, transaction)
+	raw, err := base64.StdEncoding.DecodeString(transaction)
+	if err != nil {
+		return refusePayment("", ReasonMalformedTransaction, err)
+	}
+	tx, payer, reason := verifyStatic(req, raw)
 	if reason != "" {
 		return refusePayment("", reason, nil)
 	}
@@ -269,7 +277,7 @@ func (f *Facilitator) check(ctx context.Context, payload types.PaymentPayload, r
 		}
 		return refusePayment(payer, ReasonSimulationFailed, err)
 	}
-	return paymentCheck{verdict: paymentAccepted, tx: tx, payer: payer}
+	return paymentCheck{verdict: paymentAccepted, raw: raw, payer: payer}
 }
 
 // transactionOf reads the scheme payload's transaction, the base64 of the signed

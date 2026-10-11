@@ -34,11 +34,15 @@ func TestGnoclientNode_NodeChainIDWithoutAClient(t *testing.T) {
 // other call is a nil-interface panic naming the method the test did not expect.
 type stubRPCClient struct {
 	rpcclient.Client
-	broadcast func() (*ctypes.ResultBroadcastTxCommit, error)
-	abciQuery func() (*ctypes.ResultABCIQuery, error)
+	broadcastBytes func(bfttypes.Tx) // sees the bytes broadcast, when set
+	broadcast      func() (*ctypes.ResultBroadcastTxCommit, error)
+	abciQuery      func() (*ctypes.ResultABCIQuery, error)
 }
 
-func (s stubRPCClient) BroadcastTxCommit(context.Context, bfttypes.Tx) (*ctypes.ResultBroadcastTxCommit, error) {
+func (s stubRPCClient) BroadcastTxCommit(_ context.Context, tx bfttypes.Tx) (*ctypes.ResultBroadcastTxCommit, error) {
+	if s.broadcastBytes != nil {
+		s.broadcastBytes(tx)
+	}
 	return s.broadcast()
 }
 
@@ -75,7 +79,7 @@ func broadcastThrough(t *testing.T, res *ctypes.ResultBroadcastTxCommit, err err
 	node := exact.NewGnoclientNode(&gnoclient.Client{RPCClient: stubRPCClient{
 		broadcast: func() (*ctypes.ResultBroadcastTxCommit, error) { return res, err },
 	}})
-	return node.Broadcast(&std.Tx{})
+	return node.Broadcast([]byte{0x0a})
 }
 
 // TestGnoclientNode_BroadcastReportsTheTxTheChainAborted keeps the transaction
@@ -123,4 +127,21 @@ func TestGnoclientNode_BroadcastReportsNoTxForACheckTxRefusal(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, exact.ChainRefused(err), "a CheckTx refusal is the chain's own answer")
 	assert.Empty(t, hash, "a transaction CheckTx refused was never broadcast")
+}
+
+// TestGnoclientNode_BroadcastSendsTheBytesItIsGiven pins the adapter's half of the
+// relay invariant: the bytes reach the node unchanged.
+func TestGnoclientNode_BroadcastSendsTheBytesItIsGiven(t *testing.T) {
+	sent := []byte{0x0a, 0x01, 0x02}
+	var received []byte
+	node := exact.NewGnoclientNode(&gnoclient.Client{RPCClient: stubRPCClient{
+		broadcastBytes: func(tx bfttypes.Tx) { received = tx },
+		broadcast: func() (*ctypes.ResultBroadcastTxCommit, error) {
+			return &ctypes.ResultBroadcastTxCommit{Hash: []byte{0x01}}, nil
+		},
+	}})
+
+	_, err := node.Broadcast(sent)
+	require.NoError(t, err)
+	assert.Equal(t, sent, []byte(received))
 }

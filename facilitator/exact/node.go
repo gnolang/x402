@@ -107,23 +107,35 @@ func (n *GnoclientNode) NodeChainID(ctx context.Context) (string, error) {
 	return status.NodeInfo.Network, nil
 }
 
-// Broadcast reports a failed CheckTx or DeliverTx as an error:
-// gnoclient.BroadcastTxCommit already wraps both into its returned error, so
-// no separate result inspection is needed here.
+// Broadcast relays tx, the payer's own bytes, and reports a failed CheckTx or
+// DeliverTx as an error. The bytes go to the RPC client unchanged:
+// gnoclient.BroadcastTxCommit takes a decoded transaction and amino-encodes it
+// again, which for a payment another SDK encoded yields other bytes, and the
+// chain records a payment under the hash of what it receives.
 //
-// The error is returned untouched, for the same reason Simulate's is: only the
-// chain's own abci.Error makes it a verdict on the transaction, and chainRefused
-// reads that off the type.
+// The chain's refusal is wrapped with %w, for the same reason Simulate returns
+// its error untouched: only the chain's own abci.Error makes it a verdict on the
+// transaction, and chainRefused reads that off the type.
 //
 // A hash travels with it only for a transaction the chain committed. A delivery
 // the chain committed and then aborted charged the payer its fee, so that hash
 // is a real record, and the only one a charge can be reconciled against. A
 // transaction CheckTx refused never entered a mempool, and a transport failure
 // carries no result: neither broadcast anything.
-func (n *GnoclientNode) Broadcast(tx *std.Tx) (string, error) {
-	res, err := n.cli.BroadcastTxCommit(tx)
-	if res == nil || res.CheckTx.IsErr() {
-		return "", err
+func (n *GnoclientNode) Broadcast(tx []byte) (string, error) {
+	if n.cli.RPCClient == nil {
+		return "", gnoclient.ErrMissingRPCClient
 	}
-	return hex.EncodeToString(res.Hash), err
+	res, err := n.cli.RPCClient.BroadcastTxCommit(context.Background(), tx)
+	if err != nil {
+		return "", fmt.Errorf("broadcast: %w", err)
+	}
+	if res.CheckTx.IsErr() {
+		return "", fmt.Errorf("check transaction failed: log:%s: %w", res.CheckTx.Log, res.CheckTx.Error)
+	}
+	hash := hex.EncodeToString(res.Hash)
+	if res.DeliverTx.IsErr() {
+		return hash, fmt.Errorf("deliver transaction failed: log:%s: %w", res.DeliverTx.Log, res.DeliverTx.Error)
+	}
+	return hash, nil
 }

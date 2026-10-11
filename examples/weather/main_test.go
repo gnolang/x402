@@ -27,7 +27,7 @@ func (unreachableChain) Simulate(*std.Tx) error {
 	panic("an unpaid request must be answered without simulating")
 }
 
-func (unreachableChain) Broadcast(*std.Tx) (string, error) {
+func (unreachableChain) Broadcast([]byte) (string, error) {
 	panic("an unpaid request must be answered without broadcasting")
 }
 

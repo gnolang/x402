@@ -93,6 +93,12 @@ func VerifyStatic(req types.PaymentRequirements, transaction string) (tx *std.Tx
 	if err != nil {
 		return nil, "", ReasonMalformedTransaction
 	}
+	return verifyStatic(req, raw)
+}
+
+// verifyStatic is VerifyStatic over the transaction's bytes, decoded once by a
+// caller that broadcasts them.
+func verifyStatic(req types.PaymentRequirements, raw []byte) (tx *std.Tx, payer, reason string) {
 	var decoded std.Tx
 	if err := amino.Unmarshal(raw, &decoded); err != nil {
 		return nil, "", ReasonMalformedTransaction

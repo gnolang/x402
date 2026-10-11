@@ -33,7 +33,7 @@ func (keylessNode) Simulate(*std.Tx) error {
 	panic("an unpaid request must be answered without simulating")
 }
 
-func (keylessNode) Broadcast(*std.Tx) (string, error) {
+func (keylessNode) Broadcast([]byte) (string, error) {
 	panic("an unpaid request must be answered without broadcasting")
 }
 

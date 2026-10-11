@@ -63,8 +63,9 @@ type Node struct {
 	Hash         string
 	BroadcastErr error
 
-	Simulates  int
-	Broadcasts int
+	Simulates   int
+	Broadcasts  int
+	Broadcasted []byte // the bytes the last broadcast carried
 }
 
 var _ exact.Node = (*Node)(nil)
@@ -81,8 +82,9 @@ func (n *Node) Simulate(*std.Tx) error {
 	return n.SimulateErr
 }
 
-func (n *Node) Broadcast(*std.Tx) (string, error) {
+func (n *Node) Broadcast(tx []byte) (string, error) {
 	n.Broadcasts++
+	n.Broadcasted = tx
 	return n.Hash, n.BroadcastErr
 }
 
