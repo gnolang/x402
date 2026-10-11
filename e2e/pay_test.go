@@ -7,6 +7,9 @@
 // adds two commands to it: one that stands up the facilitator against that node,
 // one that guards an HTTP resource with the canonical middleware. The buyer is the
 // JS one, run by `exec node`, so the assertion crosses both languages.
+//
+// settle_test.go starts in-process nodes itself instead, to hand one signed
+// payment to two facilitators at once, which no single scripted buyer can do.
 package e2e
 
 import (

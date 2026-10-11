@@ -134,14 +134,16 @@ same exposure XRPL documents for its own `exact` mechanism.
 ```bash
 make test                # Library tests (no chain, no npm)
 make js-test             # Client mechanism, including the sign-doc byte-equality check
-make test-e2e            # One real payment against an in-memory node
+make test-e2e            # Real payments against in-memory nodes
 make lint                # go vet (both modules) + gofmt -l
 make build               # bin/gnofacilitator
 make help                # Every target
 ```
 
 `make test-e2e` starts a node via gno.land's txtar harness, stands up the facilitator and a priced
-endpoint, pays with the JS client, and asserts the seller's balance changed.
+endpoint, pays with the JS client, and asserts the seller's balance changed. It also hands one
+payment to two facilitators at once, through one node and through two peered nodes, and asserts how
+many report it settled.
 
 Built against [`github.com/x402-foundation/x402/go/v2`](https://github.com/x402-foundation/x402) for
 the protocol and [`gnolang/gno`](https://github.com/gnolang/gno) for the chain.

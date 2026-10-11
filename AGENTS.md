@@ -9,7 +9,7 @@ x402, its facilitator, and the harnesses that prove a payment happens. If you're
 ```bash
 make test                # library tests. No network, no chain, no npm
 make js-test             # the client mechanism, incl. the sign-doc byte-equality check
-make test-e2e            # one real payment against an in-memory node
+make test-e2e            # real payments against in-memory nodes
 make lint                # go vet (both modules) + gofmt
 make build               # bin/gnofacilitator
 make install             # the facilitator into GOPATH/bin
@@ -33,7 +33,7 @@ names a language.
 | `client/src/` | upstream's `SchemeNetworkClient`, TypeScript; emits to `client/dist/` |
 | `cmd/gnofacilitator/` | the binary |
 | `examples/weather/` | the demo: a priced endpoint (`main.go`), the buyer that pays it (`buy.mjs`), and a Makefile that runs them and a facilitator |
-| `e2e/` | one real payment through a real node — its own Go module. `buyer.mjs` beside it is the buyer the contract scenarios drive; the happy path drives `examples/weather/buy.mjs` |
+| `e2e/` | real payments through real nodes — its own Go module. `buyer.mjs` beside it is the buyer the contract scenarios drive; the happy path drives `examples/weather/buy.mjs`. `settle_test.go` hands one payment to two facilitators at once, through one node and through two peered nodes |
 | `docs/releasing.md` | the two independent release lines |
 | `docs/deploying.md` | running the facilitator image: flags, endpoints, limits, failure modes |
 
