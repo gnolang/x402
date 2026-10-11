@@ -22,6 +22,10 @@ import { signForChain } from "../signing.js";
 const NAMESPACE = "gno";
 const ASSET = "ugnot";
 
+// How a gno payment moves value: the payer signs a bank send the facilitator
+// broadcasts. An offer that omits extra.assetTransferMethod means it.
+const ASSET_TRANSFER_METHOD = "bank-send";
+
 // A gno buyer pays its own transaction fee: std.Fee names no payer and the ante
 // charges the first signer, so the payer of the payment is also the payer of the
 // fee. The requirements carry no gasWanted or gasFee, so the buyer chooses. This
@@ -107,6 +111,16 @@ export class ExactGnoScheme implements SchemeNetworkClient {
     }
     if (typeof paymentRequirements.payTo !== "string" || paymentRequirements.payTo === "") {
       throw new Error("x402-gno: requirements name no payTo");
+    }
+    // §6.1 reserves both keys: an offer naming a transfer method or a flow this
+    // mechanism does not implement is not one it may sign a payment for.
+    const method = paymentRequirements.extra?.["assetTransferMethod"];
+    if (method !== undefined && method !== ASSET_TRANSFER_METHOD) {
+      throw new Error(`x402-gno: assetTransferMethod ${String(method)} is not ${ASSET_TRANSFER_METHOD}`);
+    }
+    const flow = paymentRequirements.extra?.["paymentFlow"];
+    if (flow !== undefined && flow !== "authorization") {
+      throw new Error(`x402-gno: paymentFlow ${String(flow)} is not authorization`);
     }
 
     const from = await this.wallet.getAddress();

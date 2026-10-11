@@ -28,16 +28,17 @@ func NewExactGnoScheme() *ExactGnoScheme { return &ExactGnoScheme{} }
 // Scheme names the x402 payment scheme this implements.
 func (s *ExactGnoScheme) Scheme() string { return "exact" }
 
-// DefaultAssetTransferMethod is the SDK's placeholder key: a gno payment is a
-// native bank send, so there is no transfer method to put on the wire.
+// DefaultAssetTransferMethod is bank-send: the payer signs a bank send the
+// facilitator broadcasts. A route that omits extra.assetTransferMethod means it,
+// and the 402 then carries no key.
 func (s *ExactGnoScheme) DefaultAssetTransferMethod() string {
-	return x402.SDKDefaultAssetTransferMethod
+	return facilitatorexact.AssetTransferMethod
 }
 
 // PaymentFlows declares authorization only: verify, serve, then settle.
 func (s *ExactGnoScheme) PaymentFlows() map[string]x402.PaymentFlowConfig {
 	return map[string]x402.PaymentFlowConfig{
-		x402.SDKDefaultAssetTransferMethod: {
+		facilitatorexact.AssetTransferMethod: {
 			Supported: []x402.PaymentFlowName{x402.PaymentFlowAuthorization},
 			Default:   x402.PaymentFlowAuthorization,
 		},

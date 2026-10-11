@@ -28,6 +28,11 @@ const schemeExact = "exact"
 // caipFamily is the CAIP-2 namespace every gno network shares.
 const caipFamily = "gno:*"
 
+// AssetTransferMethod names how a gno payment moves value: the payer signs a
+// bank send the facilitator broadcasts. It is the scheme's default, so an offer
+// that omits extra.assetTransferMethod means it.
+const AssetTransferMethod = "bank-send"
+
 // MaxMemoBytes caps extra.memo; a longer memo would bloat the signed tx and every
 // echo of the requirements. gno's own limit is far higher, so the cap is the
 // scheme's rather than the chain's — and the number is the ecosystem's, not one
@@ -231,8 +236,14 @@ func (f *Facilitator) check(ctx context.Context, payload types.PaymentPayload, r
 	if req.Network != f.network() {
 		return refusePayment("", ReasonInvalidNetwork, nil)
 	}
+	if err := unsupportedTerms(req.Extra); err != nil {
+		return refusePayment("", ReasonInvalidRequirements, err)
+	}
 	if !acceptsSameOffer(payload.Accepted, req) {
 		return refusePayment("", ReasonInvalidPayload, nil)
+	}
+	if err := unsupportedTerms(payload.Accepted.Extra); err != nil {
+		return refusePayment("", ReasonInvalidPayload, err)
 	}
 	// VerifyStatic refuses an unusable memo too, but discards why. A non-string
 	// memo and an over-cap one share one wire reason, so the cause is read here
@@ -278,6 +289,19 @@ func (f *Facilitator) check(ctx context.Context, payload types.PaymentPayload, r
 		return refusePayment(payer, ReasonSimulationFailed, err)
 	}
 	return paymentCheck{verdict: paymentAccepted, raw: raw, payer: payer}
+}
+
+// unsupportedTerms refuses an extra naming a transfer method or a payment flow
+// this mechanism does not implement. §6.1 reserves both keys, so a payment
+// offered under either is not one this mechanism may settle.
+func unsupportedTerms(extra map[string]any) error {
+	if v, ok := extra["assetTransferMethod"]; ok && v != AssetTransferMethod {
+		return fmt.Errorf("x402: extra.assetTransferMethod is %v, want %q", v, AssetTransferMethod)
+	}
+	if v, ok := extra["paymentFlow"]; ok && v != string(x402.PaymentFlowAuthorization) {
+		return fmt.Errorf("x402: extra.paymentFlow is %v, want %q", v, x402.PaymentFlowAuthorization)
+	}
+	return nil
 }
 
 // transactionOf reads the scheme payload's transaction, the base64 of the signed

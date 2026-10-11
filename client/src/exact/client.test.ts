@@ -104,6 +104,14 @@ describe("ExactGnoScheme.createPaymentPayload", () => {
       requirements: offer({ payTo: "" }),
       message: /no payTo/,
     },
+    "another transfer method": {
+      requirements: offer({ extra: { assetTransferMethod: "eip3009" } }),
+      message: /assetTransferMethod eip3009 is not bank-send/,
+    },
+    "a flow other than authorization": {
+      requirements: offer({ extra: { paymentFlow: "upfront" } }),
+      message: /paymentFlow upfront is not authorization/,
+    },
   };
 
   for (const [name, { requirements, message }] of Object.entries(refusals)) {
@@ -127,6 +135,18 @@ describe("ExactGnoScheme.createPaymentPayload", () => {
   // so it has to get past validation. Reaching signing is the proof: signing is
   // the first step that needs the provider this wallet does not have, so that is
   // the failure a well-formed offer produces here.
+  // Naming the defaults is the same offer as omitting them, so it has to get
+  // past validation too.
+  it("accepts bank-send and authorization named explicitly and reaches signing", async () => {
+    const mechanism = await scheme();
+    await expect(
+      mechanism.createPaymentPayload(
+        2,
+        offer({ extra: { assetTransferMethod: "bank-send", paymentFlow: "authorization" } }),
+      ),
+    ).rejects.toThrow(/no provider connected/);
+  });
+
   it("accepts an absent extra.memo and reaches signing", async () => {
     const mechanism = await scheme();
     await expect(mechanism.createPaymentPayload(2, offer())).rejects.toThrow(

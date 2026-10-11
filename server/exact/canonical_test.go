@@ -171,3 +171,31 @@ func TestARouteCanOnlyAskForTheAuthorizationFlow(t *testing.T) {
 		assert.Error(t, initialize(flow), "paymentFlow %q", flow)
 	}
 }
+
+// TestARouteMayNameTheBankSendTransferMethod pins the transfer method gno
+// declares. Omitting extra.assetTransferMethod means bank-send, and the 402 then
+// carries no key; a route may also name it, and any other method is refused when
+// the routes initialize.
+func TestARouteMayNameTheBankSendTransferMethod(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(keylessNode{}, "test14").Handler())
+	t.Cleanup(gnofacilitator.Close)
+
+	initialize := func(method string) error {
+		routes := x402http.RoutesConfig{"GET /weather": {Accepts: x402http.PaymentOptions{{
+			Scheme:  "exact",
+			PayTo:   "g1u7y667z64x2h7vc6fmpcprgey4ck233jaww9zq",
+			Price:   x402.AssetAmount{Asset: "ugnot", Amount: "250000"},
+			Network: "gno:test14",
+			Extra:   map[string]any{"assetTransferMethod": method},
+		}}}}
+		server := x402http.Newx402HTTPResourceServer(routes,
+			x402.WithFacilitatorClient(x402http.NewHTTPFacilitatorClient(&x402http.FacilitatorConfig{URL: gnofacilitator.URL})),
+			x402.WithSchemeServer("gno:test14", gnoexact.NewExactGnoScheme()))
+		return server.Initialize(context.Background())
+	}
+
+	require.NoError(t, initialize(facilitatorexact.AssetTransferMethod))
+	for _, method := range []string{"eip3009", "default"} {
+		assert.Error(t, initialize(method), "assetTransferMethod %q", method)
+	}
+}

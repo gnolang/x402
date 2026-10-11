@@ -74,8 +74,9 @@ you the resource, while an overpriced one costs a little more than it had to.
 The requirements arrive from a seller over the network, so they are validated rather than trusted —
 a malformed amount or a missing `payTo` would otherwise become a signed transaction that pays the
 wrong thing. It throws on a network that is not `gno:<chain-id>`, a scheme that is not `exact`, an
-asset that is not `ugnot`, an amount that is not a positive integer, an absent `payTo`, and an
-`extra.memo` that is present but not a string.
+asset that is not `ugnot`, an amount that is not a positive integer, an absent `payTo`, an
+`extra.memo` that is present but not a string, an `extra.assetTransferMethod` other than
+`bank-send`, and an `extra.paymentFlow` other than `authorization`.
 
 ## Development
 
