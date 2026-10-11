@@ -1,10 +1,13 @@
 import type { ABCIAccount, GasPrice, Provider, Status, Tx } from "@gnolang/tm2-js-client";
 
-// A provider for tests. It answers the questions signing asks — the chain id and
-// the account — and refuses the rest, so a payment path that reaches the network
-// some other way fails the test loudly.
+// A provider for tests. It answers the questions a payment asks — the chain id,
+// the account, the gas price — and refuses the rest, so a payment path that
+// reaches the network some other way fails the test loudly.
 export class FakeProvider implements Provider {
-  constructor(private readonly reportedChain: string) {}
+  constructor(
+    private readonly reportedChain: string,
+    private readonly gasPrice: GasPrice | null = null,
+  ) {}
 
   async getStatus(): Promise<Status> {
     return {
@@ -45,6 +48,10 @@ export class FakeProvider implements Provider {
     };
   }
 
+  async getGasPrice(): Promise<GasPrice | null> {
+    return this.gasPrice;
+  }
+
   private unreachable(): never {
     throw new Error("a payment must not reach this provider method");
   }
@@ -71,9 +78,6 @@ export class FakeProvider implements Provider {
     return this.unreachable();
   }
   getConsensusParams(): never {
-    return this.unreachable();
-  }
-  getGasPrice(): Promise<GasPrice | null> {
     return this.unreachable();
   }
   abciQuery(): never {

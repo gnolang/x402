@@ -1,7 +1,9 @@
-import { Wallet } from "@gnolang/tm2-js-client";
+import { MsgEndpoint } from "@gnolang/gno-js-client";
+import { type GasPrice, Tx, Wallet, base64ToUint8Array } from "@gnolang/tm2-js-client";
 import type { PaymentRequirements } from "@x402/core/types";
 import { describe, expect, it } from "vitest";
 
+import { FakeProvider } from "../fake-provider.js";
 import { ExactGnoScheme, gnoChainId } from "./client.js";
 
 // The well-known test1 account. Nothing is signed or broadcast in these tests —
@@ -179,5 +181,59 @@ describe("ExactGnoScheme.createPaymentPayload", () => {
     await expect(mechanism.createPaymentPayload(2, offer())).rejects.toThrow(
       /no provider connected/,
     );
+  });
+});
+
+// The payment a connected buyer signs for the default offer, against a chain
+// whose gas price is gasPrice, decoded back from the payload.
+async function signedPayment(gasPrice: GasPrice | null): Promise<{ keys: string[]; tx: Tx }> {
+  const wallet = await Wallet.fromMnemonic(MNEMONIC);
+  wallet.connect(new FakeProvider("dev", gasPrice));
+  const { payload } = await new ExactGnoScheme(wallet).createPaymentPayload(2, offer());
+  const transaction = payload["transaction"];
+  if (typeof transaction !== "string") {
+    throw new Error(`payload transaction is ${typeof transaction}, want string`);
+  }
+  return { keys: Object.keys(payload), tx: Tx.decode(base64ToUint8Array(transaction)) };
+}
+
+const ONYX_GAS_PRICE: GasPrice = { amount: 1, denom: "ugnot", gas: 1000 };
+
+describe("ExactGnoScheme payment", () => {
+  // The facilitator relays the payload verbatim and reads one field of it, so a
+  // second key would be a field nobody reads and every party still carries.
+  it("carries nothing but the signed transaction", async () => {
+    const { keys, tx } = await signedPayment(ONYX_GAS_PRICE);
+
+    expect(keys).toEqual(["transaction"]);
+    expect(tx.messages.map((m) => m.type_url)).toEqual([MsgEndpoint.MSG_SEND]);
+    expect(tx.signatures).toHaveLength(1);
+  });
+
+  // The chain takes the whole fee offered, not the gas used, so the fee follows
+  // the chain's own price for the gas the payment reserves. The price adapts to
+  // load, and a fee under it is refused at settle after the resource ran, so it
+  // is offered twice over.
+  it("offers twice the chain's gas price for the gas it reserves", async () => {
+    const { tx } = await signedPayment(ONYX_GAS_PRICE);
+
+    expect(tx.fee?.gas_wanted).toBe(10_000_000n);
+    expect(tx.fee?.gas_fee).toBe("20000ugnot");
+  });
+
+  // A fee is a whole number of the denomination's smallest unit, and one rounded
+  // down would offer less than the price.
+  it("rounds a fractional fee up", async () => {
+    const { tx } = await signedPayment({ amount: 3, denom: "ugnot", gas: 7 });
+
+    expect(tx.fee?.gas_fee).toBe("8571429ugnot");
+  });
+
+  // A chain with no minimum gas price may still have nodes that set one of their
+  // own, which the chain does not report, so the fee is one well clear of any.
+  it("offers a fee well clear of any minimum when the chain names no gas price", async () => {
+    const { tx } = await signedPayment(null);
+
+    expect(tx.fee?.gas_fee).toBe("1000000ugnot");
   });
 });

@@ -70,9 +70,12 @@ the chain charges the first signer, so the payer of the payment is also the paye
 fee, and the facilitator holds no key — it only broadcasts what you signed. A gno offer says so:
 `extra.areFeesSponsored` is `false`.
 
-The requirements carry no gas fields, so the buyer chooses. This offers well clear of the chain's
-minimum rather than tracking the gas price: an underpriced payment is refused at settle and costs
-you the resource, while an overpriced one costs a little more than it had to.
+The requirements carry no gas fields, so the buyer chooses. The chain takes the whole fee offered,
+not the gas used, so the fee follows the chain's own gas price, read from the wallet's node: twice
+that price for 10,000,000 gas, rounded up. The price adapts to load, and an underpriced payment is
+refused at settle and costs you the resource, hence the margin. On onyx-1, at 1ugnot per 1000 gas,
+that is 20000ugnot. A chain that reports no gas price gets 1000000ugnot, clear of any minimum a
+node sets on its own.
 
 ## What it refuses
 
