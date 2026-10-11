@@ -33,7 +33,7 @@
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
-  "//engines": "The floor a CONSUMER needs, not the one this repo builds with: the emit targets ES2023, which Node 20 covers in full, and neither @gnolang runtime dependency declares a constraint of its own. Working on the package needs newer — tsdown wants Node 22.18+ and CI runs 24.",
+  "//engines": "The floor a CONSUMER needs, not the one this repo builds with: the emit targets ES2023, which Node 20 covers in full, and neither @gnolang runtime dependency declares a constraint of its own. Working on the package needs newer — tsdown wants Node ^22.18.0 or >=24.11.0, and CI runs 24.",
   "engines": {
     "node": ">=20"
   },
