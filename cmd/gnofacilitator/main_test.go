@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -85,16 +87,43 @@ func jsSignedPayment(t *testing.T) string {
 	return string(body)
 }
 
-// TestSilentNodeIsAnswered503 pins the promise a seller relies on: a payment
-// the chain never answered for gets a 503, not a dropped connection. The answer
-// deadline is what delivers it, since a node call can outlast the write timeout.
+// captureLogs sends slog output to a buffer for the rest of the test.
+func captureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	return &buf
+}
+
+// TestSilentNodeIsAnswered503 pins that a payment the chain never answers for
+// gets its 503 from the answer deadline, not from the node call's own timeout:
+// in production that timeout outlasts the write timeout, and the 503 would never
+// reach the seller.
 func TestSilentNodeIsAnswered503(t *testing.T) {
+	logs := captureLogs(t)
+	// The handlers behind each 503 run on until the node is closed below; they
+	// are waited for so their log lines land here rather than in a later test.
+	var abandoned sync.WaitGroup
+	t.Cleanup(func() {
+		abandoned.Wait()
+		assert.Contains(t, logs.String(), "x402 verify: chain unreachable")
+		assert.Contains(t, logs.String(), "x402 settle: chain unreachable")
+	})
+
 	rpc, err := rpcclient.NewHTTPClient(silentNode(t), rpcclient.WithRequestTimeout(5*time.Second))
 	require.NoError(t, err)
 	node := facilitator.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc})
+	h := facilitator.New(node, "dev").Handler()
+	counted := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		abandoned.Add(1)
+		defer abandoned.Done()
+		h.ServeHTTP(w, r)
+	})
 
 	const answerWithin = 100 * time.Millisecond
-	srv := newServer("", facilitator.New(node, "dev").Handler(), answerWithin)
+	srv := newServer(counted, answerWithin)
 	ts := httptest.NewUnstartedServer(srv.Handler)
 	ts.Config = srv
 	ts.Start()
@@ -120,6 +149,7 @@ func TestSilentNodeIsAnswered503(t *testing.T) {
 // arrives, such as a settle the chain may be committing, finishes and gets its
 // answer before serve returns.
 func TestServeDrainsAnInFlightRequest(t *testing.T) {
+	logs := captureLogs(t)
 	entered, release := make(chan struct{}), make(chan struct{})
 	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		close(entered)
@@ -153,12 +183,14 @@ func TestServeDrainsAnInFlightRequest(t *testing.T) {
 	close(release)
 	assert.Equal(t, http.StatusOK, <-status)
 	require.NoError(t, <-served)
+	assert.Contains(t, logs.String(), "draining requests in flight", "an operator sees the stop begin")
 }
 
 // TestServeReportsADrainThatRanOut pins that a request still running when the
 // drain window closes makes the stop an error, so the exit code says the stop was
 // not clean.
 func TestServeReportsADrainThatRanOut(t *testing.T) {
+	captureLogs(t)
 	entered, release := make(chan struct{}), make(chan struct{})
 	t.Cleanup(func() { close(release) })
 	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

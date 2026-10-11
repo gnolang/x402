@@ -175,7 +175,7 @@ func main() {
 
 	slog.Info("gnofacilitator listening",
 		"version", version, "addr", ln.Addr().String(), "network", "gno:"+*chainID)
-	if err := serve(ctx, newServer(*listen, f.Handler(), answerTimeout), ln, writeTimeout); err != nil {
+	if err := serve(ctx, newServer(f.Handler(), answerTimeout), ln, writeTimeout); err != nil {
 		slog.Error("serve", "err", err)
 		os.Exit(1)
 	}
@@ -185,9 +185,8 @@ func main() {
 // newServer returns the HTTP server for h. A request still unanswered after
 // answerWithin gets a 503, never a payment verdict. The handler keeps running
 // behind that answer, so a /settle broadcast may still commit.
-func newServer(addr string, h http.Handler, answerWithin time.Duration) *http.Server {
+func newServer(h http.Handler, answerWithin time.Duration) *http.Server {
 	return &http.Server{
-		Addr:              addr,
 		Handler:           http.TimeoutHandler(h, answerWithin, "the chain did not answer in time"),
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readTimeout,
@@ -208,6 +207,7 @@ func serve(ctx context.Context, srv *http.Server, ln net.Listener, drain time.Du
 		return err
 	case <-ctx.Done():
 	}
+	slog.Info("gnofacilitator stopping: draining requests in flight", "within", drain)
 
 	drainCtx, cancel := context.WithTimeout(context.Background(), drain)
 	defer cancel()
