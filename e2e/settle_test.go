@@ -89,10 +89,9 @@ func TestDuplicateSettle_OneNodeSettlesOnce(t *testing.T) {
 //
 // Each node admits the transaction into its own mempool, because neither has
 // heard of it from the other yet: tm2 gossips on a flush interval. The validator
-// commits one copy, and each node answers its own broadcast_tx_commit with that
-// delivery, because tm2 matches a waiting broadcast to a committed transaction by
-// its bytes, and the bytes are the same. Neither answer says whose broadcast was
-// included, and the hash cannot tell either, being the hash of those bytes.
+// commits one copy, and each facilitator finds that delivery by looking up the
+// hash on its own node, because the bytes and so the hash are the same. Neither
+// answer says whose broadcast was included.
 //
 // This asserts the limit as it stands. Deduplicating across processes makes it
 // fail, and it should then assert exactly one success.
@@ -183,6 +182,8 @@ func TestAReplayedPaymentIsRefused(t *testing.T) {
 	require.Equal(t, http.StatusOK, again.status, "again: %v", again)
 	assert.False(t, again.response.Success)
 	assert.Equal(t, exact.ReasonDuplicateSettlement, again.response.ErrorReason)
+	assert.Equal(t, first.response.Transaction, again.response.Transaction,
+		"the refusal carries the hash the payment settled under")
 
 	elsewhere, err := postSettle(startFacilitator(t, exact.NewGnoclientNode(validator.client)), body)
 	require.NoError(t, err)

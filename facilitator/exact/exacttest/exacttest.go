@@ -64,9 +64,22 @@ type Node struct {
 	BroadcastErr error
 	OnBroadcast  func() // runs during the broadcast, when set
 
+	// Delivery answers AwaitDelivery when set; otherwise every transaction is
+	// delivered. NeverDelivered is the answer for one no block executes.
+	Delivery func(ctx context.Context) error
+
 	Simulates   int
 	Broadcasts  int
 	Broadcasted []byte // the bytes the last broadcast carried
+	Awaits      int
+	Awaited     string // the hash the last AwaitDelivery asked about
+}
+
+// NeverDelivered is a Delivery for a transaction no block executes: it waits
+// out the context it is given, as a node polled for one would.
+func NeverDelivered(ctx context.Context) error {
+	<-ctx.Done()
+	return ctx.Err()
 }
 
 var _ exact.Node = (*Node)(nil)
@@ -90,6 +103,15 @@ func (n *Node) Broadcast(tx []byte) (string, error) {
 	n.Broadcasts++
 	n.Broadcasted = tx
 	return n.Hash, n.BroadcastErr
+}
+
+func (n *Node) AwaitDelivery(ctx context.Context, hash string) error {
+	n.Awaits++
+	n.Awaited = hash
+	if n.Delivery == nil {
+		return nil
+	}
+	return n.Delivery(ctx)
 }
 
 // Payment describes the payment Requirements prices, signed for real against

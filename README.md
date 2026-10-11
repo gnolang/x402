@@ -123,6 +123,10 @@ the root Makefile's targets run from here. The demo's Makefile runs from `exampl
 - **The facilitator holds no key.** It verifies offline and broadcasts a transaction the payer already signed, so it cannot move funds anywhere the payer did not sign for.
 - **A failed resource is not charged for.** The flow is `authorization`: verify, serve, then settle. The middleware buffers the response and skips settlement on any status ≥400.
 - **A failed settlement withholds the response.** The buffered body is discarded.
+- **A payment no block executed in time is pending, not failed.** The facilitator answers
+  `settlement_pending` with the transaction hash. The seller's SDK settles once more, which asks
+  the chain about that hash rather than broadcasting again, and a buyer still not served gets the
+  hash to look up.
 - **A payment settles once per facilitator.** A copy presented while it settles, or within five
   minutes after, is refused as `duplicate_settlement`. The record is in memory, so run one
   facilitator process per chain.

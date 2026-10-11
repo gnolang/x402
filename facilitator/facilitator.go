@@ -167,18 +167,29 @@ func (s *Server) answerSettleError(w http.ResponseWriter, req request, err error
 		return
 	}
 	reason := s.specReason(refusal.ErrorReason, req.requirementsScheme)
-	if reason == exact.ReasonBroadcastFailed {
+	switch reason {
+	case exact.ReasonBroadcastFailed:
 		// A delivery the chain committed and then aborted charged the payer its
 		// fee, so its hash is reported and logged: it is the record the charge is
 		// reconciled against.
 		slog.Error("x402 settle: broadcast failed", "payer", refusal.Payer, "tx", refusal.Transaction, "err", refusal.ErrorMessage)
-		writeJSON(w, x402.SettleResponse{
-			Success: false, Transaction: refusal.Transaction, Network: x402.Network(s.network),
-			Payer: refusal.Payer, ErrorReason: reason,
-		})
+	case x402.ErrSettlementPending:
+		// The payment may still commit. §9 requires its hash with this reason: the
+		// seller's SDK settles again only when one is present, and the buyer looks
+		// the payment up with it.
+		slog.Warn("x402 settle: settlement pending", "payer", refusal.Payer, "tx", refusal.Transaction, "err", refusal.ErrorMessage)
+	case exact.ReasonDuplicateSettlement:
+		// Another settle answers for the payment. Its hash, once a node admitted
+		// it, is what this caller can still look the payment up with.
+		slog.Info("x402 settle: duplicate settlement", "tx", refusal.Transaction)
+	default:
+		s.refuseSettle(w, refusal.Payer, reason, refusal.ErrorMessage)
 		return
 	}
-	s.refuseSettle(w, refusal.Payer, reason, refusal.ErrorMessage)
+	writeJSON(w, x402.SettleResponse{
+		Success: false, Transaction: refusal.Transaction, Network: x402.Network(s.network),
+		Payer: refusal.Payer, ErrorReason: reason,
+	})
 }
 
 // refuseSettle answers a payment that will not settle. payer is set only once

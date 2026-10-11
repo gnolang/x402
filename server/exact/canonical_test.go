@@ -37,6 +37,10 @@ func (keylessNode) Broadcast([]byte) (string, error) {
 	panic("an unpaid request must be answered without broadcasting")
 }
 
+func (keylessNode) AwaitDelivery(context.Context, string) error {
+	panic("an unpaid request must be answered without waiting for a delivery")
+}
+
 // TestTheCanonicalSellerSnippetOffersGno is the claim this mechanism exists to
 // make: the seller code from x402.org's front page, with gno listed as a way to
 // pay, offers a gno payment for an ordinary HTTP resource.

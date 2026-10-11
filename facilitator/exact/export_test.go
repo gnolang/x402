@@ -20,12 +20,23 @@ const (
 	NoVerdict       = noVerdict
 )
 
-const SettlementTTL = settlementTTL
+const (
+	SettlementTTL  = settlementTTL
+	DeliveryMargin = deliveryMargin
+)
 
 type Settlements = settlements
 
 func NewSettlements() *Settlements { return newSettlements() }
 
-func (s *Settlements) Claim(hash string, now time.Time) bool { return s.claim(hash, now) }
+// Claim reports whether hash was claimed, and whether it was pending before.
+func (s *Settlements) Claim(hash string, now time.Time) (wasPending, ok bool) {
+	prior, ok := s.claim(hash, now)
+	return prior.state == pending, ok
+}
 
-func (s *Settlements) MarkSettled(hash string, now time.Time) { s.markSettled(hash, now) }
+func (s *Settlements) MarkSettled(hash string, now time.Time) { s.markSettled(hash, hash, now) }
+
+func (s *Settlements) MarkPending(hash string, now time.Time) {
+	s.markPending(hash, "g1payer", hash, now)
+}

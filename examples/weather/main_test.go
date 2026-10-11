@@ -31,6 +31,10 @@ func (unreachableChain) Broadcast([]byte) (string, error) {
 	panic("an unpaid request must be answered without broadcasting")
 }
 
+func (unreachableChain) AwaitDelivery(context.Context, string) error {
+	panic("an unpaid request must be answered without waiting for a delivery")
+}
+
 // TestABrowserIsToldWhatTheResourceCostsInGno opens the priced route the way a
 // browser does. The middleware answers a browser with an HTML paywall, and its
 // built-in one is a wallet app for EVM and Solana chains that renders nothing

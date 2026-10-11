@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gnolang/gno/tm2/pkg/amino"
 	"github.com/gnolang/gno/tm2/pkg/crypto"
@@ -203,15 +204,12 @@ func TestFacilitator_SettleBroadcastFailure(t *testing.T) {
 }
 
 // TestFacilitator_SettleBroadcastUnreachableReportsNoVerdict pins the answer for
-// a broadcast that never reached the chain.
+// a broadcast the node never answered.
 //
-// Such a failure is not a refusal. Upstream errors a broadcast both when CheckTx
-// rejected the transaction and when it timed out waiting for the transaction to
-// commit — and on the timeout the transaction is already in the mempool and will
-// commit. Nothing at this layer separates the two beyond the chain's own
-// abci.Error, so answering success:false would tell the seller a payment failed
-// while the payer's funds move anyway, and the seller discards the response the
-// payer paid for. 503 states what is actually known, and a client retries it.
+// Such a failure is not a refusal: only the chain's own abci.Error is one, and
+// success:false would tell the seller a payment failed that nobody refused. Nor
+// is it pending, which would claim the node admitted the transaction when nothing
+// says it did. 503 states what is actually known.
 func TestFacilitator_SettleBroadcastUnreachableReportsNoVerdict(t *testing.T) {
 	txB64, account := exacttest.SignedTx(t, nil)
 	node := &exacttest.Node{BroadcastErr: errors.New("connection refused"), Account: account}
@@ -231,7 +229,9 @@ func TestFacilitator_SettleBroadcastUnreachableReportsNoVerdict(t *testing.T) {
 func TestFacilitator_SettleReportsTheTxOfAnAbortedDelivery(t *testing.T) {
 	logs := captureLogs(t)
 	txB64, account := exacttest.SignedTx(t, nil)
-	node := &exacttest.Node{Hash: "abc123", BroadcastErr: std.ErrSessionExpired("session expired"), Account: account}
+	node := &exacttest.Node{Hash: "abc123", Account: account, Delivery: func(context.Context) error {
+		return std.ErrSessionExpired("session expired")
+	}}
 	h := New(node, "dev").Handler()
 
 	rec := facilitatorRequest(t, h, "/settle", exacttest.Requirements(), txB64)
@@ -242,6 +242,37 @@ func TestFacilitator_SettleReportsTheTxOfAnAbortedDelivery(t *testing.T) {
 	assert.Equal(t, "abc123", resp.Transaction, "a committed delivery was broadcast, so its hash is reported")
 
 	record := logRecord(t, logs, "x402 settle: broadcast failed")
+	assert.Equal(t, "abc123", record["tx"])
+	assert.Equal(t, "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5", record["payer"])
+}
+
+// TestFacilitator_SettleReportsAnUndeliveredBroadcastAsPending pins the answer
+// for a payment the node admitted and no block executed in time: x402 v2's
+// settlement_pending, carrying the hash and the network so the seller can settle
+// again or reconcile on chain. A 503 here would leave a buyer whose payment then
+// commits charged, unserved, and without a hash.
+func TestFacilitator_SettleReportsAnUndeliveredBroadcastAsPending(t *testing.T) {
+	logs := captureLogs(t)
+	txB64, account := exacttest.SignedTx(t, nil)
+	node := &exacttest.Node{Hash: "abc123", Account: account, Delivery: exacttest.NeverDelivered}
+	ctx, cancel := context.WithTimeout(t.Context(), 1200*time.Millisecond)
+	defer cancel()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/settle",
+		bytes.NewReader(facilitatorRequestBody(t, exacttest.Requirements(), txB64)))
+	New(node, "dev").Handler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp x402.SettleResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.False(t, resp.Success)
+	assert.Equal(t, x402.ErrSettlementPending, resp.ErrorReason)
+	assert.Equal(t, "abc123", resp.Transaction)
+	assert.Equal(t, x402.Network("gno:dev"), resp.Network)
+	assert.Equal(t, "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5", resp.Payer)
+
+	record := logRecord(t, logs, "x402 settle: settlement pending")
 	assert.Equal(t, "abc123", record["tx"])
 	assert.Equal(t, "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5", record["payer"])
 }
@@ -519,9 +550,9 @@ func TestFacilitator_AbsentAccountIsAPaymentVerdict(t *testing.T) {
 // 200 {isValid:false} states one, and under a node outage it states it about
 // every payment that arrives — permanent-looking, so a client that believes it
 // discards payments that are perfectly good. 503 says what actually happened,
-// and an x402 client retries it. No scheme reason code is minted for the
-// condition: this facilitator's own downtime does not belong in the published
-// wire vocabulary.
+// and leaves the payment untouched for the buyer to present again. No scheme
+// reason code is minted for the condition: this facilitator's own downtime does
+// not belong in the published wire vocabulary.
 func TestFacilitator_UnreachableChainIsNotAPaymentVerdict(t *testing.T) {
 	unreachable := errors.New("query account: dial tcp 127.0.0.1:26657: connection refused")
 

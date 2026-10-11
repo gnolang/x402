@@ -51,26 +51,43 @@ const AssetTransferMethod = "bank-send"
 const MaxMemoBytes = 256
 
 // Node is the chain access the facilitator needs: the signer's account for
-// signature and sequence checks, full-tx simulation for verify, commit broadcast
-// for settle. Implemented by the gnoclient adapter NewGnoclientNode and by fakes
-// in tests.
+// signature and sequence checks, full-tx simulation for verify, broadcast and the
+// delivery that follows for settle. Implemented by the gnoclient adapter
+// NewGnoclientNode and by fakes in tests.
 //
-// SignerAccount and Simulate each report a refusal the chain decided and a
-// failure to reach the chain at all through one error, so an implementation has
-// to preserve what it was handed: chainRefused tells the two apart by the
-// chain's own abci.Error, and only that is a verdict on the payment.
+// Each method reports a refusal the chain decided and a failure to reach the
+// chain at all through one error, so an implementation has to preserve what it
+// was handed: chainRefused tells the two apart by the chain's own abci.Error, and
+// only that is a verdict on the payment.
 type Node interface {
 	AccountReader
 	Simulate(tx *std.Tx) error
 
-	// Broadcast relays tx, the signed transaction's bytes exactly as the payer
-	// encoded them.
+	// Broadcast submits tx, the signed transaction's bytes exactly as the payer
+	// encoded them, and returns once the node's CheckTx has answered. A nil error
+	// means the node admitted it to its mempool under hash.
 	Broadcast(tx []byte) (hash string, err error)
+
+	// AwaitDelivery waits until a block holds the transaction hash names, or ctx
+	// ends. It returns nil for a delivery that succeeded and the chain's
+	// abci.Error for one it aborted; any other error means no block was seen
+	// holding it.
+	AwaitDelivery(ctx context.Context, hash string) error
 }
 
+// deliveryWait bounds how long a settle waits for a block to execute the payment
+// it broadcast, as long as a node's own broadcast_tx_commit waits by default. A
+// payment no block executed by then is answered settlement_pending.
+const deliveryWait = 10 * time.Second
+
+// deliveryMargin is how long before the request's own deadline that wait ends,
+// so its answer is written before the server's timeout answers in its place.
+const deliveryMargin = time.Second
+
 // NoVerdictError reports a payment the facilitator could not decide: the chain it
-// checks against could not be read, or the request ended before a broadcast. It
-// carries no reason code, because nothing was established about the payment.
+// checks against could not be read, the request ended before a broadcast, or the
+// node never answered the broadcast. It carries no reason code, because nothing
+// was established about the payment.
 type NoVerdictError struct {
 	// Payer is the address the payment's transaction claims to pay from, whether
 	// or not its signature verified, or empty when the transaction did not decode.
@@ -129,68 +146,84 @@ func (f *Facilitator) Verify(ctx context.Context, payload types.PaymentPayload, 
 	return &x402.VerifyResponse{IsValid: true, Payer: check.payer}, nil
 }
 
-// Settle verifies a payment again and broadcasts it. A refusal is an
-// *x402.SettleError carrying the reason code; a payment the chain could not be
-// read for, or whose request ended before the broadcast, is a *NoVerdictError
-// and moved nothing.
+// Settle verifies a payment again, broadcasts it, and waits for a block to
+// execute it. A refusal is an *x402.SettleError carrying the reason code. A
+// *NoVerdictError returned before the broadcast moved nothing; one from a
+// broadcast the node never answered may still commit.
 //
-// A delivery the chain committed and then aborted charged the payer its fee, so
-// its refusal carries the transaction's hash.
+// A payment the node admitted and no block executed within deliveryWait is
+// answered x402.ErrSettlementPending with its hash, since it may still commit.
+// The next settle of it under the same terms asks the chain about that hash
+// rather than checking the chain and broadcasting it again. A delivery the chain
+// aborted charged the payer its fee, so its refusal carries the hash too.
 //
-// A payment is settled once per process. A copy presented while it settles, or
-// within settlementTTL after a block executed it, is refused as
-// ReasonDuplicateSettlement before anything is checked: two nodes would each
-// admit a copy and answer both broadcasts with the one delivery.
+// A payment is settled once per process. Once the rules decidable offline accept
+// it, a copy presented while it settles, or within settlementTTL after a block
+// executed it, is refused as ReasonDuplicateSettlement, carrying the hash a node
+// admitted it under when one did.
 func (f *Facilitator) Settle(ctx context.Context, payload types.PaymentPayload, requirements types.PaymentRequirements, _ *x402.FacilitatorContext) (*x402.SettleResponse, error) {
-	key := settlementKey(payload.Payload)
-	if key == "" {
-		return f.settle(ctx, payload, requirements)
+	offline := f.checkOffline(payload, requirements)
+	if offline.verdict != paymentAccepted {
+		return nil, f.settleRefusal(offline)
 	}
-	if !f.settlements.claim(key, time.Now()) {
-		return nil, x402.NewSettleError(ReasonDuplicateSettlement, "", x402.Network(f.network()), "",
+	key := hex.EncodeToString(bfttypes.Tx(offline.raw).Hash())
+	prior, ok := f.settlements.claim(key, time.Now())
+	if !ok {
+		return nil, x402.NewSettleError(ReasonDuplicateSettlement, "", x402.Network(f.network()), prior.hash,
 			"this facilitator is settling or has settled this payment")
 	}
-	executed := false
+	recorded := false
 	defer func() {
-		if executed {
-			f.settlements.markSettled(key, time.Now())
-		} else {
+		if !recorded {
 			f.settlements.release(key)
 		}
 	}()
-	res, err := f.settle(ctx, payload, requirements)
-	executed = err == nil || abortedDelivery(err)
+
+	var res *x402.SettleResponse
+	var err error
+	if prior.state == pending {
+		res, err = f.delivery(ctx, prior.hash, prior.payer)
+	} else {
+		res, err = f.settle(ctx, offline)
+	}
+	f.record(key, res, err, time.Now())
+	recorded = true
 	return res, err
 }
 
-// settlementKey is the hash the chain records the payload's transaction under,
-// or "" when the payload carries none that decodes, which check refuses.
-func settlementKey(payload map[string]any) string {
-	transaction, err := transactionOf(payload)
-	if err != nil {
-		return ""
+// settleRefusal answers a settle for a payment a check did not accept.
+func (f *Facilitator) settleRefusal(check paymentCheck) error {
+	if check.verdict == noVerdict {
+		return &NoVerdictError{Payer: check.payer, Err: check.cause}
 	}
-	raw, err := base64.StdEncoding.DecodeString(transaction)
-	if err != nil || len(raw) == 0 {
-		return ""
-	}
-	return hex.EncodeToString(bfttypes.Tx(raw).Hash())
+	return x402.NewSettleError(check.reason, check.payer, x402.Network(f.network()), "", causeText(check.cause))
 }
 
-// abortedDelivery reports whether err refuses a payment a block executed and
-// aborted, the one refusal that carries a transaction hash.
-func abortedDelivery(err error) bool {
+// record keeps what a settle of the claimed payment established: a block
+// executed it, or the node admitted it and no block was seen executing it. A
+// settle that broadcast nothing releases the claim.
+func (f *Facilitator) record(key string, res *x402.SettleResponse, err error, now time.Time) {
+	if err == nil {
+		f.settlements.markSettled(key, res.Transaction, now)
+		return
+	}
 	refusal, ok := errors.AsType[*x402.SettleError](err)
-	return ok && refusal.ErrorReason == ReasonBroadcastFailed && refusal.Transaction != ""
+	switch {
+	case !ok || refusal.Transaction == "":
+		f.settlements.release(key)
+	case refusal.ErrorReason == x402.ErrSettlementPending:
+		f.settlements.markPending(key, refusal.Payer, refusal.Transaction, now)
+	default:
+		f.settlements.markSettled(key, refusal.Transaction, now)
+	}
 }
 
-func (f *Facilitator) settle(ctx context.Context, payload types.PaymentPayload, requirements types.PaymentRequirements) (*x402.SettleResponse, error) {
-	check := f.check(ctx, payload, requirements)
-	switch check.verdict {
-	case noVerdict:
-		return nil, &NoVerdictError{Payer: check.payer, Err: check.cause}
-	case paymentRefused:
-		return nil, x402.NewSettleError(check.reason, check.payer, x402.Network(f.network()), "", causeText(check.cause))
+// settle checks against the chain a payment checkOffline accepted, broadcasts it,
+// and waits for its delivery.
+func (f *Facilitator) settle(ctx context.Context, offline paymentCheck) (*x402.SettleResponse, error) {
+	check := f.checkOnChain(ctx, offline)
+	if check.verdict != paymentAccepted {
+		return nil, f.settleRefusal(check)
 	}
 	// A request that ended while the node was read has had its answer, or lost
 	// its caller: broadcasting now would move funds behind a response with no
@@ -200,17 +233,43 @@ func (f *Facilitator) settle(ctx context.Context, payload types.PaymentPayload, 
 	}
 	hash, err := f.node.Broadcast(check.raw)
 	if err != nil {
-		// A broadcast that never reached the chain settles nothing and refuses
-		// nothing. Upstream errors this call both for a transaction CheckTx
-		// rejected and for one it timed out waiting to commit — and on the
-		// timeout the transaction is already in the mempool and will commit. Only
-		// the chain's own abci.Error separates the two.
+		// Only the chain's own abci.Error is a refusal. A broadcast the node never
+		// answered may or may not have reached its mempool: neither refused nor
+		// pending.
 		if !chainRefused(err) {
 			return nil, &NoVerdictError{Payer: check.payer, Err: err}
 		}
-		return nil, x402.NewSettleError(ReasonBroadcastFailed, check.payer, x402.Network(f.network()), hash, err.Error())
+		return nil, x402.NewSettleError(ReasonBroadcastFailed, check.payer, x402.Network(f.network()), "", err.Error())
 	}
-	return &x402.SettleResponse{Success: true, Transaction: hash, Network: x402.Network(f.network()), Payer: check.payer}, nil
+	return f.delivery(ctx, hash, check.payer)
+}
+
+// delivery waits for a block to execute the payment the node admitted under
+// hash, and answers for it: settled, refused with the hash when the block
+// aborted it, or pending when no block was seen executing it in time.
+func (f *Facilitator) delivery(ctx context.Context, hash, payer string) (*x402.SettleResponse, error) {
+	ctx, cancel := context.WithDeadline(ctx, deliveryDeadline(ctx, time.Now()))
+	defer cancel()
+
+	network := x402.Network(f.network())
+	err := f.node.AwaitDelivery(ctx, hash)
+	switch {
+	case err == nil:
+		return &x402.SettleResponse{Success: true, Transaction: hash, Network: network, Payer: payer}, nil
+	case chainRefused(err):
+		return nil, x402.NewSettleError(ReasonBroadcastFailed, payer, network, hash, err.Error())
+	}
+	return nil, x402.NewSettleError(x402.ErrSettlementPending, payer, network, hash, err.Error())
+}
+
+// deliveryDeadline is when a settle stops waiting for its delivery: deliveryWait
+// after now, or deliveryMargin before ctx's own deadline when that comes first.
+func deliveryDeadline(ctx context.Context, now time.Time) time.Time {
+	deadline := now.Add(deliveryWait)
+	if requestDeadline, ok := ctx.Deadline(); ok && requestDeadline.Add(-deliveryMargin).Before(deadline) {
+		deadline = requestDeadline.Add(-deliveryMargin)
+	}
+	return deadline
 }
 
 func causeText(err error) string {
@@ -265,6 +324,7 @@ const (
 // conditions or behind a failed read.
 type paymentCheck struct {
 	verdict paymentVerdict
+	tx      *std.Tx
 	raw     []byte
 	payer   string
 	reason  string
@@ -280,11 +340,22 @@ func refusePayment(payer, reason string, cause error) paymentCheck {
 // account, simulate) and reports what it concluded. A refusal names the payer
 // only once the signature verified: until then the sender is whatever the
 // transaction's bytes claim.
+func (f *Facilitator) check(ctx context.Context, payload types.PaymentPayload, req types.PaymentRequirements) paymentCheck {
+	offline := f.checkOffline(payload, req)
+	if offline.verdict != paymentAccepted {
+		return offline
+	}
+	return f.checkOnChain(ctx, offline)
+}
+
+// checkOffline runs every rule decidable without the chain. A payment it accepts
+// carries the decoded transaction, its bytes, and the payer the transaction
+// claims, which no signature has confirmed yet.
 //
 // The engine dispatches by scheme and by registered network, so neither needs
 // rechecking here, except that a registration under a wildcard pattern hands this
 // chain's mechanism a payment for another gno chain.
-func (f *Facilitator) check(ctx context.Context, payload types.PaymentPayload, req types.PaymentRequirements) paymentCheck {
+func (f *Facilitator) checkOffline(payload types.PaymentPayload, req types.PaymentRequirements) paymentCheck {
 	if req.Network != f.network() {
 		return refusePayment("", ReasonInvalidNetwork, nil)
 	}
@@ -315,6 +386,14 @@ func (f *Facilitator) check(ctx context.Context, payload types.PaymentPayload, r
 	if reason != "" {
 		return refusePayment("", reason, nil)
 	}
+	return paymentCheck{verdict: paymentAccepted, tx: tx, raw: raw, payer: payer}
+}
+
+// checkOnChain decides what only the chain can about a payment checkOffline
+// accepted: its signature and sequence against the signer's account, then a
+// simulation.
+func (f *Facilitator) checkOnChain(ctx context.Context, offline paymentCheck) paymentCheck {
+	tx, payer := offline.tx, offline.payer
 	// The signer's account decides the signature and the sequence, and it decides
 	// them before anything is simulated. Simulation cannot: gno's auth ante skips
 	// signature verification under simulate, so a forged signature and a
@@ -340,7 +419,7 @@ func (f *Facilitator) check(ctx context.Context, payload types.PaymentPayload, r
 		}
 		return refusePayment(payer, ReasonSimulationFailed, err)
 	}
-	return paymentCheck{verdict: paymentAccepted, raw: raw, payer: payer}
+	return paymentCheck{verdict: paymentAccepted, raw: offline.raw, payer: payer}
 }
 
 // unsupportedTerms refuses an extra naming a transfer method or a payment flow

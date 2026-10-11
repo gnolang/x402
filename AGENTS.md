@@ -71,8 +71,11 @@ accident and needs no build tag to stay out of the way.
   each admit a copy and answer both broadcasts with the one delivery: one payment, two
   resources.
 - **A reason code names something established about the payment.** A facilitator's own
-  outage is not that: when the chain did not answer, return `503` with no verdict. A false
-  failure tells a seller to discard a response the buyer paid for.
+  outage is not that: when the chain did not answer, or did not answer the broadcast,
+  return `503` with no verdict. Once a node admitted the payment, answer for it: success or
+  the chain's refusal when a block executed it, `settlement_pending` with its hash until
+  then. A false failure tells a seller to discard a response the buyer paid for, and a
+  `503` after the node admitted the payment leaves the buyer without the hash.
 - **The reason vocabulary is pinned by `TestReasonVocabulary`**, and the v2 header
   contract by the `TestConformance_*` tests, transcribed from the specification. Adding
   or renaming a code means updating them in the same change.
