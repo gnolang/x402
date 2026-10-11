@@ -104,18 +104,9 @@ func VerifyStatic(req PaymentRequirements, payload SchemePayload) (tx *std.Tx, p
 	// keeps that ordering: static verification runs ahead of simulation
 	// precisely so a payment is refused before it costs anything.
 	//
-	// The whole type is refused rather than its subkey count, because a
-	// threshold key that decodes is not a key the chain's own constructor would
-	// build. multisig.NewPubKeyMultisigThreshold panics on a threshold of zero,
-	// while amino decodes the struct whatever its fields say, and
-	// PubKeyMultisigThreshold.VerifyBytes bounds its signature list against
-	// that threshold before indexing the list once per set bit of the
-	// signature's bit array — so a zero threshold reaches an out-of-range index
-	// on a list it was told to accept as long enough. Refusing the type keeps
-	// every such shape away from verification: this scheme's payment carries one
-	// signature from one signer, and the single-subkey threshold key is the only
-	// one a subkey count would have admitted anyway. The remaining key types
-	// verify a signature without indexing anything the payload sizes.
+	// The whole type is refused rather than its subkey count: this scheme's
+	// payment carries one signature from one signer, and the single-subkey
+	// threshold key is the only one a subkey count would have admitted anyway.
 	if _, ok := decoded.Signatures[0].PubKey.(multisig.PubKeyMultisigThreshold); ok {
 		return nil, "", ReasonSignatureCount
 	}

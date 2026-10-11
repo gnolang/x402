@@ -11,10 +11,7 @@ import (
 // SignerAccount is the on-chain account a transaction's signature is verified
 // against.
 //
-// It carries the account itself rather than a copy of the fields a sign doc needs,
-// so the sign doc and the renderings that verify come from upstream: which account
-// fields enter the document is a decision the chain makes, and re-deriving it here
-// would be a drift channel on the one check where a silent accept is catastrophic.
+// Verification reads the account's stored key, number and sequence.
 type SignerAccount struct {
 	Account std.Account
 }
@@ -100,9 +97,8 @@ func verifySignature(tx *std.Tx, acc SignerAccount, signer crypto.Address, chain
 	if key == nil {
 		return signatureUnverifiable
 	}
-	// Upstream decides both what the sign doc covers (tx.SignDoc) and which
-	// renderings of it verify (std.VerifySignaturePayload, the rule the ante
-	// applies), so neither can drift from the chain.
+	// tx.SignDoc and std.VerifySignaturePayload come from upstream, so the check
+	// matches the ante of the gno this binary links.
 	verifies := func(sequence uint64) bool {
 		doc := tx.SignDoc(chainID, acc.number(), sequence)
 		rendering, err := std.VerifySignaturePayload(key, doc, tx.Signatures[0].Signature)

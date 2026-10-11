@@ -15,7 +15,8 @@ ghcr.io/gnoverse/gnofacilitator:<version>
 
 **0.1.0 cannot serve onyx-1.** It links a gno older than the one onyx-1 runs and cannot decode
 the node's simulation reply. Payments that reach simulation answer `503`, valid ones included.
-Deploy a later release.
+Deploy a later release. Each release links one gno version and verifies payments by that
+version's rules, so it serves the chains running that version.
 
 | | |
 |---|---|
@@ -87,9 +88,9 @@ Callers are **resource servers, server-to-server** — not browsers. No CORS hea
 **There is no health endpoint.** Use `GET /supported` for liveness.
 
 **It is not a readiness signal.** Verified: with an unreachable `-rpc`, the container starts,
-logs a warning, and `/supported` still answers `200` — while every `/verify` and `/settle`
-would answer `503`. If you need readiness to reflect the chain, probe the node's RPC
-separately; this service cannot tell you.
+logs a warning, and `/supported` still answers `200` — while every payment that passes the
+offline checks would answer `503` on `/verify` and `/settle`. If you need readiness to reflect
+the chain, probe the node's RPC separately; this service cannot tell you.
 
 ## Rate limiting behind a proxy
 
@@ -149,7 +150,8 @@ Two consequences:
 
 | Condition | Response | Meaning |
 |---|---|---|
-| node unreachable or silent | `503`, no reason code | deliberately *not* a payment verdict — the facilitator will not tell a seller a payment failed when it could not check |
+| node unreachable | `503`, no reason code | deliberately *not* a payment verdict — the facilitator will not tell a seller a payment failed when it could not check |
+| node accepts the connection and never answers | no HTTP response; the connection closes at 60 s | the RPC client gives up at 60 s, past the 30 s write timeout, so the `503` is never delivered |
 | payment fails a check, or the chain refused the transaction | `200` with `isValid:false` (`/verify`) or `success:false` (`/settle`) and a reason code | an established outcome |
 | over rate limit | `429` | |
 | body is not one JSON request, or exceeds 1 MiB | `400`, plain text, no reason code | |

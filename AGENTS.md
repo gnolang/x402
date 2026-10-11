@@ -33,6 +33,7 @@ names a language.
 | `examples/weather/` | a priced endpoint you can run and curl |
 | `e2e/` | one real payment through a real node — its own Go module. `buyer.mjs` beside it is the buyer the scenarios drive |
 | `docs/releasing.md` | the two independent release lines |
+| `docs/deploying.md` | running the facilitator image: flags, endpoints, limits, failure modes |
 
 `e2e` is a separate Go module on purpose, so `go test ./...` cannot start a chain by
 accident and needs no build tag to stay out of the way.
@@ -78,6 +79,8 @@ accident and needs no build tag to stay out of the way.
 | Change the payload or the wire types | `facilitator/types.go` and its test · the client's payload builder in `client/src/exact/client.ts` — both halves sign the same bytes |
 | Rename `.github/workflows/release.yml` | the npm **trusted publisher** on npmjs.com, which matches the filename exactly. Publishing breaks until it does |
 | Change the release flow or a tag scheme | `docs/releasing.md` |
+| Change a flag, default, timeout, limit or exit code in `cmd/gnofacilitator` | `docs/deploying.md` |
+| Follow the target testnet to a new `gnolang/gno` chain tag | `github.com/gnolang/gno` in `go.mod` and `e2e/go.mod` · re-record `facilitator/testdata/onyx_simulate_send.json` |
 | Release the client | bump `package.json`'s version — the workflow refuses a dispatch that disagrees with it. The facilitator's version is its git tag alone, so it needs no bump |
 | Add a make target | this file (Commands) |
 
