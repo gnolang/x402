@@ -12,7 +12,10 @@ make js-test             # the client mechanism, incl. the sign-doc byte-equalit
 make test-e2e            # one real payment against an in-memory node
 make lint                # go vet (both modules) + gofmt
 make build               # bin/gnofacilitator
+make install             # the facilitator into GOPATH/bin
 make js                  # install and build the client bundle
+make fmt                 # gofmt the Go sources
+make clean               # remove build artifacts
 make help                # every target
 ```
 
@@ -71,7 +74,7 @@ accident and needs no build tag to stay out of the way.
 
 | When you… | Update |
 |---|---|
-| Add or rename a reason code | `facilitator/types.go` · `TestReasonVocabulary` |
+| Add or rename a reason code | `facilitator/verify.go` · `TestReasonVocabulary` |
 | Change the payload or the wire types | `facilitator/types.go` and its test · the client's payload builder in `client/src/exact/client.ts` — both halves sign the same bytes |
 | Rename `.github/workflows/release.yml` | the npm **trusted publisher** on npmjs.com, which matches the filename exactly. Publishing breaks until it does |
 | Change the release flow or a tag scheme | `docs/releasing.md` |

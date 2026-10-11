@@ -7,7 +7,7 @@
 # payer did not already sign for. It does need a reachable node:
 #
 #   docker run --rm -p 8402:8402 ghcr.io/gnoverse/gnofacilitator:latest \
-#     -rpc https://rpc.sapphire.testnets.gno.land:443 -chain-id sapphire-1
+#     -rpc https://rpc.onyx.testnets.gno.land:443 -chain-id onyx-1
 #
 # -listen already defaults to all interfaces on :8402, so publishing the port is
 # enough — unlike a service that binds loopback for host safety.
