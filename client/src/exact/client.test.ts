@@ -76,9 +76,27 @@ describe("ExactGnoScheme.createPaymentPayload", () => {
       requirements: offer({ scheme: "upto" }),
       message: /scheme upto is not exact/,
     },
-    "another asset": {
-      requirements: offer({ asset: "atom" }),
-      message: /asset atom is not ugnot/,
+    // The coin sent is amount + asset as one string, so an asset outside the
+    // chain's denomination grammar is either unparseable there or another coin.
+    "an upper-case asset": {
+      requirements: offer({ asset: "UGNOT" }),
+      message: /asset UGNOT is not a gno denomination/,
+    },
+    "an asset that runs into the amount": {
+      requirements: offer({ asset: "0ugnot" }),
+      message: /asset 0ugnot is not a gno denomination/,
+    },
+    "an asset naming a second coin": {
+      requirements: offer({ asset: "ugnot,1000000ugnot" }),
+      message: /asset ugnot,1000000ugnot is not a gno denomination/,
+    },
+    "an asset too short to be a denomination": {
+      requirements: offer({ asset: "ug" }),
+      message: /asset ug is not a gno denomination/,
+    },
+    "an asset longer than the chain stores": {
+      requirements: offer({ asset: `/${"a".repeat(274)}` }),
+      message: /is not a gno denomination/,
     },
     "a dollar-denominated amount": {
       requirements: offer({ amount: "$0.01" }),
@@ -146,6 +164,15 @@ describe("ExactGnoScheme.createPaymentPayload", () => {
       ),
     ).rejects.toThrow(/no provider connected/);
   });
+
+  for (const asset of ["atom", "/gno.land/r/demo/foo20:foo"]) {
+    it(`accepts the ${asset} denomination and reaches signing`, async () => {
+      const mechanism = await scheme();
+      await expect(mechanism.createPaymentPayload(2, offer({ asset }))).rejects.toThrow(
+        /no provider connected/,
+      );
+    });
+  }
 
   it("accepts an absent extra.memo and reaches signing", async () => {
     const mechanism = await scheme();

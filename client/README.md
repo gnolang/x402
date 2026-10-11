@@ -24,8 +24,10 @@ const res = await paid("https://api.example.com/weather");
 required: a gno sequence is sequential, so only the chain knows the next one.
 
 `setSpendControls` admits ugnot. It exists from `@x402/core` 2.23, and from that version a stock
-client pays only in USD-pegged assets unless they are listed there; ugnot is not one. `maxAmountPerPayment` is the most one
-request may cost, in ugnot; the network fee is paid on top.
+client pays only in USD-pegged assets unless they are listed there; ugnot is not one.
+`maxAmountPerPayment` is the most one request may cost, in ugnot; the network fee is paid on top.
+The mechanism signs for any gno denomination, so an offer priced in another one is paid once an
+entry lists it. The fee stays in ugnot whatever the price is in.
 
 `e2e/buyer.mjs` uses that same package-name import from inside this repository, resolving through the
 manifest's `exports` map rather than a built path — so the map is exercised by the payment test
@@ -74,7 +76,7 @@ you the resource, while an overpriced one costs a little more than it had to.
 The requirements arrive from a seller over the network, so they are validated rather than trusted —
 a malformed amount or a missing `payTo` would otherwise become a signed transaction that pays the
 wrong thing. It throws on a network that is not `gno:<chain-id>`, a scheme that is not `exact`, an
-asset that is not `ugnot`, an amount that is not a positive integer, an absent `payTo`, an
+asset that is not a gno denomination, an amount that is not a positive integer, an absent `payTo`, an
 `extra.memo` that is present but not a string, an `extra.assetTransferMethod` other than
 `bank-send`, and an `extra.paymentFlow` other than `authorization`.
 

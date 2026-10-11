@@ -20,7 +20,12 @@ import type {
 import { signForChain } from "../signing.js";
 
 const NAMESPACE = "gno";
-const ASSET = "ugnot";
+
+// tm2's denomination grammar (std.ValidateDenom), capped at its MaxDenomLength of
+// 274 bytes. The coin a payment sends is amount + asset as one string, so an
+// asset outside it is either refused by the chain or read as another coin:
+// "0ugnot" after "250000" is 2500000ugnot.
+const DENOMINATION = /^[a-z/][a-z0-9_.:/-]{2,273}$/;
 
 // How a gno payment moves value: the payer signs a bank send the facilitator
 // broadcasts. An offer that omits extra.assetTransferMethod means it.
@@ -103,8 +108,8 @@ export class ExactGnoScheme implements SchemeNetworkClient {
     if (paymentRequirements.scheme !== this.scheme) {
       throw new Error(`x402-gno: scheme ${paymentRequirements.scheme} is not ${this.scheme}`);
     }
-    if (paymentRequirements.asset !== ASSET) {
-      throw new Error(`x402-gno: asset ${paymentRequirements.asset} is not ${ASSET}`);
+    if (!DENOMINATION.test(paymentRequirements.asset)) {
+      throw new Error(`x402-gno: asset ${paymentRequirements.asset} is not a gno denomination`);
     }
     if (!/^[1-9][0-9]*$/.test(paymentRequirements.amount)) {
       throw new Error(`x402-gno: amount ${paymentRequirements.amount} is not a positive integer`);
