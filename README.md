@@ -111,7 +111,7 @@ implementation detail of the role, so no directory names one.
 | client | `client/src/exact/client.ts` | upstream's `SchemeNetworkClient`, TypeScript |
 
 Plus `cmd/gnofacilitator/` (the binary), `examples/weather/` (a seller and a buyer that make one
-payment end to end, with a Makefile to run them) and `e2e/` (one real payment through a real node —
+payment end to end, with a Makefile to run them) and `e2e/` (real payments through real nodes —
 its own Go module).
 
 Both manifests — `go.mod` and `package.json` — live at the root, so `go test ./...`, `npm test` and
@@ -123,6 +123,9 @@ the root Makefile's targets run from here. The demo's Makefile runs from `exampl
 - **The facilitator holds no key.** It verifies offline and broadcasts a transaction the payer already signed, so it cannot move funds anywhere the payer did not sign for.
 - **A failed resource is not charged for.** The flow is `authorization`: verify, serve, then settle. The middleware buffers the response and skips settlement on any status ≥400.
 - **A failed settlement withholds the response.** The buffered body is discarded.
+- **A payment settles once per facilitator.** A copy presented while it settles, or within five
+  minutes after, is refused as `duplicate_settlement`. The record is in memory, so run one
+  facilitator process per chain.
 - **Prices name their denomination.** gno has no default asset, so `"$0.001"` errors rather than resolving to a token.
 
 **Accepted risk:** between `/verify` and `/settle` a payer can consume the signed-over account
@@ -141,9 +144,10 @@ make help                # Every target
 ```
 
 `make test-e2e` starts a node via gno.land's txtar harness, stands up the facilitator and a priced
-endpoint, pays with the JS client, and asserts the seller's balance changed. It also hands one
-payment to two facilitators at once, through one node and through two peered nodes, and asserts how
-many report it settled, and it replays a settled payment and asserts it is refused as spent.
+endpoint, pays with the JS client, and asserts the seller's balance changed. It also settles one
+payment twice at once in three arrangements: two facilitators sharing a node, two facilitators on
+two peered nodes, and one facilitator balancing over both. It asserts how many report the payment
+settled, and replays a settled payment to assert it is refused.
 
 Built against [`github.com/x402-foundation/x402/go/v2`](https://github.com/x402-foundation/x402) for
 the protocol and [`gnolang/gno`](https://github.com/gnolang/gno) for the chain.

@@ -13,11 +13,14 @@ package exact
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
+	"time"
 
 	abci "github.com/gnolang/gno/tm2/pkg/bft/abci/types"
+	bfttypes "github.com/gnolang/gno/tm2/pkg/bft/types"
 	"github.com/gnolang/gno/tm2/pkg/std"
 	x402 "github.com/x402-foundation/x402/go/v2"
 	"github.com/x402-foundation/x402/go/v2/types"
@@ -82,8 +85,9 @@ func (e *NoVerdictError) Unwrap() error { return e.Err }
 
 // Facilitator verifies and settles gno "exact" payments for one chain.
 type Facilitator struct {
-	node    Node
-	chainID string
+	node        Node
+	chainID     string
+	settlements *settlements
 }
 
 var _ x402.SchemeNetworkFacilitator = (*Facilitator)(nil)
@@ -92,7 +96,7 @@ var _ x402.SchemeNetworkFacilitator = (*Facilitator)(nil)
 // reference half of the network "gno:<chainID>". The chain id is expected to
 // satisfy ValidChainID.
 func NewFacilitator(node Node, chainID string) *Facilitator {
-	return &Facilitator{node: node, chainID: chainID}
+	return &Facilitator{node: node, chainID: chainID, settlements: newSettlements()}
 }
 
 // Scheme names the x402 payment scheme this implements.
@@ -132,7 +136,55 @@ func (f *Facilitator) Verify(ctx context.Context, payload types.PaymentPayload, 
 //
 // A delivery the chain committed and then aborted charged the payer its fee, so
 // its refusal carries the transaction's hash.
+//
+// A payment is settled once per process. A copy presented while it settles, or
+// within settlementTTL after a block executed it, is refused as
+// ReasonDuplicateSettlement before anything is checked: two nodes would each
+// admit a copy and answer both broadcasts with the one delivery.
 func (f *Facilitator) Settle(ctx context.Context, payload types.PaymentPayload, requirements types.PaymentRequirements, _ *x402.FacilitatorContext) (*x402.SettleResponse, error) {
+	key := settlementKey(payload.Payload)
+	if key == "" {
+		return f.settle(ctx, payload, requirements)
+	}
+	if !f.settlements.claim(key, time.Now()) {
+		return nil, x402.NewSettleError(ReasonDuplicateSettlement, "", x402.Network(f.network()), "",
+			"this facilitator is settling or has settled this payment")
+	}
+	executed := false
+	defer func() {
+		if executed {
+			f.settlements.markSettled(key, time.Now())
+		} else {
+			f.settlements.release(key)
+		}
+	}()
+	res, err := f.settle(ctx, payload, requirements)
+	executed = err == nil || abortedDelivery(err)
+	return res, err
+}
+
+// settlementKey is the hash the chain records the payload's transaction under,
+// or "" when the payload carries none that decodes, which check refuses.
+func settlementKey(payload map[string]any) string {
+	transaction, err := transactionOf(payload)
+	if err != nil {
+		return ""
+	}
+	raw, err := base64.StdEncoding.DecodeString(transaction)
+	if err != nil || len(raw) == 0 {
+		return ""
+	}
+	return hex.EncodeToString(bfttypes.Tx(raw).Hash())
+}
+
+// abortedDelivery reports whether err refuses a payment a block executed and
+// aborted, the one refusal that carries a transaction hash.
+func abortedDelivery(err error) bool {
+	refusal, ok := errors.AsType[*x402.SettleError](err)
+	return ok && refusal.ErrorReason == ReasonBroadcastFailed && refusal.Transaction != ""
+}
+
+func (f *Facilitator) settle(ctx context.Context, payload types.PaymentPayload, requirements types.PaymentRequirements) (*x402.SettleResponse, error) {
 	check := f.check(ctx, payload, requirements)
 	switch check.verdict {
 	case noVerdict:

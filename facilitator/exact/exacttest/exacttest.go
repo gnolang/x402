@@ -62,6 +62,7 @@ type Node struct {
 	SimulateErr  error
 	Hash         string
 	BroadcastErr error
+	OnBroadcast  func() // runs during the broadcast, when set
 
 	Simulates   int
 	Broadcasts  int
@@ -83,6 +84,9 @@ func (n *Node) Simulate(*std.Tx) error {
 }
 
 func (n *Node) Broadcast(tx []byte) (string, error) {
+	if n.OnBroadcast != nil {
+		n.OnBroadcast()
+	}
 	n.Broadcasts++
 	n.Broadcasted = tx
 	return n.Hash, n.BroadcastErr

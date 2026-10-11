@@ -43,27 +43,31 @@ var (
 		exact.ReasonUnsupportedScheme,
 		exact.ReasonUnexpectedSettleError,
 	}
+	settlementReasons = []string{
+		exact.ReasonDuplicateSettlement,
+	}
 )
 
 // TestReasonVocabulary pins the shape of the reason vocabulary. Scheme-level
 // codes carry the invalid_exact_<caip2-namespace> prefix the peer schemes use —
 // "gno" is the CAIP-2 namespace, matching how SVM's constants say "solana" —
 // while envelope-level codes are the spec's own §9 names and carry no scheme
-// prefix. Reason strings are the one part of the wire that cannot be changed
-// once integrators depend on them, so a collision or a stray prefix must fail
-// here rather than after publication.
+// prefix. Settlement codes carry none either: duplicate_settlement is the name
+// upstream's Solana mechanism uses. Reason strings are the one part of the wire
+// that cannot be changed once integrators depend on them, so a collision or a
+// stray prefix must fail here rather than after publication.
 func TestReasonVocabulary(t *testing.T) {
 	for _, reason := range schemeLevelReasons {
 		assert.True(t, strings.HasPrefix(reason, "invalid_exact_gno_"),
 			"scheme-level reason %q must name the scheme and the CAIP-2 namespace", reason)
 	}
-	for _, reason := range envelopeLevelReasons {
+	for _, reason := range slices.Concat(envelopeLevelReasons, settlementReasons) {
 		assert.False(t, strings.HasPrefix(reason, "invalid_exact_"),
-			"envelope-level reason %q is not scheme-specific", reason)
+			"envelope-level or settlement reason %q is not scheme-specific", reason)
 	}
 
 	seen := make(map[string]bool)
-	for _, reason := range slices.Concat(schemeLevelReasons, envelopeLevelReasons) {
+	for _, reason := range slices.Concat(schemeLevelReasons, envelopeLevelReasons, settlementReasons) {
 		require.NotEmpty(t, reason)
 		assert.False(t, seen[reason], "two conditions must not report the same reason: %q", reason)
 		seen[reason] = true

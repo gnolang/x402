@@ -77,6 +77,14 @@ const (
 	ReasonUnexpectedSettleError = "unexpected_settle_error"
 )
 
+// Settlement codes, reported for where a payment's settlement stands rather than
+// for anything the payment says.
+const (
+	// ReasonDuplicateSettlement refuses a copy of a payment this facilitator is
+	// settling or has settled. It is the name upstream's Solana mechanism uses.
+	ReasonDuplicateSettlement = "duplicate_settlement"
+)
+
 // VerifyStatic checks every spec rule decidable without chain state against
 // transaction, the base64 signed std.Tx a payload carries, and returns the
 // decoded tx and the payer (bech32 master address funds move from) on success,

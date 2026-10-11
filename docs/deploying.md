@@ -4,8 +4,13 @@ An x402 facilitator for one gno chain. It exposes `/verify`, `/settle` and `/sup
 **holds no keys**: it verifies payments offline and relays transactions the payer already
 signed. A compromised facilitator cannot move funds anywhere the payer did not sign for.
 
-Stateless. No database, no volumes, no migrations, no secrets. The only state is in-memory
-rate-limit buckets, which are swept.
+No database, no volumes, no migrations, no secrets. The only state is in memory: rate-limit
+buckets, which are swept, and the transaction hashes of the payments it settled in the last five
+minutes, which make each payment settle once.
+
+**Run one facilitator process per chain.** That record is per process. Two replicas behind a
+balancer can each settle the same payment through different nodes, and both report it settled
+while the payee is paid once. One process deduplicates even through a load-balanced RPC.
 
 ## Artifact
 
@@ -152,6 +157,7 @@ does not kill the process mid-drain.
 | node unreachable | `503`, no reason code | deliberately *not* a payment verdict — the facilitator will not tell a seller a payment failed when it could not check |
 | node accepts the connection and never answers | `503` after 25 s, no reason code | the answer timeout; no verdict, as for an unreachable node |
 | payment fails a check, or the chain refused the transaction | `200` with `isValid:false` (`/verify`) or `success:false` (`/settle`) and a reason code | an established outcome |
+| `/settle` of a payment this process is settling, or settled in the last five minutes | `200`, `success:false`, `duplicate_settlement` | the first settle answers for it |
 | over rate limit | `429` | |
 | body is not one JSON request, or exceeds 1 MiB | `400`, plain text, no reason code | |
 

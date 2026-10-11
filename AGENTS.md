@@ -33,7 +33,7 @@ names a language.
 | `client/src/` | upstream's `SchemeNetworkClient`, TypeScript; emits to `client/dist/` |
 | `cmd/gnofacilitator/` | the binary |
 | `examples/weather/` | the demo: a priced endpoint (`main.go`), the buyer that pays it (`buy.mjs`), and a Makefile that runs them and a facilitator |
-| `e2e/` | real payments through real nodes — its own Go module. `buyer.mjs` beside it is the buyer the contract scenarios drive; the happy path drives `examples/weather/buy.mjs`. `settle_test.go` hands one payment to two facilitators at once, through one node and through two peered nodes, and replays a settled one |
+| `e2e/` | real payments through real nodes — its own Go module. `buyer.mjs` beside it is the buyer the contract scenarios drive; the happy path drives `examples/weather/buy.mjs`. `settle_test.go` settles one payment twice at once through two facilitators on one node, two on two nodes and one over two nodes, and replays a settled one |
 | `docs/releasing.md` | the two independent release lines |
 | `docs/deploying.md` | running the facilitator image: flags, endpoints, limits, failure modes |
 
@@ -65,6 +65,11 @@ accident and needs no build tag to stay out of the way.
   base64; never re-encode a `transaction` on the way through.
 - **Everything decidable offline is decided before the node is touched**, so a payment
   that cannot settle costs the facilitator nothing.
+- **A payment settles once per facilitator process.** `exact.Facilitator` claims a
+  payment's transaction hash before checking it and keeps it for five minutes after a block
+  executes it; a copy is refused as `duplicate_settlement`. Without the claim, two nodes
+  each admit a copy and answer both broadcasts with the one delivery: one payment, two
+  resources.
 - **A reason code names something established about the payment.** A facilitator's own
   outage is not that: when the chain did not answer, return `503` with no verdict. A false
   failure tells a seller to discard a response the buyer paid for.

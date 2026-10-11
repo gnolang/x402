@@ -8,9 +8,9 @@
 // one that guards an HTTP resource with the canonical middleware. The buyer is the
 // JS one, run by `exec node`, so the assertion crosses both languages.
 //
-// settle_test.go starts in-process nodes itself instead, to hand one signed
-// payment to two facilitators at once and to replay a settled one, which a
-// scripted buyer paying once cannot do.
+// settle_test.go starts in-process nodes itself instead, to settle one signed
+// payment twice at once and to replay a settled one, which a scripted buyer
+// paying once cannot do.
 package e2e
 
 import (

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -57,7 +58,8 @@ func TestDuplicateSettle_OneNodeSettlesOnce(t *testing.T) {
 	before := readAccounts(t, validator, payer, payee)
 
 	answers := settleConcurrently(t, signedSettleRequest(t, validator, payer, payee),
-		startFacilitator(t, validator), startFacilitator(t, validator))
+		startFacilitator(t, exact.NewGnoclientNode(validator.client)),
+		startFacilitator(t, exact.NewGnoclientNode(validator.client)))
 
 	require.Equal(t, 1, settledCount(answers), "answers: %v", answers)
 	for _, answer := range answers {
@@ -82,8 +84,8 @@ func TestDuplicateSettle_OneNodeSettlesOnce(t *testing.T) {
 // resources. x402's exact scheme forbids this. A mechanism whose resubmitted
 // payment is indistinguishable from the original must deduplicate settlements
 // atomically across every process serving /settle
-// (specs/schemes/exact/scheme_exact.md, Duplicate delivery), and this
-// facilitator keeps no state to do it with.
+// (specs/schemes/exact/scheme_exact.md, Duplicate delivery), and a facilitator
+// deduplicates within its own process only. These two share nothing.
 //
 // Each node admits the transaction into its own mempool, because neither has
 // heard of it from the other yet: tm2 gossips on a flush interval. The validator
@@ -92,8 +94,8 @@ func TestDuplicateSettle_OneNodeSettlesOnce(t *testing.T) {
 // its bytes, and the bytes are the same. Neither answer says whose broadcast was
 // included, and the hash cannot tell either, being the hash of those bytes.
 //
-// This asserts the facilitator's behaviour as it stands. Deduplicating
-// settlements makes it fail, and it should then assert exactly one success.
+// This asserts the limit as it stands. Deduplicating across processes makes it
+// fail, and it should then assert exactly one success.
 func TestDuplicateSettle_TwoNodesBothReportSuccess(t *testing.T) {
 	payer, payee := payerKey(t), payeeAddress()
 	validator := startValidator(t, payee)
@@ -101,7 +103,8 @@ func TestDuplicateSettle_TwoNodesBothReportSuccess(t *testing.T) {
 	before := readAccounts(t, validator, payer, payee)
 
 	answers := settleConcurrently(t, signedSettleRequest(t, validator, payer, payee),
-		startFacilitator(t, validator), startFacilitator(t, follower))
+		startFacilitator(t, exact.NewGnoclientNode(validator.client)),
+		startFacilitator(t, exact.NewGnoclientNode(follower.client)))
 
 	require.Equal(t, 2, settledCount(answers), "answers: %v", answers)
 
@@ -110,35 +113,86 @@ func TestDuplicateSettle_TwoNodesBothReportSuccess(t *testing.T) {
 	assert.Equal(t, before.payerSequence+1, after.payerSequence, "one transaction committed")
 }
 
-// TestAReplayedPaymentIsRefusedAsConsumed settles a payment, then hands the same
-// facilitator the same /settle body again.
+// TestDuplicateSettle_OneFacilitatorBehindABalancerSettlesOnce hands one payment
+// to a single facilitator twice at the same instant, through an endpoint that
+// sends each broadcast to the next of two nodes: the shape of a load-balanced
+// public RPC, which answered forty requests from eight distinct nodes on onyx-1.
 //
-// The chain consumed the sequence the payment was signed at, so the replay
-// cannot settle, and x402's exact scheme requires a consumed payment to fail at
-// settle. It is refused as a sequence mismatch rather than an invalid signature:
+// Two nodes would each admit a copy and answer both broadcasts with the one
+// delivery, as two facilitators do. One facilitator settles the payment once and
+// refuses the copy as a duplicate.
+func TestDuplicateSettle_OneFacilitatorBehindABalancerSettlesOnce(t *testing.T) {
+	payer, payee := payerKey(t), payeeAddress()
+	validator := startValidator(t, payee)
+	follower := startFollower(t, validator)
+	before := readAccounts(t, validator, payer, payee)
+	balancer := &broadcastBalancer{Node: exact.NewGnoclientNode(validator.client), nodes: []exact.Node{
+		exact.NewGnoclientNode(validator.client), exact.NewGnoclientNode(follower.client),
+	}}
+	facilitatorURL := startFacilitator(t, balancer)
+
+	answers := settleConcurrently(t, signedSettleRequest(t, validator, payer, payee), facilitatorURL, facilitatorURL)
+
+	require.Equal(t, 1, settledCount(answers), "answers: %v", answers)
+	for _, answer := range answers {
+		if !answer.settled() {
+			assert.Equal(t, exact.ReasonDuplicateSettlement, answer.response.ErrorReason, "answers: %v", answers)
+		}
+	}
+	after := readAccounts(t, validator, payer, payee)
+	assert.Equal(t, before.payeeUgnot+dupPrice, after.payeeUgnot, "the payee is paid once")
+	assert.Equal(t, before.payerSequence+1, after.payerSequence, "one transaction committed")
+}
+
+// broadcastBalancer reads the chain through its embedded Node and sends each
+// broadcast to the next of its nodes in turn.
+type broadcastBalancer struct {
+	exact.Node
+	nodes []exact.Node
+	next  atomic.Uint32
+}
+
+func (b *broadcastBalancer) Broadcast(tx []byte) (string, error) {
+	i := b.next.Add(1) - 1
+	return b.nodes[int(i)%len(b.nodes)].Broadcast(tx)
+}
+
+// TestAReplayedPaymentIsRefused settles a payment, then replays the same /settle
+// body to the facilitator that settled it and to another one.
+//
+// The facilitator that settled it refuses the replay as a duplicate before
+// reading the chain. Another facilitator remembers nothing, and is refused by
+// the chain itself: x402's exact scheme requires a consumed payment to fail at
+// settle. That refusal is a sequence mismatch rather than an invalid signature:
 // the signature still verifies over the sequence it was signed at, which is what
 // tells a spent payment from a forged one. Only a chain that ran the ante can
 // show it, since the unit tests read a scripted account.
-func TestAReplayedPaymentIsRefusedAsConsumed(t *testing.T) {
+func TestAReplayedPaymentIsRefused(t *testing.T) {
 	payer, payee := payerKey(t), payeeAddress()
 	validator := startValidator(t, payee)
-	facilitatorURL := startFacilitator(t, validator)
+	settledBy := startFacilitator(t, exact.NewGnoclientNode(validator.client))
 	body := signedSettleRequest(t, validator, payer, payee)
 
-	first, err := postSettle(facilitatorURL, body)
+	first, err := postSettle(settledBy, body)
 	require.NoError(t, err)
 	require.True(t, first.settled(), "first: %v", first)
 	paid := readAccounts(t, validator, payer, payee)
 
-	replay, err := postSettle(facilitatorURL, body)
+	again, err := postSettle(settledBy, body)
 	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, again.status, "again: %v", again)
+	assert.False(t, again.response.Success)
+	assert.Equal(t, exact.ReasonDuplicateSettlement, again.response.ErrorReason)
 
-	require.Equal(t, http.StatusOK, replay.status, "replay: %v", replay)
-	assert.False(t, replay.response.Success)
-	assert.Equal(t, exact.ReasonSequenceMismatch, replay.response.ErrorReason)
-	assert.Equal(t, payer.PubKey().Address().String(), replay.response.Payer,
+	elsewhere, err := postSettle(startFacilitator(t, exact.NewGnoclientNode(validator.client)), body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, elsewhere.status, "elsewhere: %v", elsewhere)
+	assert.False(t, elsewhere.response.Success)
+	assert.Equal(t, exact.ReasonSequenceMismatch, elsewhere.response.ErrorReason)
+	assert.Equal(t, payer.PubKey().Address().String(), elsewhere.response.Payer,
 		"the signature verified, so the refusal names the payer")
-	assert.Equal(t, paid, readAccounts(t, validator, payer, payee), "the replay moved nothing")
+
+	assert.Equal(t, paid, readAccounts(t, validator, payer, payee), "neither replay moved anything")
 }
 
 // ---- Chain
@@ -217,12 +271,11 @@ func startNode(t *testing.T, cfg *gnoland.InMemoryNodeConfig) *chainNode {
 	return &chainNode{node: n, client: &gnoclient.Client{RPCClient: rpc}}
 }
 
-// startFacilitator serves a facilitator that reads and broadcasts through one
-// node.
-func startFacilitator(t *testing.T, through *chainNode) string {
+// startFacilitator serves a facilitator that reads and broadcasts through node.
+func startFacilitator(t *testing.T, node exact.Node) string {
 	t.Helper()
 
-	f := facilitator.New(exact.NewGnoclientNode(through.client), chainID)
+	f := facilitator.New(node, chainID)
 	server := httptest.NewServer(f.Handler())
 	t.Cleanup(server.Close)
 	return server.URL
