@@ -12,7 +12,7 @@ import (
 // The fixtures below are the literal base64 header values published in the x402
 // v2 HTTP transport specification, transcribed verbatim from
 // specs/transports-v2/http.md at x402-foundation/x402 commit
-// b6d5bffd73f56b72c37f888c743224dab63e35ff (lines 22, 67, 123 and 147).
+// f8f83309706b14cc696962f0a002eeeb66c3dc26 (lines 22, 67, 123 and 147).
 //
 // They exist so that conformance is checked against the spec rather than against
 // this package's own encoder. A round trip through our own types proves only
@@ -184,7 +184,7 @@ func keysOf(m map[string]json.RawMessage) []string {
 }
 
 // The reason codes §9 of the specification enumerates, transcribed verbatim from
-// specs/x402-specification-v2.md at the commit named above (lines 605-619).
+// specs/x402-specification-v2.md at the commit named above (lines 593-608).
 //
 // Only the scheme-independent names are transcribed. §9 also lists EVM's
 // invalid_exact_evm_payload_* codes, which belong to that scheme's vocabulary
@@ -200,6 +200,7 @@ var specEnvelopeReasons = []string{
 	"invalid_transaction_state",
 	"unexpected_verify_error",
 	"unexpected_settle_error",
+	"settlement_pending",
 }
 
 // TestEnvelopeReasonsAreSpecNames checks the envelope-level codes against the
