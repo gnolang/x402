@@ -143,3 +143,30 @@ func TestTheCanonicalSellerSnippetOffersGno(t *testing.T) {
 	_, declaresTransferMethod := offer.Extra["assetTransferMethod"]
 	assert.False(t, declaresTransferMethod, "a gno payment is a bank send, with no transfer method to name")
 }
+
+// TestARouteCanOnlyAskForTheAuthorizationFlow pins the flows gno declares. Only
+// authorization, verify then serve then settle, is proved end to end, so a route
+// asking to settle first or to escrow is refused when the routes initialize.
+func TestARouteCanOnlyAskForTheAuthorizationFlow(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(keylessNode{}, "test14").Handler())
+	t.Cleanup(gnofacilitator.Close)
+
+	initialize := func(flow string) error {
+		routes := x402http.RoutesConfig{"GET /weather": {Accepts: x402http.PaymentOptions{{
+			Scheme:  "exact",
+			PayTo:   "g1u7y667z64x2h7vc6fmpcprgey4ck233jaww9zq",
+			Price:   x402.AssetAmount{Asset: "ugnot", Amount: "250000"},
+			Network: "gno:test14",
+			Extra:   map[string]any{"paymentFlow": flow},
+		}}}}
+		server := x402http.Newx402HTTPResourceServer(routes,
+			x402.WithFacilitatorClient(x402http.NewHTTPFacilitatorClient(&x402http.FacilitatorConfig{URL: gnofacilitator.URL})),
+			x402.WithSchemeServer("gno:test14", gnoexact.NewExactGnoScheme()))
+		return server.Initialize(context.Background())
+	}
+
+	require.NoError(t, initialize("authorization"))
+	for _, flow := range []string{"upfront", "escrow"} {
+		assert.Error(t, initialize(flow), "paymentFlow %q", flow)
+	}
+}
