@@ -24,8 +24,10 @@ const res = await paid("https://api.example.com/weather");
 required: a gno sequence is sequential, so only the chain knows the next one.
 
 `setSpendControls` admits ugnot. It exists from `@x402/core` 2.23, and from that version a stock
-client pays only in USD-pegged assets unless they are listed there; ugnot is not one. `maxAmountPerPayment` is the most one
-request may cost, in ugnot; the network fee is paid on top.
+client pays only in USD-pegged assets unless they are listed there; ugnot is not one.
+`maxAmountPerPayment` is the most one request may cost, in ugnot; the network fee is paid on top.
+The mechanism signs for any gno denomination, so an offer priced in another one is paid once an
+entry lists it. The fee stays in ugnot whatever the price is in.
 
 `e2e/buyer.mjs` uses that same package-name import from inside this repository, resolving through the
 manifest's `exports` map rather than a built path — so the map is exercised by the payment test
@@ -52,6 +54,9 @@ reports. That is worth stating because the obvious implementation cannot do it:
 This builds the sign doc itself instead, and a test holds the result byte-identical to the wallet's
 own signing.
 
+The sign doc renders the fee in the shape of gnolang/gno#6173, as `@gnolang/tm2-js-client` 3 does.
+A chain without that change refuses the signature; onyx-1 has it.
+
 The chain id is the only sign-doc field that comes from the offer. The account number and the
 sequence still come from the wallet's provider, because only a chain knows the next sequence for an
 account — so paying a second gno chain also means pointing the wallet at a node on it. A wallet
@@ -65,17 +70,23 @@ the chain charges the first signer, so the payer of the payment is also the paye
 fee, and the facilitator holds no key — it only broadcasts what you signed. A gno offer says so:
 `extra.areFeesSponsored` is `false`.
 
-The requirements carry no gas fields, so the buyer chooses. This offers well clear of the chain's
-minimum rather than tracking the gas price: an underpriced payment is refused at settle and costs
-you the resource, while an overpriced one costs a little more than it had to.
+The requirements carry no gas fields, so the buyer chooses. The chain takes the whole fee offered,
+not the gas used, so the fee follows the chain's own gas price, read from the wallet's node: twice
+that price for 10,000,000 gas, rounded up. The price adapts to load, and an underpriced payment is
+refused at settle and costs you the resource, hence the margin. On onyx-1, at 1ugnot per 1000 gas,
+that is 20000ugnot. A block above the chain's gas target raises the price's amount by at least 1, so
+on onyx-1 one such block between signing and settle doubles it, and the margin covers exactly one. A
+chain that reports no gas price gets 1000000ugnot, clear of any minimum a node sets on its own.
 
 ## What it refuses
 
 The requirements arrive from a seller over the network, so they are validated rather than trusted —
 a malformed amount or a missing `payTo` would otherwise become a signed transaction that pays the
 wrong thing. It throws on a network that is not `gno:<chain-id>`, a scheme that is not `exact`, an
-asset that is not `ugnot`, an amount that is not a positive integer, an absent `payTo`, and an
-`extra.memo` that is present but not a string.
+asset that is not a gno denomination, an amount that is not a positive integer, an absent `payTo`, an
+`extra.memo` that is present but not a string, an `extra.assetTransferMethod` other than
+`bank-send`, and an `extra.paymentFlow` other than `authorization`. A null transfer method or flow
+names nothing, as upstream's SDKs read it.
 
 ## Development
 

@@ -1,10 +1,13 @@
 import {
   type Any,
+  type Provider,
   PubKeySecp256k1,
   Secp256k1PubKeyType,
   type Tx,
+  type TxSignPayload,
   type Wallet,
   encodeCharacterSet,
+  parseSignCoin,
   sortedJsonStringify,
   stringToUTF8,
 } from "@gnolang/tm2-js-client";
@@ -48,33 +51,22 @@ export async function signForChain(
     throw new Error("x402-gno: transaction names no fee, so nothing can be signed");
   }
 
-  // getProvider is the one wallet accessor that does not check the connection
-  // itself, so an unconnected wallet would fail on the property access below
-  // with a bare TypeError — and an x402 client wraps that into a failure to
-  // create a payment payload, which names neither the wallet nor the connection.
-  const provider = wallet.getProvider();
-  if (provider === undefined) {
-    throw new Error("x402-gno: the wallet has no provider connected, so no sequence can be read");
-  }
-
+  const provider = connectedProvider(wallet);
   const address = await wallet.getAddress();
   const account = await provider.getAccount(address);
 
-  const signBytes = stringToUTF8(
-    encodeCharacterSet(
-      sortedJsonStringify({
-        chain_id: chainId,
-        account_number: account.BaseAccount.account_number,
-        sequence: account.BaseAccount.sequence,
-        fee: {
-          gas_fee: fee.gas_fee,
-          gas_wanted: fee.gas_wanted.toString(10),
-        },
-        msgs: decodeTxMessages(tx.messages),
-        memo: tx.memo,
-      }),
-    ),
-  );
+  const payload: TxSignPayload = {
+    chain_id: chainId,
+    account_number: account.BaseAccount.account_number,
+    sequence: account.BaseAccount.sequence,
+    fee: {
+      amount: parseSignCoin(fee.gas_fee),
+      gas: fee.gas_wanted.toString(10),
+    },
+    msgs: decodeTxMessages(tx.messages),
+    memo: tx.memo,
+  };
+  const signBytes = stringToUTF8(encodeCharacterSet(sortedJsonStringify(payload)));
 
   const signer = wallet.getSigner();
   const publicKey = await signer.getPublicKey();
@@ -89,7 +81,25 @@ export async function signForChain(
           value: PubKeySecp256k1.encode({ key: publicKey }).finish(),
         },
         signature: await signer.signData(signBytes),
+        session_addr: "",
       },
     ],
   };
+}
+
+/**
+ * Returns the wallet's provider, which a payment reads its account and the gas
+ * price from.
+ *
+ * getProvider is the one wallet accessor that does not check the connection
+ * itself, so an unconnected wallet would fail on the first property access with a
+ * bare TypeError — and an x402 client wraps that into a failure to create a
+ * payment payload, which names neither the wallet nor the connection.
+ */
+export function connectedProvider(wallet: Wallet): Provider {
+  const provider = wallet.getProvider();
+  if (provider === undefined) {
+    throw new Error("x402-gno: the wallet has no provider connected, so the chain cannot be read");
+  }
+  return provider;
 }

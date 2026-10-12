@@ -12,13 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/gnoverse/x402/facilitator"
+	"github.com/gnoverse/x402/facilitator/exact"
 )
 
 // unreachableChain stands in for the node. A 402 is decided from the seller's
 // own configuration, so a call here means an unpaid request reached the chain.
 type unreachableChain struct{}
 
-func (unreachableChain) SignerAccount(context.Context, *std.Tx) (facilitator.SignerAccount, error) {
+func (unreachableChain) SignerAccount(context.Context, *std.Tx) (exact.SignerAccount, error) {
 	panic("an unpaid request must be answered without reading an account")
 }
 
@@ -26,8 +27,12 @@ func (unreachableChain) Simulate(*std.Tx) error {
 	panic("an unpaid request must be answered without simulating")
 }
 
-func (unreachableChain) Broadcast(*std.Tx) (string, int64, error) {
+func (unreachableChain) Broadcast([]byte) (string, error) {
 	panic("an unpaid request must be answered without broadcasting")
+}
+
+func (unreachableChain) AwaitDelivery(context.Context, string) error {
+	panic("an unpaid request must be answered without waiting for a delivery")
 }
 
 // TestABrowserIsToldWhatTheResourceCostsInGno opens the priced route the way a

@@ -16,6 +16,7 @@ import (
 	nethttpmw "github.com/x402-foundation/x402/go/v2/http/nethttp"
 
 	"github.com/gnoverse/x402/facilitator"
+	facilitatorexact "github.com/gnoverse/x402/facilitator/exact"
 	gnoexact "github.com/gnoverse/x402/server/exact"
 )
 
@@ -24,7 +25,7 @@ import (
 // a method called here means the middleware went somewhere it should not.
 type keylessNode struct{}
 
-func (keylessNode) SignerAccount(context.Context, *std.Tx) (facilitator.SignerAccount, error) {
+func (keylessNode) SignerAccount(context.Context, *std.Tx) (facilitatorexact.SignerAccount, error) {
 	panic("an unpaid request must be answered without reading an account")
 }
 
@@ -32,8 +33,12 @@ func (keylessNode) Simulate(*std.Tx) error {
 	panic("an unpaid request must be answered without simulating")
 }
 
-func (keylessNode) Broadcast(*std.Tx) (string, int64, error) {
+func (keylessNode) Broadcast([]byte) (string, error) {
 	panic("an unpaid request must be answered without broadcasting")
+}
+
+func (keylessNode) AwaitDelivery(context.Context, string) error {
+	panic("an unpaid request must be answered without waiting for a delivery")
 }
 
 // TestTheCanonicalSellerSnippetOffersGno is the claim this mechanism exists to
@@ -168,5 +173,33 @@ func TestARouteCanOnlyAskForTheAuthorizationFlow(t *testing.T) {
 	require.NoError(t, initialize("authorization"))
 	for _, flow := range []string{"upfront", "escrow"} {
 		assert.Error(t, initialize(flow), "paymentFlow %q", flow)
+	}
+}
+
+// TestARouteMayNameTheBankSendTransferMethod pins the transfer method gno
+// declares. Omitting extra.assetTransferMethod means bank-send, and the 402 then
+// carries no key; a route may also name it, and any other method is refused when
+// the routes initialize.
+func TestARouteMayNameTheBankSendTransferMethod(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(keylessNode{}, "test14").Handler())
+	t.Cleanup(gnofacilitator.Close)
+
+	initialize := func(method string) error {
+		routes := x402http.RoutesConfig{"GET /weather": {Accepts: x402http.PaymentOptions{{
+			Scheme:  "exact",
+			PayTo:   "g1u7y667z64x2h7vc6fmpcprgey4ck233jaww9zq",
+			Price:   x402.AssetAmount{Asset: "ugnot", Amount: "250000"},
+			Network: "gno:test14",
+			Extra:   map[string]any{"assetTransferMethod": method},
+		}}}}
+		server := x402http.Newx402HTTPResourceServer(routes,
+			x402.WithFacilitatorClient(x402http.NewHTTPFacilitatorClient(&x402http.FacilitatorConfig{URL: gnofacilitator.URL})),
+			x402.WithSchemeServer("gno:test14", gnoexact.NewExactGnoScheme()))
+		return server.Initialize(context.Background())
+	}
+
+	require.NoError(t, initialize(facilitatorexact.AssetTransferMethod))
+	for _, method := range []string{"eip3009", "default"} {
+		assert.Error(t, initialize(method), "assetTransferMethod %q", method)
 	}
 }

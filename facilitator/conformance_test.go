@@ -7,15 +7,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	x402 "github.com/x402-foundation/x402/go/v2"
+	"github.com/x402-foundation/x402/go/v2/types"
 )
 
 // The fixtures below are the literal base64 header values published in the x402
 // v2 HTTP transport specification, transcribed verbatim from
 // specs/transports-v2/http.md at x402-foundation/x402 commit
-// b6d5bffd73f56b72c37f888c743224dab63e35ff (lines 22, 67, 123 and 147).
+// f8f83309706b14cc696962f0a002eeeb66c3dc26 (lines 22, 67, 123 and 147).
 //
 // They exist so that conformance is checked against the spec rather than against
-// this package's own encoder. A round trip through our own types proves only
+// an encoder's own output. A round trip through our own types proves only
 // that we are self-consistent, which is exactly how this implementation came to
 // declare x402Version 2 while speaking v1's transport. Replacing these with
 // re-encoded output would make the whole file worthless.
@@ -51,7 +53,7 @@ func decodeSpecHeader(t *testing.T, header string, into any) map[string]json.Raw
 // to emit, so only the entry is decoded here.
 func TestConformance_SpecPaymentRequiredHeader(t *testing.T) {
 	var got struct {
-		Accepts []PaymentRequirements `json:"accepts"`
+		Accepts []types.PaymentRequirements `json:"accepts"`
 	}
 	raw := decodeSpecHeader(t, specPaymentRequiredHeader, &got)
 
@@ -73,13 +75,10 @@ func TestConformance_SpecPaymentRequiredHeader(t *testing.T) {
 	// has to echo back what it was given.
 	assert.Equal(t, map[string]any{"name": "USDC", "version": "2"}, accepted.Extra)
 
-	memo, err := accepted.Memo()
-	require.NoError(t, err, "an extra without a memo key is not an error")
-	assert.Empty(t, memo)
 }
 
 func TestConformance_SpecPaymentSignatureHeader(t *testing.T) {
-	var got PaymentPayload
+	var got types.PaymentPayload
 	raw := decodeSpecHeader(t, specPaymentSignatureHeader, &got)
 
 	for _, key := range []string{"x402Version", "resource", "accepted", "payload"} {
@@ -97,28 +96,28 @@ func TestConformance_SpecPaymentSignatureHeader(t *testing.T) {
 	assert.Equal(t, 60, got.Accepted.MaxTimeoutSeconds)
 	assert.Equal(t, map[string]any{"name": "USDC", "version": "2"}, got.Accepted.Extra)
 
-	// The fixture's payload is the EVM exact scheme's {signature, authorization},
-	// which the gno scheme's SchemePayload cannot represent. Only its presence is
-	// asserted: the envelope is shared across schemes, the payload is not.
+	// The fixture's payload is the EVM exact scheme's {signature, authorization}.
+	// Only its presence is asserted: the envelope is shared across schemes, the
+	// payload is not.
 	assert.NotEmpty(t, raw["payload"])
-	assert.Empty(t, got.Payload.Transaction, "an EVM payload carries no gno transaction")
+	assert.NotContains(t, got.Payload, "transaction", "an EVM payload carries no gno transaction")
 }
 
 func TestConformance_SpecPaymentResponseHeaders(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		var got SettleResponse
+		var got x402.SettleResponse
 		raw := decodeSpecHeader(t, specPaymentResponseSuccessHeader, &got)
 		for _, key := range []string{"success", "transaction", "network", "payer"} {
 			assert.Contains(t, raw, key)
 		}
 		assert.True(t, got.Success)
 		assert.Equal(t, "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef", got.Transaction)
-		assert.Equal(t, "eip155:84532", got.Network)
+		assert.Equal(t, x402.Network("eip155:84532"), got.Network)
 		assert.Equal(t, "0x857b06519E91e3A54538791bDbb0E22373e36b66", got.Payer)
 	})
 
 	t.Run("failure", func(t *testing.T) {
-		var got SettleResponse
+		var got x402.SettleResponse
 		raw := decodeSpecHeader(t, specPaymentResponseFailureHeader, &got)
 		for _, key := range []string{"success", "errorReason", "transaction", "network", "payer"} {
 			assert.Contains(t, raw, key)
@@ -130,88 +129,4 @@ func TestConformance_SpecPaymentResponseHeaders(t *testing.T) {
 		assert.Equal(t, `""`, string(raw["transaction"]))
 		assert.Empty(t, got.Transaction)
 	})
-}
-
-// ---- Scheme level: our own encoder against the structure the spec implies
-
-// TestConformance_GnoPayloadKeySet pins the exact key set and nesting our
-// encoder emits, at every level. A field added or renamed without a matching
-// spec update fails here.
-func TestConformance_GnoPayloadKeySet(t *testing.T) {
-	data, err := json.Marshal(PaymentPayload{
-		X402Version: protocolVersion,
-		Accepted: PaymentRequirements{
-			Scheme:            schemeExact,
-			Network:           "gno:topaz-1",
-			Amount:            "250000",
-			Asset:             "ugnot",
-			PayTo:             "g1u7y667z64x2h7vc6fmpcprgey4ck233jaww9zq",
-			MaxTimeoutSeconds: 60,
-			Extra:             map[string]any{"memo": "pay_1"},
-		},
-		Payload: SchemePayload{Transaction: "dGVzdA=="},
-	})
-	require.NoError(t, err)
-
-	var envelope map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal(data, &envelope))
-	assert.ElementsMatch(t, []string{"x402Version", "accepted", "payload"}, keysOf(envelope),
-		"resource is optional and this client sets none, so it must be absent rather than null")
-
-	var accepted map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal(envelope["accepted"], &accepted))
-	assert.ElementsMatch(t,
-		[]string{"scheme", "network", "amount", "asset", "payTo", "maxTimeoutSeconds", "extra"},
-		keysOf(accepted))
-
-	var payload map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal(envelope["payload"], &payload))
-	assert.ElementsMatch(t, []string{"transaction"}, keysOf(payload),
-		"the gno exact scheme's payload is the signed amino tx and nothing else")
-
-	var extra map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal(accepted["extra"], &extra))
-	assert.ElementsMatch(t, []string{"memo"}, keysOf(extra),
-		"gasWanted and gasFee were never emitted or verified and must stay gone")
-}
-
-func keysOf(m map[string]json.RawMessage) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
-}
-
-// The reason codes §9 of the specification enumerates, transcribed verbatim from
-// specs/x402-specification-v2.md at the commit named above (lines 605-619).
-//
-// Only the scheme-independent names are transcribed. §9 also lists EVM's
-// invalid_exact_evm_payload_* codes, which belong to that scheme's vocabulary
-// and say nothing about this one.
-var specEnvelopeReasons = []string{
-	"insufficient_funds",
-	"invalid_network",
-	"invalid_payload",
-	"invalid_payment_requirements",
-	"invalid_scheme",
-	"unsupported_scheme",
-	"invalid_x402_version",
-	"invalid_transaction_state",
-	"unexpected_verify_error",
-	"unexpected_settle_error",
-}
-
-// TestEnvelopeReasonsAreSpecNames checks the envelope-level codes against the
-// specification's list rather than against our own constants. A code that
-// describes the envelope is a name every scheme shares, so inventing one — or
-// misspelling one — publishes a token no client can interpret.
-//
-// Scheme-level codes are deliberately absent: gno's have no entry to match,
-// which is what the invalid_exact_gno_ prefix declares.
-func TestEnvelopeReasonsAreSpecNames(t *testing.T) {
-	for _, reason := range envelopeLevelReasons {
-		assert.Contains(t, specEnvelopeReasons, reason,
-			"envelope-level reason %q is not a name the specification defines", reason)
-	}
 }

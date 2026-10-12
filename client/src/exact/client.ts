@@ -10,26 +10,45 @@
 // ExactKeetaScheme in @x402/keeta is the in-tree analogue — same shape, one
 // opaque base64 chain-native signed object in the payload.
 import { MsgEndpoint, MsgSend, decodeTxMessages } from "@gnolang/gno-js-client";
-import { Tx, type Wallet, uint8ArrayToBase64 } from "@gnolang/tm2-js-client";
+import { type GasPrice, Tx, type Wallet, uint8ArrayToBase64 } from "@gnolang/tm2-js-client";
 import type {
   PaymentPayloadResult,
   PaymentRequirements,
   SchemeNetworkClient,
 } from "@x402/core/types";
 
-import { signForChain } from "../signing.js";
+import { connectedProvider, signForChain } from "../signing.js";
 
 const NAMESPACE = "gno";
-const ASSET = "ugnot";
+
+// tm2's denomination grammar (std.ValidateDenom), capped at its MaxDenomLength of
+// 274 bytes. The coin a payment sends is amount + asset as one string, so an
+// asset outside it is either refused by the chain or read as another coin:
+// "0ugnot" after "250000" is 2500000ugnot.
+const DENOMINATION = /^[a-z/][a-z0-9_.:/-]{2,273}$/;
+
+// How a gno payment moves value: the payer signs a bank send the facilitator
+// broadcasts. An offer that omits extra.assetTransferMethod means it.
+const ASSET_TRANSFER_METHOD = "bank-send";
 
 // A gno buyer pays its own transaction fee: std.Fee names no payer and the ante
 // charges the first signer, so the payer of the payment is also the payer of the
-// fee. The requirements carry no gasWanted or gasFee, so the buyer chooses. This
-// offers well clear of the chain's minimum rather than tracking the gas price,
-// because an underpriced payment is refused at settle and costs the buyer the
-// resource, while an overpriced one costs it only a little more than it had to.
+// fee. The requirements carry no gasWanted or gasFee, so the buyer chooses.
+//
+// The chain takes the whole fee offered, not the gas used, so the fee follows the
+// chain's gas price for the gas the payment reserves. That price adapts to load,
+// and a payment under it is refused at settle after the resource ran, costing the
+// buyer the resource; it is offered GAS_PRICE_MARGIN times over. A block above
+// the chain's gas target raises the price's amount by at least 1, so at onyx-1's
+// 1ugnot per 1000 gas the margin covers exactly one such block between signing
+// and settle. A bank send uses about an eighth of GAS_WANTED.
 const GAS_WANTED = 10_000_000n;
-const GAS_FEE = "1000000ugnot";
+const GAS_PRICE_MARGIN = 2n;
+
+// The fee offered when the chain reports no minimum gas price: a node may still
+// set one of its own, which the chain does not report, so this is well clear of
+// any.
+const UNPRICED_GAS_FEE = "1000000ugnot";
 
 /**
  * Returns the gno chain id a CAIP-2-style x402 network string names, or null when
@@ -99,8 +118,8 @@ export class ExactGnoScheme implements SchemeNetworkClient {
     if (paymentRequirements.scheme !== this.scheme) {
       throw new Error(`x402-gno: scheme ${paymentRequirements.scheme} is not ${this.scheme}`);
     }
-    if (paymentRequirements.asset !== ASSET) {
-      throw new Error(`x402-gno: asset ${paymentRequirements.asset} is not ${ASSET}`);
+    if (!DENOMINATION.test(paymentRequirements.asset)) {
+      throw new Error(`x402-gno: asset ${paymentRequirements.asset} is not a gno denomination`);
     }
     if (!/^[1-9][0-9]*$/.test(paymentRequirements.amount)) {
       throw new Error(`x402-gno: amount ${paymentRequirements.amount} is not a positive integer`);
@@ -108,8 +127,21 @@ export class ExactGnoScheme implements SchemeNetworkClient {
     if (typeof paymentRequirements.payTo !== "string" || paymentRequirements.payTo === "") {
       throw new Error("x402-gno: requirements name no payTo");
     }
+    // §6.1 reserves both keys: an offer naming a transfer method or a flow this
+    // mechanism does not implement is not one it may sign a payment for. A key
+    // set to null names nothing, as upstream's SDKs read it.
+    const method = paymentRequirements.extra?.["assetTransferMethod"];
+    if (method !== undefined && method !== null && method !== ASSET_TRANSFER_METHOD) {
+      throw new Error(`x402-gno: assetTransferMethod ${String(method)} is not ${ASSET_TRANSFER_METHOD}`);
+    }
+    const flow = paymentRequirements.extra?.["paymentFlow"];
+    if (flow !== undefined && flow !== null && flow !== "authorization") {
+      throw new Error(`x402-gno: paymentFlow ${String(flow)} is not authorization`);
+    }
 
+    const memo = requiredMemo(paymentRequirements.extra);
     const from = await this.wallet.getAddress();
+    const fee = gasFee(await connectedProvider(this.wallet).getGasPrice());
     const tx: Tx = {
       messages: [
         {
@@ -121,8 +153,8 @@ export class ExactGnoScheme implements SchemeNetworkClient {
           }).finish(),
         },
       ],
-      fee: { gas_wanted: GAS_WANTED, gas_fee: GAS_FEE },
-      memo: requiredMemo(paymentRequirements.extra),
+      fee: { gas_wanted: GAS_WANTED, gas_fee: fee },
+      memo,
       signatures: [],
     };
 
@@ -138,4 +170,17 @@ export class ExactGnoScheme implements SchemeNetworkClient {
       payload: { transaction: uint8ArrayToBase64(Tx.encode(signed).finish()) },
     };
   }
+}
+
+/**
+ * The fee a payment offers for GAS_WANTED at the chain's gas price, rounded up to
+ * a whole unit, or UNPRICED_GAS_FEE when the chain reports none.
+ */
+function gasFee(price: GasPrice | null): string {
+  if (price === null) {
+    return UNPRICED_GAS_FEE;
+  }
+  const gas = BigInt(price.gas);
+  const fee = (GAS_WANTED * BigInt(price.amount) * GAS_PRICE_MARGIN + gas - 1n) / gas;
+  return `${fee}${price.denom}`;
 }

@@ -33,7 +33,7 @@
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
-  "//engines": "The floor a CONSUMER needs, not the one this repo builds with: the emit targets ES2023, which Node 20 covers in full, and neither @gnolang runtime dependency declares a constraint of its own. Working on the package needs newer — tsdown wants Node 22.18+ and CI runs 24.",
+  "//engines": "The floor a CONSUMER needs, not the one this repo builds with: the emit targets ES2023, which Node 20 covers in full, and neither @gnolang runtime dependency declares a constraint of its own. Working on the package needs newer — tsdown wants Node ^22.18.0 or >=24.11.0, and CI runs 24.",
   "engines": {
     "node": ">=20"
   },
@@ -47,11 +47,12 @@
   },
   "//dependencies": "Versions are exact so a signed payment changes only when a dependency is deliberately bumped. @x402/core is a peer: only its types are used, and a mechanism must not pull in a second copy of the client its consumer already has.",
   "dependencies": {
-    "@gnolang/gno-js-client": "2.0.3",
-    "@gnolang/tm2-js-client": "2.0.4"
+    "@gnolang/gno-js-client": "3.1.0",
+    "@gnolang/tm2-js-client": "3.3.0"
   },
+  "//peerDependencies": "2.23 is the first @x402/core with setSpendControls. From that version a stock client pays only in USD-pegged assets unless they are listed there, and ugnot is not one, so every buyer of this mechanism calls it.",
   "peerDependencies": {
-    "@x402/core": ">=2.21.0"
+    "@x402/core": ">=2.23.0"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",

@@ -20,8 +20,10 @@ import (
 	rpcclient "github.com/gnolang/gno/tm2/pkg/bft/rpc/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/x402-foundation/x402/go/v2/types"
 
 	"github.com/gnoverse/x402/facilitator"
+	"github.com/gnoverse/x402/facilitator/exact"
 )
 
 // silentNode accepts connections and never answers them, the way a node that
@@ -57,15 +59,14 @@ func silentNode(t *testing.T) string {
 	return "http://" + ln.Addr().String()
 }
 
-// jsSignedPayment returns a request body carrying the facilitator package's
-// JS-signed fixture, a payment that passes every offline check and so reaches the
-// node.
+// jsSignedPayment returns a request body carrying the exact package's JS-signed
+// fixture, a payment that passes every offline check and so reaches the node.
 func jsSignedPayment(t *testing.T) string {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "..", "facilitator", "testdata", "gnojs_signed_send.b64"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "facilitator", "exact", "testdata", "gnojs_signed_send.b64"))
 	require.NoError(t, err)
 
-	req := facilitator.PaymentRequirements{
+	req := types.PaymentRequirements{
 		Scheme:            "exact",
 		Network:           "gno:dev",
 		Amount:            "250000",
@@ -74,14 +75,14 @@ func jsSignedPayment(t *testing.T) string {
 		MaxTimeoutSeconds: 300,
 		Extra:             map[string]any{"memo": "x402-interop"},
 	}
-	body, err := json.Marshal(facilitator.Request{
-		X402Version: 2,
-		PaymentPayload: facilitator.PaymentPayload{
+	body, err := json.Marshal(map[string]any{
+		"x402Version": 2,
+		"paymentPayload": types.PaymentPayload{
 			X402Version: 2,
 			Accepted:    req,
-			Payload:     facilitator.SchemePayload{Transaction: strings.TrimSpace(string(raw))},
+			Payload:     map[string]any{"transaction": strings.TrimSpace(string(raw))},
 		},
-		PaymentRequirements: req,
+		"paymentRequirements": req,
 	})
 	require.NoError(t, err)
 	return string(body)
@@ -114,7 +115,7 @@ func TestSilentNodeIsAnswered503(t *testing.T) {
 
 	rpc, err := rpcclient.NewHTTPClient(silentNode(t), rpcclient.WithRequestTimeout(5*time.Second))
 	require.NoError(t, err)
-	node := facilitator.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc})
+	node := exact.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc})
 	h := facilitator.New(node, "dev").Handler()
 	counted := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		abandoned.Add(1)

@@ -9,7 +9,8 @@
 # The test layers are separate on purpose, cheapest first:
 #   test       the library. No network, no chain, no npm.
 #   js-test    the buyer mechanism, including the sign doc byte-equality check.
-#   test-e2e   one real payment, through a real in-memory node and the JS buyer.
+#   test-e2e   real payments through real in-memory nodes: the JS buyer paying a
+#              seller, one payment handed to two facilitators at once, and a replay.
 #
 # e2e is its own Go module, so `test` cannot start a chain by accident and needs
 # no build tag to stay out of the way.
@@ -55,7 +56,7 @@ test: ## Run the library tests
 	$(GO) test ./...
 
 # The buyer is half of what this asserts, so the package has to be built first.
-test-e2e: $(JS_CLIENT) ## Pay a gno seller end to end against a real in-memory node
+test-e2e: $(JS_CLIENT) ## Pay gno sellers end to end against real in-memory nodes
 	cd $(E2E) && $(GO) test -count=1 ./...
 
 # The buyer the payment test drives is a stock @x402/* client. These targets are

@@ -9,7 +9,7 @@ x402, its facilitator, and the harnesses that prove a payment happens. If you're
 ```bash
 make test                # library tests. No network, no chain, no npm
 make js-test             # the client mechanism, incl. the sign-doc byte-equality check
-make test-e2e            # one real payment against an in-memory node
+make test-e2e            # real payments against in-memory nodes
 make lint                # go vet (both modules) + gofmt
 make build               # bin/gnofacilitator
 make install             # the facilitator into GOPATH/bin
@@ -27,12 +27,13 @@ names a language.
 
 | Path | What |
 |---|---|
-| `facilitator/` | verification, settlement, the `/verify` `/settle` `/supported` service, and the wire types + reason vocabulary the other roles import |
+| `facilitator/` | the `/verify` `/settle` `/supported` HTTP service: upstream's facilitator engine with the gno mechanism registered, plus the rate limit, body caps, §9 reason names and the 503 that carries no verdict |
+| `facilitator/exact/` | the gno mechanism: upstream's `SchemeNetworkFacilitator`, verification, settlement and the reason vocabulary. `exacttest/` holds the fixtures both packages' tests share |
 | `server/exact/` | upstream's `SchemeNetworkServer` implemented for gno (package `exact`) |
 | `client/src/` | upstream's `SchemeNetworkClient`, TypeScript; emits to `client/dist/` |
 | `cmd/gnofacilitator/` | the binary |
 | `examples/weather/` | the demo: a priced endpoint (`main.go`), the buyer that pays it (`buy.mjs`), and a Makefile that runs them and a facilitator |
-| `e2e/` | one real payment through a real node — its own Go module. `buyer.mjs` beside it is the buyer the contract scenarios drive; the happy path drives `examples/weather/buy.mjs` |
+| `e2e/` | real payments through real nodes — its own Go module. `buyer.mjs` beside it is the buyer the contract scenarios drive; the happy path drives `examples/weather/buy.mjs`. `settle_test.go` settles one payment twice at once through two facilitators on one node, two on two nodes and one over two nodes, and replays a settled one |
 | `docs/releasing.md` | the two independent release lines |
 | `docs/deploying.md` | running the facilitator image: flags, endpoints, limits, failure modes |
 
@@ -59,13 +60,22 @@ accident and needs no build tag to stay out of the way.
 
 - **The facilitator holds no key.** It verifies offline and broadcasts a transaction the
   payer already signed, so it cannot move funds anywhere the payer did not sign for.
-- **A scheme payload is relayed verbatim.** `SchemePayload` is re-emitted byte-for-byte;
-  never re-encode a `transaction` field on the way through.
+- **A scheme payload is relayed verbatim.** The transport hands the engine the payload's
+  bytes as received, and what is broadcast is the transaction decoded from the payer's own
+  base64; never re-encode a `transaction` on the way through.
 - **Everything decidable offline is decided before the node is touched**, so a payment
   that cannot settle costs the facilitator nothing.
+- **A payment settles once per facilitator process.** `exact.Facilitator` claims a
+  payment's transaction hash before checking it and keeps it for five minutes after a block
+  executes it; a copy is refused as `duplicate_settlement`. Without the claim, two nodes
+  each admit a copy and answer both broadcasts with the one delivery: one payment, two
+  resources.
 - **A reason code names something established about the payment.** A facilitator's own
-  outage is not that: when the chain did not answer, return `503` with no verdict. A false
-  failure tells a seller to discard a response the buyer paid for.
+  outage is not that: when the chain did not answer, or did not answer the broadcast,
+  return `503` with no verdict. Once a node admitted the payment, answer for it: success or
+  the chain's refusal when a block executed it, `settlement_pending` with its hash until
+  then. A false failure tells a seller to discard a response the buyer paid for, and a
+  `503` after the node admitted the payment leaves the buyer without the hash.
 - **The reason vocabulary is pinned by `TestReasonVocabulary`**, and the v2 header
   contract by the `TestConformance_*` tests, transcribed from the specification. Adding
   or renaming a code means updating them in the same change.
@@ -76,12 +86,12 @@ accident and needs no build tag to stay out of the way.
 
 | When you… | Update |
 |---|---|
-| Add or rename a reason code | `facilitator/verify.go` · `TestReasonVocabulary` |
-| Change the payload or the wire types | `facilitator/types.go` and its test · the client's payload builder in `client/src/exact/client.ts` — both halves sign the same bytes |
+| Add or rename a reason code | `facilitator/exact/verify.go` · `TestReasonVocabulary` |
+| Change the payload | `facilitator/exact` (`transactionOf`, `VerifyStatic`) · the client's payload builder in `client/src/exact/client.ts` — both halves sign the same bytes |
 | Rename `.github/workflows/release.yml` | the npm **trusted publisher** on npmjs.com, which matches the filename exactly. Publishing breaks until it does |
 | Change the release flow or a tag scheme | `docs/releasing.md` |
 | Change a flag, default, timeout, limit or exit code in `cmd/gnofacilitator` | `docs/deploying.md` |
-| Follow the target testnet to a new `gnolang/gno` chain tag | `github.com/gnolang/gno` in `go.mod` and `e2e/go.mod` · re-record `facilitator/testdata/onyx_simulate_send.json` |
+| Follow the target testnet to a new `gnolang/gno` chain tag | `github.com/gnolang/gno` in `go.mod` and `e2e/go.mod` · re-record `facilitator/exact/testdata/onyx_simulate_send.json` |
 | Release the client | bump `package.json`'s version — the workflow refuses a dispatch that disagrees with it. The facilitator's version is its git tag alone, so it needs no bump |
 | Add a make target | this file (Commands) |
 

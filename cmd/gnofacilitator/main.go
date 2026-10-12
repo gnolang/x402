@@ -20,6 +20,7 @@ import (
 	rpcclient "github.com/gnolang/gno/tm2/pkg/bft/rpc/client"
 
 	"github.com/gnoverse/x402/facilitator"
+	"github.com/gnoverse/x402/facilitator/exact"
 )
 
 // version is stamped at build time with -ldflags "-X main.version=…". A binary
@@ -67,7 +68,7 @@ const (
 // The query is left running if the watchdog fires. It answers into a buffered
 // channel nobody reads, so it cannot block on the send, and the process is either
 // serving by then or on its way out.
-func nodeChainID(node *facilitator.GnoclientNode) (string, error) {
+func nodeChainID(node *exact.GnoclientNode) (string, error) {
 	type answer struct {
 		chainID string
 		err     error
@@ -89,7 +90,7 @@ func nodeChainID(node *facilitator.GnoclientNode) (string, error) {
 // retryChainID asks until the node answers or the window is spent, so a
 // facilitator started beside its own node does not warn on the first query and
 // then never compare anything. The last error is returned once the window is spent.
-func retryChainID(node *facilitator.GnoclientNode) (string, error) {
+func retryChainID(node *exact.GnoclientNode) (string, error) {
 	deadline := time.Now().UTC().Add(chainIDCheckWindow)
 	for attempt := 0; ; attempt++ {
 		reported, err := node.NodeChainID(context.Background())
@@ -126,10 +127,10 @@ func main() {
 		slog.Error("-rpc and -chain-id are required")
 		os.Exit(2)
 	}
-	// The network this serves is "gno:" + the flag, so a chain id the CAIP-2 form
-	// cannot carry has to be refused here: every payment would be refused instead,
-	// and none of those refusals would name the flag.
-	if err := facilitator.ValidChainID(*chainID); err != nil {
+	// The network this serves is "gno:" + the flag, and x402 names networks in
+	// CAIP-2, so a chain id outside its grammar is refused here, where the refusal
+	// names the flag.
+	if err := exact.ValidChainID(*chainID); err != nil {
 		slog.Error("-chain-id cannot be published as a network name", "err", err)
 		os.Exit(2)
 	}
@@ -143,7 +144,7 @@ func main() {
 		slog.Error("rpc client", "err", err)
 		os.Exit(1)
 	}
-	node := facilitator.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc})
+	node := exact.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc})
 
 	// -chain-id and -rpc are configured separately, and a disagreement is
 	// undetectable from a payment: every signature would be verified against the

@@ -1,10 +1,11 @@
-package facilitator
+package exact
 
 import (
 	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"time"
 
 	gnoclient "github.com/gnolang/gno/gno.land/pkg/gnoclient"
 	"github.com/gnolang/gno/tm2/pkg/std"
@@ -107,23 +108,68 @@ func (n *GnoclientNode) NodeChainID(ctx context.Context) (string, error) {
 	return status.NodeInfo.Network, nil
 }
 
-// Broadcast reports a failed CheckTx or DeliverTx as an error:
-// gnoclient.BroadcastTxCommit already wraps both into its returned error, so
-// no separate result inspection is needed here.
+// Broadcast submits tx, the payer's own bytes, and returns the hash the node
+// admitted it under once CheckTx has answered. The bytes go to the RPC client
+// unchanged: gnoclient's broadcasts take a decoded transaction and amino-encode it
+// again, which for a payment another SDK encoded yields other bytes, and the chain
+// records a payment under the hash of what it receives.
 //
-// The error is returned untouched, for the same reason Simulate's is: only the
-// chain's own abci.Error makes it a verdict on the transaction, and chainRefused
-// reads that off the type.
+// It does not wait for a block, as broadcast_tx_commit would: tm2 documents that
+// call as for testing and development only, and a commit it timed out waiting on
+// comes back as a bare error carrying no hash, like a transport failure or a
+// transaction the mempool refused before CheckTx ran. None of them says whether
+// the node admitted the transaction. AwaitDelivery waits instead.
 //
-// A result travels with it when there is one. Upstream answers the CheckTx and
-// DeliverTx paths with both, and a delivery the chain committed and then aborted
-// charged the payer its fee — so that transaction's hash is a real record, and
-// the only one an operator can reconcile the charge against. A transport failure
-// carries no result and leaves nothing to report.
-func (n *GnoclientNode) Broadcast(tx *std.Tx) (string, int64, error) {
-	res, err := n.cli.BroadcastTxCommit(tx)
-	if res == nil {
-		return "", 0, err
+// The chain's refusal is wrapped with %w, for the same reason Simulate returns
+// its error untouched: only the chain's own abci.Error makes it a verdict on the
+// transaction, and chainRefused reads that off the type. A refused transaction
+// never entered a mempool, and a transport failure carries no result, so neither
+// reports a hash.
+func (n *GnoclientNode) Broadcast(tx []byte) (string, error) {
+	if n.cli.RPCClient == nil {
+		return "", gnoclient.ErrMissingRPCClient
 	}
-	return hex.EncodeToString(res.Hash), res.Height, err
+	res, err := n.cli.RPCClient.BroadcastTxSync(context.Background(), tx)
+	if err != nil {
+		return "", fmt.Errorf("broadcast: %w", err)
+	}
+	if res.Error != nil {
+		return "", fmt.Errorf("check transaction failed: log:%s: %w", res.Log, res.Error)
+	}
+	return hex.EncodeToString(res.Hash), nil
+}
+
+// deliveryPoll is how often AwaitDelivery asks whether a block holds the
+// transaction.
+const deliveryPoll = 500 * time.Millisecond
+
+// AwaitDelivery asks the node for the transaction hash names until a block holds
+// it or ctx ends. The node answers from its state database, which records every
+// transaction a block executed whether or not it indexes them. A lookup that
+// fails, including for a transaction not found yet, is asked again; the last
+// failure is returned once ctx ends.
+func (n *GnoclientNode) AwaitDelivery(ctx context.Context, hash string) error {
+	if n.cli.RPCClient == nil {
+		return gnoclient.ErrMissingRPCClient
+	}
+	raw, err := hex.DecodeString(hash)
+	if err != nil {
+		return fmt.Errorf("transaction hash %q: %w", hash, err)
+	}
+	poll := time.NewTicker(deliveryPoll)
+	defer poll.Stop()
+	for {
+		res, err := n.cli.RPCClient.Tx(ctx, raw)
+		if err == nil {
+			if res.TxResult.IsErr() {
+				return fmt.Errorf("deliver transaction failed: log:%s: %w", res.TxResult.Log, res.TxResult.Error)
+			}
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("look up transaction %s: %w", hash, err)
+		case <-poll.C:
+		}
+	}
 }

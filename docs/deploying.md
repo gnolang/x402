@@ -4,8 +4,14 @@ An x402 facilitator for one gno chain. It exposes `/verify`, `/settle` and `/sup
 **holds no keys**: it verifies payments offline and relays transactions the payer already
 signed. A compromised facilitator cannot move funds anywhere the payer did not sign for.
 
-Stateless. No database, no volumes, no migrations, no secrets. The only state is in-memory
-rate-limit buckets, which are swept.
+No database, no volumes, no migrations, no secrets. The only state is in memory: rate-limit
+buckets, which are swept, and the transaction hashes of the payments it settled or left pending in
+the last five minutes. They make each payment settle once, and let a pending one be settled again
+without a second broadcast.
+
+**Run one facilitator process per chain.** That record is per process. Two replicas behind a
+balancer can each settle the same payment through different nodes, and both report it settled
+while the payee is paid once. One process deduplicates even through a load-balanced RPC.
 
 ## Artifact
 
@@ -44,7 +50,7 @@ Flags only — the binary reads no environment variables.
 | Flag | Required | Default | Meaning |
 |---|---|---|---|
 | `-rpc` | **yes** | — | gno chain RPC URL |
-| `-chain-id` | **yes** | — | chain id; the service advertises the network as `gno:<chain-id>` |
+| `-chain-id` | **yes** | — | chain id, 1 to 32 of `[-_a-zA-Z0-9]` (CAIP-2); the service advertises the network as `gno:<chain-id>` |
 | `-listen` | no | `:8402` | listen address, all interfaces |
 | `-rate-per-second` | no | `10` | sustained per-peer rate on `/verify` and `/settle` |
 | `-rate-burst` | no | `20` | largest tolerated per-peer spike |
@@ -80,7 +86,7 @@ Callers are **resource servers, server-to-server** — not browsers. No CORS hea
 `/supported` response shape, useful as a smoke test:
 
 ```json
-{"kinds":[{"x402Version":2,"scheme":"exact","network":"gno:onyx-1"}],"extensions":[],"signers":{}}
+{"kinds":[{"x402Version":2,"scheme":"exact","network":"gno:onyx-1"}],"extensions":[],"signers":{"gno:*":[]}}
 ```
 
 ## Health probes
@@ -116,6 +122,7 @@ Over-limit callers get `429`.
 | write | 30 s |
 | idle | 60 s |
 | answer, a request waiting on the node | 25 s, then `503` |
+| `/settle`, waiting for a block to execute a payment the node admitted | 10 s, then `settlement_pending` |
 
 `/settle` waits on a chain broadcast, so proxy and load-balancer timeouts must exceed the
 30 s write timeout — otherwise the proxy cuts a settle the chain may still commit.
@@ -131,7 +138,8 @@ The process queries the node for its chain id, retrying for up to 10 s:
 | match | start |
 
 So a chain/RPC mismatch is caught at boot whenever the node is reachable. A missing `-rpc` or
-`-chain-id`, a `-chain-id` containing `:`, or a negative rate flag exits 2 before listening.
+`-chain-id`, a `-chain-id` outside CAIP-2's reference grammar, or a negative rate flag exits 2
+before listening.
 An `-rpc` the RPC client rejects exits 1. A malformed one it accepts fails the chain-id query like
 an unreachable node, so the process warns and starts.
 
@@ -150,17 +158,20 @@ does not kill the process mid-drain.
 |---|---|---|
 | node unreachable | `503`, no reason code | deliberately *not* a payment verdict — the facilitator will not tell a seller a payment failed when it could not check |
 | node accepts the connection and never answers | `503` after 25 s, no reason code | the answer timeout; no verdict, as for an unreachable node |
+| node admitted the payment and no block executed it within 10 s | `200`, `success:false`, `settlement_pending`, with the transaction hash | not a failure: the payment may still commit. The seller SDKs settle once more, and that settle asks the chain about the hash without broadcasting again |
 | payment fails a check, or the chain refused the transaction | `200` with `isValid:false` (`/verify`) or `success:false` (`/settle`) and a reason code | an established outcome |
+| `/settle` of a payment this process is settling, or settled in the last five minutes | `200`, `success:false`, `duplicate_settlement`, with the transaction hash once a node admitted the payment | the first settle answers for it |
 | over rate limit | `429` | |
 | body is not one JSON request, or exceeds 1 MiB | `400`, plain text, no reason code | |
 
-The distinction in row 1 matters operationally: a `503` means "ask again", not "the buyer
-didn't pay".
+The distinction in row 1 matters operationally: a `503` means "could not check", not "the
+buyer didn't pay", and the buyer can present the payment again.
 
-A `/settle` answered `503` starts no broadcast after that answer, but one already under way
-may still commit. Retrying the same payment then answers
-`invalid_exact_gno_payload_sequence_mismatch`: the payer's sequence is spent, possibly by
-that payment. Look the transaction up on chain before refusing the buyer.
+A `/settle` answered `503` starts no broadcast after that answer. A broadcast the node never
+answered may have reached its mempool and may still commit. Settling the same payment again then
+answers `invalid_exact_gno_payload_sequence_mismatch`: the payer's sequence is spent, possibly
+by that payment. Look the transaction up on chain before refusing the buyer. The hash to look up
+is the hex SHA-256 of the bytes the payload's `transaction` decodes to.
 
 ## Security posture
 

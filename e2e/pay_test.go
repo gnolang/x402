@@ -7,6 +7,10 @@
 // adds two commands to it: one that stands up the facilitator against that node,
 // one that guards an HTTP resource with the canonical middleware. The buyer is the
 // JS one, run by `exec node`, so the assertion crosses both languages.
+//
+// settle_test.go starts in-process nodes itself instead, to settle one signed
+// payment twice at once and to replay a settled one, which a scripted buyer
+// paying once cannot do.
 package e2e
 
 import (
@@ -29,6 +33,7 @@ import (
 	nethttpmw "github.com/x402-foundation/x402/go/v2/http/nethttp"
 
 	"github.com/gnoverse/x402/facilitator"
+	"github.com/gnoverse/x402/facilitator/exact"
 	gnoexact "github.com/gnoverse/x402/server/exact"
 )
 
@@ -137,7 +142,7 @@ func facilitatorCmd(ts *testscript.TestScript, neg bool, args []string) {
 	rpc, err := rpcclient.NewHTTPClient(httpURL(rpcAddr))
 	ts.Check(err)
 
-	node := facilitator.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc})
+	node := exact.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc})
 	server := httptest.NewServer(facilitator.New(node, chainID).Handler())
 	ts.Defer(server.Close)
 

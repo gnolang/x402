@@ -5,11 +5,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gnoverse/x402/facilitator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	x402 "github.com/x402-foundation/x402/go/v2"
 	"github.com/x402-foundation/x402/go/v2/types"
+
+	facilitatorexact "github.com/gnoverse/x402/facilitator/exact"
 )
 
 // The seller registers this with the canonical middleware, which accepts nothing
@@ -153,9 +154,9 @@ func TestEnhanceKeepsASellersMemo(t *testing.T) {
 // to the seller.
 func TestEnhanceRefusesAMemoTheSchemeWillNotCarry(t *testing.T) {
 	for name, memo := range map[string]interface{}{
-		"over the cap":           strings.Repeat("a", facilitator.MaxMemoBytes+1),
+		"over the cap":           strings.Repeat("a", facilitatorexact.MaxMemoBytes+1),
 		"not a string":           42,
-		"multibyte over the cap": strings.Repeat("é", facilitator.MaxMemoBytes),
+		"multibyte over the cap": strings.Repeat("é", facilitatorexact.MaxMemoBytes),
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := NewExactGnoScheme().EnhancePaymentRequirements(
@@ -176,7 +177,7 @@ func TestEnhanceAcceptsAMemoAtTheCap(t *testing.T) {
 	got := enhance(t, types.PaymentRequirements{
 		Scheme:  "exact",
 		Network: "gno:dev",
-		Extra:   map[string]interface{}{"memo": strings.Repeat("a", facilitator.MaxMemoBytes)},
+		Extra:   map[string]interface{}{"memo": strings.Repeat("a", facilitatorexact.MaxMemoBytes)},
 	})
-	assert.Len(t, got.Extra["memo"], facilitator.MaxMemoBytes)
+	assert.Len(t, got.Extra["memo"], facilitatorexact.MaxMemoBytes)
 }

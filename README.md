@@ -107,11 +107,11 @@ implementation detail of the role, so no directory names one.
 | Role | Path | What |
 |------|------|------|
 | server | `server/exact/` | upstream's `SchemeNetworkServer`, implemented for gno |
-| facilitator | `facilitator/` | verification, settlement, and the `/verify` `/settle` `/supported` service |
+| facilitator | `facilitator/exact/`, `facilitator/` | upstream's `SchemeNetworkFacilitator` for gno, and the `/verify` `/settle` `/supported` service built on upstream's engine |
 | client | `client/src/exact/client.ts` | upstream's `SchemeNetworkClient`, TypeScript |
 
 Plus `cmd/gnofacilitator/` (the binary), `examples/weather/` (a seller and a buyer that make one
-payment end to end, with a Makefile to run them) and `e2e/` (one real payment through a real node —
+payment end to end, with a Makefile to run them) and `e2e/` (real payments through real nodes —
 its own Go module).
 
 Both manifests — `go.mod` and `package.json` — live at the root, so `go test ./...`, `npm test` and
@@ -121,27 +121,42 @@ the root Makefile's targets run from here. The demo's Makefile runs from `exampl
 
 - **The payer pays the network fee.** `std.Fee` names no payer and the chain charges the first signer, so the payer of the resource is also the payer of the gas. Offers state this as `extra.areFeesSponsored: false`.
 - **The facilitator holds no key.** It verifies offline and broadcasts a transaction the payer already signed, so it cannot move funds anywhere the payer did not sign for.
-- **A failed resource is not charged for.** The flow is `authorization`: verify, serve, then settle. The middleware buffers the response and skips settlement on any status ≥400.
+- **A failed resource is not charged for.** The flow is `authorization`: verify, serve, then settle. The middleware buffers the response and skips settlement on any status ≥400. Skipping it does not void the payment, which stays signed and valid (see below).
 - **A failed settlement withholds the response.** The buffered body is discarded.
+- **A payment no block executed in time is pending, not failed.** The facilitator answers
+  `settlement_pending` with the transaction hash. The seller's SDK settles once more, which asks
+  the chain about that hash rather than broadcasting again, and a buyer still not served gets the
+  hash to look up.
+- **A payment settles once per facilitator.** A copy presented while it settles, or within five
+  minutes after, is refused as `duplicate_settlement`. The record is in memory, so run one
+  facilitator process per chain.
 - **Prices name their denomination.** gno has no default asset, so `"$0.001"` errors rather than resolving to a token.
 
 **Accepted risk:** between `/verify` and `/settle` a payer can consume the signed-over account
 sequence with another transaction. gno has no pull-settlement primitive, so this is cooperative — the
 same exposure XRPL documents for its own `exact` mechanism.
 
+**A signed payment does not expire.** A gno transaction carries no expiry, and `maxTimeoutSeconds`
+binds nothing in it. Until the payer spends its sequence on another transaction, whoever holds the
+`PAYMENT-SIGNATURE` header, the seller included, can still broadcast it. A buyer refused service
+voids an unused payment by sending any other transaction from the paying account.
+
 ## Development
 
 ```bash
 make test                # Library tests (no chain, no npm)
 make js-test             # Client mechanism, including the sign-doc byte-equality check
-make test-e2e            # One real payment against an in-memory node
+make test-e2e            # Real payments against in-memory nodes
 make lint                # go vet (both modules) + gofmt -l
 make build               # bin/gnofacilitator
 make help                # Every target
 ```
 
 `make test-e2e` starts a node via gno.land's txtar harness, stands up the facilitator and a priced
-endpoint, pays with the JS client, and asserts the seller's balance changed.
+endpoint, pays with the JS client, and asserts the seller's balance changed. It also settles one
+payment twice at once in three arrangements: two facilitators sharing a node, two facilitators on
+two peered nodes, and one facilitator balancing over both. It asserts how many report the payment
+settled, and replays a settled payment to assert it is refused.
 
 Built against [`github.com/x402-foundation/x402/go/v2`](https://github.com/x402-foundation/x402) for
 the protocol and [`gnolang/gno`](https://github.com/gnolang/gno) for the chain.
