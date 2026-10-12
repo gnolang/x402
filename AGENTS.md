@@ -17,7 +17,7 @@ make js                  # install and build the client bundle
 make fmt                 # gofmt the Go sources
 make clean               # remove build artifacts
 make help                # every target
-make -C examples/weather help   # the demo: facilitator, run and pay, each in its own terminal
+make -C examples/weather help   # the demo: `demo` starts a node, the facilitator and the seller in one command, `pay` pays them
 ```
 
 ## Map
