@@ -88,6 +88,11 @@ go run ./examples/weather \
 
 `-price` is parsed by the chain's own coin parser, so it takes whatever `gnokey` would.
 
+Behind a TLS proxy, set `-public-url https://<host>`: without it, every 402 names the seller's own
+`http://` address. The priced route also has a rate limit all callers share, `-rate-per-second` and
+`-rate-burst` (5 and 10 by default), and answers 429 past it before the payment is checked. It is a
+backstop: throttle each client at the proxy, the only place that knows a client's address.
+
 ## What you get
 
 ```sh

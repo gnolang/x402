@@ -19,6 +19,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -37,7 +38,19 @@ import (
 // made while the middleware is built.
 const paymentTimeout = 60 * time.Second
 
-const readHeaderTimeout = 5 * time.Second
+// Server timeouts. The write timeout runs from the end of the request's headers
+// to the end of the response, so it leaves a paid request its paymentTimeout
+// and room to write the answer.
+const (
+	readHeaderTimeout = 5 * time.Second
+	readTimeout       = 10 * time.Second
+	writeTimeout      = paymentTimeout + 10*time.Second
+	idleTimeout       = 60 * time.Second
+)
+
+// weatherPath is where the resource is served, and the path a public URL is
+// extended with.
+const weatherPath = "/weather"
 
 // paywall is what a browser gets in place of the resource. The middleware's own
 // paywall supports EVM and Solana chains only.
@@ -60,6 +73,9 @@ func main() {
 	network := flag.String("network", "gno:dev", "CAIP-2 network name, gno:<chain-id>")
 	payTo := flag.String("pay-to", "", "gno address paid for each request (required)")
 	price := flag.String("price", "250000ugnot", "price per request, as amount and denomination")
+	publicURL := flag.String("public-url", "", "base URL buyers reach this seller at, such as https://weather.example behind a TLS proxy (default: the address each request arrived on)")
+	ratePerSecond := flag.Float64("rate-per-second", defaultRatePerSecond, "sustained requests/second on the priced route, all callers together (0 = default)")
+	rateBurst := flag.Int("rate-burst", defaultRateBurst, "largest request spike tolerated on the priced route, all callers together (0 = default)")
 	flag.Parse()
 
 	if *payTo == "" {
@@ -81,17 +97,16 @@ func main() {
 		payTo:          *payTo,
 		price:          coin,
 		log:            slog.Default(),
+		publicURL:      *publicURL,
+		ratePerSecond:  *ratePerSecond,
+		rateBurst:      *rateBurst,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "weather: %v\n", err)
 		os.Exit(1)
 	}
 
-	srv := &http.Server{
-		Addr:              *listen,
-		Handler:           seller,
-		ReadHeaderTimeout: readHeaderTimeout,
-	}
+	srv := newServer(*listen, seller)
 
 	slog.Info("weather seller listening",
 		"addr", *listen, "network", *network, "price", coin.String(), "payTo", *payTo)
@@ -107,14 +122,42 @@ type sellerConfig struct {
 	payTo          string
 	price          std.Coin
 	log            *slog.Logger
+	publicURL      string  // base URL buyers reach the seller at; "" names each request's own address
+	ratePerSecond  float64 // backstop on the priced route; <=0 takes defaultRatePerSecond
+	rateBurst      int     // <=0 takes defaultRateBurst
 }
 
-// newSeller returns the weather resource behind the x402 middleware. It asks the
-// facilitator what it supports before returning: an unreachable facilitator is
-// only warned about, and one without exact on cfg.network exits the process.
+func newServer(addr string, h http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           h,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
+	}
+}
+
+// newSeller returns the weather resource behind the x402 middleware, behind a
+// rate limit. It asks the facilitator what it supports before returning: an
+// unreachable facilitator is only warned about, and one without exact on
+// cfg.network exits the process.
 func newSeller(cfg sellerConfig) (http.Handler, error) {
+	route := "GET " + weatherPath
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /weather", serveWeather)
+	mux.HandleFunc(route, serveWeather)
+
+	// Behind a TLS proxy the middleware would name an http:// URL on the
+	// seller's own address, so the 402 names the public one instead.
+	var resource string
+	if cfg.publicURL != "" {
+		base, err := url.Parse(cfg.publicURL)
+		if err != nil || (base.Scheme != "https" && base.Scheme != "http") || base.Host == "" ||
+			base.User != nil || base.RawQuery != "" || base.ForceQuery || base.Fragment != "" {
+			return nil, fmt.Errorf("-public-url %q is not a plain absolute http or https URL", cfg.publicURL)
+		}
+		resource = base.JoinPath(weatherPath).String()
+	}
 
 	var page strings.Builder
 	err := paywall.Execute(&page, struct{ Price, Network, PayTo string }{
@@ -127,7 +170,8 @@ func newSeller(cfg sellerConfig) (http.Handler, error) {
 	}
 
 	routes := x402http.RoutesConfig{
-		"GET /weather": {
+		route: {
+			Resource: resource,
 			Accepts: x402http.PaymentOptions{{
 				Scheme:  "exact",
 				PayTo:   cfg.payTo,
@@ -157,7 +201,7 @@ func newSeller(cfg sellerConfig) (http.Handler, error) {
 		}),
 	).Register(x402.Network(cfg.network), gnoexact.NewExactGnoScheme())
 
-	return nethttpmw.PaymentMiddleware(routes, server,
+	paid := nethttpmw.PaymentMiddleware(routes, server,
 		nethttpmw.WithSyncFacilitatorOnStart(true),
 		nethttpmw.WithTimeout(paymentTimeout),
 
@@ -174,7 +218,13 @@ func newSeller(cfg sellerConfig) (http.Handler, error) {
 			cfg.log.Error("not paid; the response is withheld", "err", err)
 			w.WriteHeader(http.StatusPaymentRequired)
 		}),
-	)(mux), nil
+	)(mux)
+
+	// The limit runs before the middleware, so a refused request costs the
+	// facilitator nothing.
+	limited := http.NewServeMux()
+	limited.Handle(route, newRateLimit(cfg.ratePerSecond, cfg.rateBurst).guard(paid))
+	return limited, nil
 }
 
 func serveWeather(w http.ResponseWriter, _ *http.Request) {
