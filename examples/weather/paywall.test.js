@@ -308,7 +308,7 @@ describe("statusLine", () => {
 function fakePage() {
   const element = (hidden = false) => ({ hidden, textContent: "", disabled: false, addEventListener() {} });
   const elements = {
-    adena: element(true),
+    "pay-adena": element(true),
     "no-adena": element(),
     pay: element(),
     "pay-status": element(),
@@ -340,13 +340,32 @@ describe("start", () => {
     try {
       const { document, window, elements } = fakePage();
       start(document, window);
-      expect(elements.adena.hidden).toBe(true);
+      expect(elements["pay-adena"].hidden).toBe(true);
 
       window.adena = fakeAdena();
       vi.advanceTimersByTime(1000);
 
-      expect(elements.adena.hidden).toBe(false);
+      expect(elements["pay-adena"].hidden).toBe(false);
       expect(elements["no-adena"].hidden).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("start, without Adena", () => {
+  // An element whose id is "adena" is reachable as window.adena too, the DOM's
+  // named access, so presence alone is not a wallet.
+  it("does not mistake a window.adena without SignTx for the wallet", () => {
+    vi.useFakeTimers();
+    try {
+      const { document, window, elements } = fakePage();
+      window.adena = { id: "adena" };
+      start(document, window);
+      vi.advanceTimersByTime(6000);
+
+      expect(elements["pay-adena"].hidden).toBe(true);
+      expect(elements["no-adena"].hidden).toBe(false);
     } finally {
       vi.useRealTimers();
     }

@@ -198,12 +198,14 @@ export function start(document, window) {
     { once: true },
   );
 
+  // Presence alone is not the wallet: an element whose id is "adena" would be
+  // window.adena too.
   const offerAdena = () => {
-    if (window.adena === undefined) {
+    if (typeof window.adena?.SignTx !== "function") {
       return false;
     }
     document.getElementById("no-adena").hidden = true;
-    document.getElementById("adena").hidden = false;
+    document.getElementById("pay-adena").hidden = false;
     return true;
   };
   if (!offerAdena()) {
