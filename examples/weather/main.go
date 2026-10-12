@@ -48,6 +48,9 @@ const (
 	idleTimeout       = 60 * time.Second
 )
 
+// paymentScheme is the x402 scheme the weather is priced in.
+const paymentScheme = "exact"
+
 // weatherPath is where the resource is served, and the path a public URL is
 // extended with.
 const weatherPath = "/weather"
@@ -140,8 +143,8 @@ func newServer(addr string, h http.Handler) *http.Server {
 
 // newSeller returns the weather resource behind the x402 middleware, behind a
 // rate limit. It asks the facilitator what it supports before returning: an
-// unreachable facilitator is only warned about, and one without exact on
-// cfg.network exits the process.
+// unreachable facilitator is warned about and asked again in the background
+// until it answers, and one without exact on cfg.network exits the process.
 func newSeller(cfg sellerConfig) (http.Handler, error) {
 	route := "GET " + weatherPath
 	mux := http.NewServeMux()
@@ -173,7 +176,7 @@ func newSeller(cfg sellerConfig) (http.Handler, error) {
 		route: {
 			Resource: resource,
 			Accepts: x402http.PaymentOptions{{
-				Scheme:  "exact",
+				Scheme:  paymentScheme,
 				PayTo:   cfg.payTo,
 				Price:   x402.AssetAmount{Asset: cfg.price.Denom, Amount: fmt.Sprint(cfg.price.Amount)},
 				Network: x402.Network(cfg.network),
@@ -219,6 +222,7 @@ func newSeller(cfg sellerConfig) (http.Handler, error) {
 			w.WriteHeader(http.StatusPaymentRequired)
 		}),
 	)(mux)
+	keepSyncing(server, x402.Network(cfg.network), paymentScheme, cfg.log)
 
 	// The limit runs before the middleware, so a refused request costs the
 	// facilitator nothing.
