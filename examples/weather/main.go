@@ -30,9 +30,11 @@ import (
 	gnoexact "github.com/gnoverse/x402/server/exact"
 )
 
-// The facilitator is queried while the middleware is being built, so this bounds
-// startup rather than a request.
-const facilitatorSyncTimeout = 10 * time.Second
+// paymentTimeout bounds a paid request as a whole: verify, the resource, and a
+// settle that can wait up to 10 s for a block, then run once more when the
+// facilitator answers settlement_pending. It also bounds the facilitator query
+// made while the middleware is built.
+const paymentTimeout = 60 * time.Second
 
 const readHeaderTimeout = 5 * time.Second
 
@@ -142,7 +144,7 @@ func newSeller(cfg sellerConfig) (http.Handler, error) {
 			{Network: x402.Network(cfg.network), Server: gnoexact.NewExactGnoScheme()},
 		},
 		SyncFacilitatorOnStart: true,
-		Timeout:                facilitatorSyncTimeout,
+		Timeout:                paymentTimeout,
 
 		// Settlement runs after the resource has produced its response, so this is
 		// where a seller learns they were actually paid.
