@@ -84,6 +84,16 @@ function requiredMemo(extra: Record<string, unknown> | undefined): string {
   return memo;
 }
 
+export type ExactGnoSchemeOptions = {
+  /**
+   * The address of the account that pays, when the wallet holds a session key
+   * that account registered rather than the account's own key. Payments then move
+   * the master's coins, within the spend limit, expiry and allowed paths the
+   * chain holds for the session. Omitted, the wallet's own account pays.
+   */
+  master?: string | undefined;
+};
+
 /**
  * Signs gno payments for the "exact" scheme. Register it against a gno network —
  * or the "gno:*" pattern for every gno chain — on an x402Client.
@@ -95,9 +105,13 @@ export class ExactGnoScheme implements SchemeNetworkClient {
    * @param wallet a GnoWallet connected to a provider. The connection is
    * required: a gno sequence is sequential, so only the chain knows the next one.
    * Sui and SVM buyers need chain access for their own reasons; only EVM's random
-   * nonce lets a buyer sign entirely offline.
+   * nonce lets a buyer sign entirely offline. Paying as a session needs a gno
+   * provider, which reads session accounts.
    */
-  constructor(private readonly wallet: Wallet) {}
+  constructor(
+    private readonly wallet: Wallet,
+    private readonly options: ExactGnoSchemeOptions = {},
+  ) {}
 
   /**
    * Builds the scheme payload: base64 of a fully signed, unbroadcast std.Tx
@@ -140,7 +154,8 @@ export class ExactGnoScheme implements SchemeNetworkClient {
     }
 
     const memo = requiredMemo(paymentRequirements.extra);
-    const from = await this.wallet.getAddress();
+    const { master } = this.options;
+    const from = master ?? (await this.wallet.getAddress());
     const fee = gasFee(await connectedProvider(this.wallet).getGasPrice());
     const tx: Tx = {
       messages: [
@@ -163,7 +178,7 @@ export class ExactGnoScheme implements SchemeNetworkClient {
     // provider, so the wallet has to be pointed at a node on the chain being
     // paid — the offer decides which chain the signature covers, not which node
     // supplies the account state it covers.
-    const signed = await signForChain(this.wallet, tx, chainId, decodeTxMessages);
+    const signed = await signForChain(this.wallet, tx, chainId, decodeTxMessages, master);
 
     return {
       x402Version,

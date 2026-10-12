@@ -91,6 +91,11 @@ Recognising the 402, selecting an entry, encoding `PAYMENT-SIGNATURE` and retryi
 rather than the one the wallet's node reports — see [client/README.md](client/README.md) for what
 that does and does not buy you.
 
+An agent can pay with a [session key](client/README.md#paying-with-a-session-key) instead of its
+owner's key: `new ExactGnoScheme(wallet, { master })`, where `master` is the owner's address and
+the wallet holds a key the owner registered on chain with a spend limit and an expiry. The chain
+enforces both.
+
 ## What's in here
 
 An x402 mechanism has three roles — **server** (the seller), **facilitator**, **client** (the buyer)

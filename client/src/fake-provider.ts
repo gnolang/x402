@@ -1,3 +1,4 @@
+import type { SessionAccountInfo } from "@gnolang/gno-js-client";
 import type { ABCIAccount, GasPrice, Provider, Status, Tx } from "@gnolang/tm2-js-client";
 
 // A provider for tests. It answers the questions a payment asks — the chain id,
@@ -94,5 +95,33 @@ export class FakeProvider implements Provider {
   }
   waitForTransaction(): Promise<Tx> {
     return this.unreachable();
+  }
+}
+
+// The session account's own number and sequence, distinct from the master's
+// above so a signature over the wrong pair shows.
+export const SESSION_ACCOUNT = { account_number: "34", sequence: "3" } as const;
+
+// A gno provider for tests: every address is a session of master, with
+// SESSION_ACCOUNT's number and sequence, and no other account holds a session.
+export class FakeGnoProvider extends FakeProvider {
+  constructor(
+    reportedChain: string,
+    private readonly master: string,
+    gasPrice: GasPrice | null = null,
+  ) {
+    super(reportedChain, gasPrice);
+  }
+
+  async getSession(masterAddress: string, sessionAddress: string): Promise<SessionAccountInfo> {
+    if (masterAddress !== this.master) {
+      throw new Error(`no session ${sessionAddress} for master account ${masterAddress}`);
+    }
+    return {
+      address: sessionAddress,
+      master_address: masterAddress,
+      allow_paths: ["bank/send"],
+      ...SESSION_ACCOUNT,
+    };
   }
 }
