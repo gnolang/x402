@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gnolang/gno/tm2/pkg/std"
@@ -73,26 +74,30 @@ func (l *sellerLog) recordsWith(t *testing.T, key string) []map[string]any {
 }
 
 // weatherSeller serves the weather seller for exacttest's offer through the
-// facilitator at facilitatorURL, and returns its URL and what it logs.
-func weatherSeller(t *testing.T, facilitatorURL string) (string, *sellerLog) {
+// facilitator at facilitatorURL, after adjust edits its configuration, and
+// returns its URL and what it logs.
+func weatherSeller(t *testing.T, facilitatorURL string, adjust ...func(*sellerConfig)) (string, *sellerLog) {
 	t.Helper()
 	log := &sellerLog{}
-	handler, err := newSeller(sellerConfig{
+	cfg := sellerConfig{
 		facilitatorURL: facilitatorURL,
 		network:        "gno:" + exacttest.ChainID,
 		payTo:          exacttest.PayTo,
 		price:          std.MustParseCoin("250000ugnot"),
 		log:            slog.New(slog.NewJSONHandler(log, nil)),
-	})
+	}
+	for _, edit := range adjust {
+		edit(&cfg)
+	}
+	handler, err := newSeller(cfg)
 	require.NoError(t, err)
 	seller := httptest.NewServer(handler)
 	t.Cleanup(seller.Close)
 	return seller.URL, log
 }
 
-// payWith answers the seller's offer with txB64 as the transaction, and returns
-// what the seller answered the paid request with.
-func payWith(t *testing.T, sellerURL, txB64 string) *http.Response {
+// termsOf requests the weather without paying and returns the 402's terms.
+func termsOf(t *testing.T, sellerURL string) x402.PaymentRequired {
 	t.Helper()
 
 	unpaid, err := http.Get(sellerURL + "/weather")
@@ -103,6 +108,15 @@ func payWith(t *testing.T, sellerURL, txB64 string) *http.Response {
 	require.NoError(t, err)
 	var required x402.PaymentRequired
 	require.NoError(t, json.Unmarshal(terms, &required))
+	return required
+}
+
+// payWith answers the seller's offer with txB64 as the transaction, and returns
+// what the seller answered the paid request with.
+func payWith(t *testing.T, sellerURL, txB64 string) *http.Response {
+	t.Helper()
+
+	required := termsOf(t, sellerURL)
 	require.Len(t, required.Accepts, 1)
 
 	payload, err := json.Marshal(types.PaymentPayload{
@@ -185,4 +199,88 @@ func TestASellerDoesNotLogAFacilitatorOutageAsARefusal(t *testing.T) {
 	assert.Equal(t, http.StatusPaymentRequired, paid.StatusCode)
 	assert.Empty(t, log.recordsWith(t, "reason"))
 	assert.Len(t, log.recordsWith(t, "err"), 1, "the seller is told the facilitator failed")
+}
+
+// TestThe402NamesThePublicURL serves the seller on a loopback address, as it
+// runs behind a TLS proxy. The 402 must name the URL buyers reach, or a client
+// that checks it pays for a resource at an address it never asked for.
+func TestThe402NamesThePublicURL(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL, func(cfg *sellerConfig) {
+		cfg.publicURL = "https://weather.example"
+	})
+
+	required := termsOf(t, sellerURL)
+
+	require.NotNil(t, required.Resource)
+	assert.Equal(t, "https://weather.example/weather", required.Resource.URL)
+}
+
+func TestWithoutAPublicURLThe402NamesTheAddressItWasReachedAt(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	required := termsOf(t, sellerURL)
+
+	require.NotNil(t, required.Resource)
+	assert.Equal(t, sellerURL+"/weather", required.Resource.URL)
+}
+
+// A public URL is what every 402 names, so one that is not a plain absolute
+// http(s) URL is refused at startup rather than advertised to every buyer: a
+// credential in it would go out in every 402.
+func TestASellerRefusesAPublicURLBuyersCannotReach(t *testing.T) {
+	for _, publicURL := range []string{
+		"weather.example", "ftp://weather.example", "https://", "https://weather.example?x=1",
+		"https://weather.example?", "https://user:secret@weather.example",
+	} {
+		t.Run(publicURL, func(t *testing.T) {
+			_, err := newSeller(sellerConfig{
+				facilitatorURL: "http://127.0.0.1:1",
+				network:        "gno:" + exacttest.ChainID,
+				payTo:          exacttest.PayTo,
+				price:          std.MustParseCoin("250000ugnot"),
+				log:            slog.New(slog.DiscardHandler),
+				publicURL:      publicURL,
+			})
+			require.ErrorContains(t, err, "-public-url")
+		})
+	}
+}
+
+// TestThePricedRouteIsRateLimitedBeforeThePaymentIsChecked spends the route's
+// only token on an unpaid request. The paid request after it gets a 429, and the
+// facilitator never hears of it: every paid request costs the facilitator a
+// verify and a settle, from this seller's one address.
+func TestThePricedRouteIsRateLimitedBeforeThePaymentIsChecked(t *testing.T) {
+	var verifies atomic.Int32
+	gno := facilitator.New(unreachableChain{}, exacttest.ChainID).Handler()
+	gnofacilitator := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/verify" {
+			verifies.Add(1)
+		}
+		gno.ServeHTTP(w, r)
+	}))
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL, func(cfg *sellerConfig) {
+		cfg.ratePerSecond = 0.001
+		cfg.rateBurst = 1
+	})
+
+	paid := payWith(t, sellerURL, exacttest.PlaceholderTx(t, nil))
+
+	assert.Equal(t, http.StatusTooManyRequests, paid.StatusCode)
+	assert.Zero(t, verifies.Load(), "the payment reached the facilitator")
+}
+
+// A write timeout under the time a paid request may take would cut the
+// connection mid-settle: the buyer is charged and never gets the response.
+func TestTheServerOutlastsAPaidRequest(t *testing.T) {
+	srv := newServer(":0", http.NotFoundHandler())
+
+	assert.Greater(t, srv.WriteTimeout, paymentTimeout)
+	assert.Positive(t, srv.IdleTimeout, "an idle keep-alive connection is held forever")
+	assert.Positive(t, srv.ReadTimeout, "a request body is read without a deadline")
 }
