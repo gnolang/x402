@@ -13,6 +13,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -22,6 +23,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,20 +58,19 @@ const paymentScheme = "exact"
 // extended with.
 const weatherPath = "/weather"
 
-// paywall is what a browser gets in place of the resource. The middleware's own
-// paywall supports EVM and Solana chains only.
-var paywall = template.Must(template.New("paywall").Parse(`<!doctype html>
-<html lang="en">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Payment required</title>
-<h1>Payment required</h1>
-<p>Weather data costs <strong>{{.Price}}</strong> on <code>{{.Network}}</code>, paid to <code>{{.PayTo}}</code>.</p>
-<p>Pay it with an x402 client, such as
-<a href="https://github.com/gnoverse/x402/tree/main/examples/weather">buy.mjs</a>:</p>
-<pre>node buy.mjs &lt;this page's URL&gt;</pre>
-</html>
-`))
+// paywallPage is what a browser gets in place of the resource. The
+// middleware's own paywall supports EVM and Solana chains only.
+//
+//go:embed paywall.html
+var paywallPage string
+
+var paywall = template.Must(template.New("paywall").Parse(paywallPage))
+
+// paywallScript is the page's payment logic, inlined so the page makes no
+// request beyond the seller.
+//
+//go:embed paywall.js
+var paywallScript string
 
 func main() {
 	listen := flag.String("listen", ":8401", "HTTP listen address")
@@ -164,11 +165,19 @@ func newSeller(ctx context.Context, cfg sellerConfig) (http.Handler, error) {
 		resource = base.JoinPath(weatherPath).String()
 	}
 
+	amount, unit := shownAmount(cfg.price)
 	var page strings.Builder
-	err := paywall.Execute(&page, struct{ Price, Network, PayTo string }{
-		Price:   cfg.price.String(),
+	err := paywall.Execute(&page, struct {
+		Amount, Unit, Coin, Network, ChainID, PayTo string
+		Script                                      template.JS
+	}{
+		Amount:  amount,
+		Unit:    unit,
+		Coin:    cfg.price.String(),
 		Network: cfg.network,
+		ChainID: strings.TrimPrefix(cfg.network, "gno:"),
 		PayTo:   cfg.payTo,
+		Script:  template.JS(paywallScript),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("render the paywall: %w", err)
@@ -231,7 +240,28 @@ func newSeller(ctx context.Context, cfg sellerConfig) (http.Handler, error) {
 	// facilitator nothing.
 	limited := http.NewServeMux()
 	limited.Handle(route, newRateLimit(cfg.ratePerSecond, cfg.rateBurst).guard(paid))
+
+	// Someone who types the host alone gets the demo. The Location is relative,
+	// so a proxy serving the seller under /prefix/ sends the browser to
+	// /prefix/weather.
+	limited.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", strings.TrimPrefix(weatherPath, "/"))
+		w.WriteHeader(http.StatusSeeOther)
+	})
 	return limited, nil
+}
+
+// shownAmount is how the page writes a price: ugnot in GNOT, the unit people
+// read (1 GNOT is 1,000,000 ugnot), and any other denomination as it is.
+func shownAmount(coin std.Coin) (amount, unit string) {
+	if coin.Denom != "ugnot" {
+		return strconv.FormatInt(coin.Amount, 10), coin.Denom
+	}
+	whole, fraction := coin.Amount/1_000_000, coin.Amount%1_000_000
+	if fraction == 0 {
+		return strconv.FormatInt(whole, 10), "GNOT"
+	}
+	return fmt.Sprintf("%d.%s", whole, strings.TrimRight(fmt.Sprintf("%06d", fraction), "0")), "GNOT"
 }
 
 func serveWeather(w http.ResponseWriter, _ *http.Request) {

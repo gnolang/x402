@@ -8,7 +8,7 @@ x402, its facilitator, and the harnesses that prove a payment happens. If you're
 
 ```bash
 make test                # library tests. No network, no chain, no npm
-make js-test             # the client mechanism, incl. the sign-doc byte-equality check
+make js-test             # the client mechanism, incl. the sign-doc byte-equality check, and the weather page's payment logic
 make test-e2e            # real payments against in-memory nodes
 make lint                # go vet (both modules) + gofmt
 make build               # bin/gnofacilitator
@@ -32,7 +32,7 @@ names a language.
 | `server/exact/` | upstream's `SchemeNetworkServer` implemented for gno (package `exact`) |
 | `client/src/` | upstream's `SchemeNetworkClient`, TypeScript; emits to `client/dist/` |
 | `cmd/gnofacilitator/` | the binary |
-| `examples/weather/` | the demo: a priced endpoint (`main.go`), the buyer that pays it (`buy.mjs`), and a Makefile that runs them and a facilitator |
+| `examples/weather/` | the demo: a priced endpoint (`main.go`), the page a browser gets and pays through with Adena (`paywall.html`, `paywall.js`, tested by `make js-test`), the buyer that pays it from a script (`buy.mjs`), and a Makefile that runs them and a facilitator |
 | `e2e/` | real payments through real nodes — its own Go module. `buyer.mjs` beside it is the buyer the contract scenarios drive; the happy path, the session payment and the pending settlement drive `examples/weather/buy.mjs`. `settle_test.go` settles one payment twice at once through two facilitators on one node, two on two nodes and one over two nodes, and replays a settled one |
 | `docs/releasing.md` | the two independent release lines |
 | `docs/deploying.md` | running the facilitator image: flags, endpoints, limits, failure modes |
