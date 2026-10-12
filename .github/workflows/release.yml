@@ -100,6 +100,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # go test builds for the runner only. goreleaser is the first step to
+      # cross-compile darwin and arm64 and to build the image on this ref, so a
+      # snapshot of the whole matrix runs here, where a failure strands nothing.
+      # It pushes nothing, and the release's --clean discards its dist/.
+      - name: Build the release as a snapshot
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          version: 'v2.17.1'
+          args: release --snapshot --clean
+
+      # goreleaser refuses a dirty tree, but only after the tag is pushed, and the
+      # steps above run npm install, which can rewrite package-lock.json.
+      - name: Refuse a tree the steps above changed
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::the release steps changed the tree, which goreleaser would refuse after the tag push:"
+            git status --porcelain
+            exit 1
+          fi
+
       - name: Create and push the tag
         run: |
           set -euo pipefail
