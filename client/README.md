@@ -74,8 +74,9 @@ The requirements carry no gas fields, so the buyer chooses. The chain takes the 
 not the gas used, so the fee follows the chain's own gas price, read from the wallet's node: twice
 that price for 10,000,000 gas, rounded up. The price adapts to load, and an underpriced payment is
 refused at settle and costs you the resource, hence the margin. On onyx-1, at 1ugnot per 1000 gas,
-that is 20000ugnot. A chain that reports no gas price gets 1000000ugnot, clear of any minimum a
-node sets on its own.
+that is 20000ugnot. A block above the chain's gas target raises the price's amount by at least 1, so
+on onyx-1 one such block between signing and settle doubles it, and the margin covers exactly one. A
+chain that reports no gas price gets 1000000ugnot, clear of any minimum a node sets on its own.
 
 ## What it refuses
 

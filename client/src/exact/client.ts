@@ -38,8 +38,10 @@ const ASSET_TRANSFER_METHOD = "bank-send";
 // The chain takes the whole fee offered, not the gas used, so the fee follows the
 // chain's gas price for the gas the payment reserves. That price adapts to load,
 // and a payment under it is refused at settle after the resource ran, costing the
-// buyer the resource; it is offered GAS_PRICE_MARGIN times over. A bank send uses
-// about an eighth of GAS_WANTED.
+// buyer the resource; it is offered GAS_PRICE_MARGIN times over. A block above
+// the chain's gas target raises the price's amount by at least 1, so at onyx-1's
+// 1ugnot per 1000 gas the margin covers exactly one such block between signing
+// and settle. A bank send uses about an eighth of GAS_WANTED.
 const GAS_WANTED = 10_000_000n;
 const GAS_PRICE_MARGIN = 2n;
 
