@@ -1,3 +1,4 @@
+import type { GnoProvider } from "@gnolang/gno-js-client";
 import {
   type Any,
   type Provider,
@@ -39,12 +40,18 @@ export type DecodeTxMessages = (messages: Any[]) => unknown[];
  * inputs, and a test holds it that way. The account fields are the strings the
  * chain returned: they are quoted in the sign doc, so passing numbers would
  * change the bytes and invalidate every signature.
+ *
+ * With master set, the wallet holds a session key registered under that
+ * account: the sign doc covers the session account's own number and sequence,
+ * and the signature names the session, so the chain verifies it against the
+ * session's key and limits.
  */
 export async function signForChain(
   wallet: Wallet,
   tx: Tx,
   chainId: string,
   decodeTxMessages: DecodeTxMessages,
+  master?: string,
 ): Promise<Tx> {
   const { fee } = tx;
   if (fee === undefined) {
@@ -53,12 +60,15 @@ export async function signForChain(
 
   const provider = connectedProvider(wallet);
   const address = await wallet.getAddress();
-  const account = await provider.getAccount(address);
+  const account =
+    master === undefined
+      ? (await provider.getAccount(address)).BaseAccount
+      : await sessionAccount(provider, master, address);
 
   const payload: TxSignPayload = {
     chain_id: chainId,
-    account_number: account.BaseAccount.account_number,
-    sequence: account.BaseAccount.sequence,
+    account_number: account.account_number,
+    sequence: account.sequence,
     fee: {
       amount: parseSignCoin(fee.gas_fee),
       gas: fee.gas_wanted.toString(10),
@@ -81,10 +91,39 @@ export async function signForChain(
           value: PubKeySecp256k1.encode({ key: publicKey }).finish(),
         },
         signature: await signer.signData(signBytes),
-        session_addr: "",
+        session_addr: master === undefined ? "" : address,
       },
     ],
   };
+}
+
+type SessionReader = Pick<GnoProvider, "getSession">;
+
+function readsSessions(provider: Provider): provider is Provider & SessionReader {
+  return "getSession" in provider && typeof provider.getSession === "function";
+}
+
+/**
+ * Returns the account number and sequence of the session account that session
+ * holds under master, as the chain renders them.
+ */
+async function sessionAccount(
+  provider: Provider,
+  master: string,
+  session: string,
+): Promise<{ account_number: string; sequence: string }> {
+  if (!readsSessions(provider)) {
+    throw new Error(
+      "x402-gno: paying as a session needs a gno provider, such as GnoJSONRPCProvider, to read the session account",
+    );
+  }
+  const { account_number, sequence } = await provider.getSession(master, session);
+  if (account_number === undefined || sequence === undefined) {
+    throw new Error(
+      `x402-gno: the chain reports no account number or sequence for session ${session} of ${master}`,
+    );
+  }
+  return { account_number, sequence };
 }
 
 /**

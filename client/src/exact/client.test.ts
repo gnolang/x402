@@ -1,15 +1,21 @@
-import { MsgEndpoint } from "@gnolang/gno-js-client";
+import { MsgEndpoint, MsgSend } from "@gnolang/gno-js-client";
 import { type GasPrice, Tx, Wallet, base64ToUint8Array } from "@gnolang/tm2-js-client";
 import type { PaymentRequirements } from "@x402/core/types";
 import { describe, expect, it } from "vitest";
 
-import { FakeProvider } from "../fake-provider.js";
+import { FakeGnoProvider, FakeProvider } from "../fake-provider.js";
 import { ExactGnoScheme, gnoChainId } from "./client.js";
 
-// The well-known test1 account. Nothing is signed or broadcast in these tests —
-// every case here is refused before the wallet's key is used for anything.
+// The well-known test1 account. Nothing here is broadcast, so the key only has
+// to be a valid one.
 const MNEMONIC =
   "source bonus chronic canvas draft south burst lottery vacant surface solve popular case indicate oppose farm nothing bullet exhibit title speed wink action roast";
+
+// test1's address standing in for a master, and a session key, public like
+// test1's and never funded.
+const MASTER = "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5";
+const SESSION_MNEMONIC =
+  "dance carry grunt uphold cloth wire usage usage clock reduce surprise page destroy reopen multiply away defense promote person web cigar immense armed enough";
 
 const PAY_TO = "g1u7y667z64x2h7vc6fmpcprgey4ck233jaww9zq";
 
@@ -196,17 +202,22 @@ describe("ExactGnoScheme.createPaymentPayload", () => {
   }
 });
 
+// The signed transaction a payload carries, decoded.
+function transactionOf(payload: Record<string, unknown>): Tx {
+  const transaction = payload["transaction"];
+  if (typeof transaction !== "string") {
+    throw new Error(`payload transaction is ${typeof transaction}, want string`);
+  }
+  return Tx.decode(base64ToUint8Array(transaction));
+}
+
 // The payment a connected buyer signs for the default offer, against a chain
 // whose gas price is gasPrice, decoded back from the payload.
 async function signedPayment(gasPrice: GasPrice | null): Promise<{ keys: string[]; tx: Tx }> {
   const wallet = await Wallet.fromMnemonic(MNEMONIC);
   wallet.connect(new FakeProvider("dev", gasPrice));
   const { payload } = await new ExactGnoScheme(wallet).createPaymentPayload(2, offer());
-  const transaction = payload["transaction"];
-  if (typeof transaction !== "string") {
-    throw new Error(`payload transaction is ${typeof transaction}, want string`);
-  }
-  return { keys: Object.keys(payload), tx: Tx.decode(base64ToUint8Array(transaction)) };
+  return { keys: Object.keys(payload), tx: transactionOf(payload) };
 }
 
 const ONYX_GAS_PRICE: GasPrice = { amount: 1, denom: "ugnot", gas: 1000 };
@@ -247,5 +258,42 @@ describe("ExactGnoScheme payment", () => {
     const { tx } = await signedPayment(null);
 
     expect(tx.fee?.gas_fee).toBe("1000000ugnot");
+  });
+
+  // A buyer passing an unset environment variable straight through gives an
+  // undefined master, which has to mean the wallet's own account.
+  it("pays from the wallet's own account when master is undefined", async () => {
+    const wallet = await Wallet.fromMnemonic(MNEMONIC);
+    wallet.connect(new FakeProvider("dev", ONYX_GAS_PRICE));
+
+    const { payload } = await new ExactGnoScheme(wallet, { master: undefined }).createPaymentPayload(
+      2,
+      offer(),
+    );
+    const tx = transactionOf(payload);
+
+    expect(tx.messages.map((m) => MsgSend.decode(m.value).from_address)).toEqual([
+      await wallet.getAddress(),
+    ]);
+    expect(tx.signatures.map((s) => s.session_addr)).toEqual([""]);
+  });
+});
+
+describe("ExactGnoScheme as a session", () => {
+  // The session key signs and the master's coins move: the chain charges the
+  // account MsgSend.from names, within the limits it holds for the session the
+  // signature names.
+  it("pays from the master's account under the session's signature", async () => {
+    const wallet = await Wallet.fromMnemonic(SESSION_MNEMONIC);
+    wallet.connect(new FakeGnoProvider("dev", MASTER, ONYX_GAS_PRICE));
+
+    const { payload } = await new ExactGnoScheme(wallet, { master: MASTER }).createPaymentPayload(
+      2,
+      offer(),
+    );
+    const tx = transactionOf(payload);
+
+    expect(tx.messages.map((m) => MsgSend.decode(m.value).from_address)).toEqual([MASTER]);
+    expect(tx.signatures.map((s) => s.session_addr)).toEqual([await wallet.getAddress()]);
   });
 });

@@ -138,7 +138,10 @@ X402_GNO_RPC=<RPC URL> node examples/weather/buy.mjs http://localhost:8401/weath
 
 It registers `ExactGnoScheme` with a stock `@x402/fetch` client, admits ugnot to the client's spend
 controls with a 1 GNOT cap per request, and signs with the mnemonic in `X402_MNEMONIC`, or as gno's
-public test1 key when that is unset. The account must be **funded** on the chain the offer names
+public test1 key when that is unset. With `X402_SESSION_MASTER` set to an account's address,
+`X402_MNEMONIC` is a session key that account registered, and the payment moves that account's
+coins within the session's limits. [client/README.md](../../client/README.md#paying-with-a-session-key)
+shows how to register one. The paying account must be **funded** on the chain the offer names
 ([faucet.gno.land](https://faucet.gno.land) funds the public testnets). Point `X402_GNO_RPC` at the
 same node the facilitator uses: the buyer reads its account sequence from the chain, so this leg
 needs a real node rather than the unreachable one a 402 tolerates.

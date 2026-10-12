@@ -7,7 +7,9 @@
 //
 // The buyer signs with the mnemonic in X402_MNEMONIC — a funded account on the
 // chain the seller's offer names — and reads its account sequence from the chain,
-// so X402_GNO_RPC must serve that same chain.
+// so X402_GNO_RPC must serve that same chain. With X402_SESSION_MASTER set to an
+// account's address, X402_MNEMONIC is instead a session key that account
+// registered, and payments move that account's coins.
 import { GnoJSONRPCProvider, GnoWallet } from "@gnolang/gno-js-client";
 import { decodePaymentRequiredHeader } from "@x402/core/http";
 import { decodePaymentResponseHeader, wrapFetchWithPayment, x402Client } from "@x402/fetch";
@@ -19,6 +21,7 @@ const TEST1 =
   "source bonus chronic canvas draft south burst lottery vacant surface solve popular case indicate oppose farm nothing bullet exhibit title speed wink action roast";
 
 const mnemonic = process.env.X402_MNEMONIC || TEST1;
+const master = process.env.X402_SESSION_MASTER || undefined;
 
 // The most this buyer pays for one request, in ugnot. The network fee is paid on
 // top of it.
@@ -51,18 +54,20 @@ try {
 // A stock client only pays in USD-pegged assets until told otherwise, and ugnot
 // is not one.
 const client = new x402Client()
-  .register("gno:*", new ExactGnoScheme(wallet))
+  .register("gno:*", new ExactGnoScheme(wallet, { master }))
   .setSpendControls({
     allowedAssets: [{ network: "gno:*", asset: "ugnot", maxAmountPerPayment: MAX_PRICE }],
   });
 const fetchWithPayment = wrapFetchWithPayment(fetch, client);
 
 const address = await wallet.getAddress();
-console.log(
-  mnemonic === TEST1
-    ? `buying as ${address}, gno's public test1 key; set X402_MNEMONIC to pay from your own account`
-    : `buying as ${address}`,
-);
+if (master !== undefined) {
+  console.log(`buying as ${master}, signed by its session key ${address}`);
+} else if (mnemonic === TEST1) {
+  console.log(`buying as ${address}, gno's public test1 key; set X402_MNEMONIC to pay from your own account`);
+} else {
+  console.log(`buying as ${address}`);
+}
 
 let paid;
 try {

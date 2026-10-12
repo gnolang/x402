@@ -78,6 +78,56 @@ that is 20000ugnot. A block above the chain's gas target raises the price's amou
 on onyx-1 one such block between signing and settle doubles it, and the margin covers exactly one. A
 chain that reports no gas price gets 1000000ugnot, clear of any minimum a node sets on its own.
 
+## Paying with a session key
+
+An agent can pay with a session key instead of its owner's key. A session is a key the owner
+registers on chain under their own account. The chain enforces its limits whatever the agent's
+code does: the messages it may sign, a spend limit per period, and an expiry. A session limited to
+`bank/send` can pay any x402 seller and do nothing else.
+
+The agent makes a fresh key and hands the owner its public key, the `pub:` field `gnokey list`
+prints for it. The owner registers it, here for 5 GNOT a day (`-spend-period` is in seconds) over
+a week:
+
+```sh
+gnokey maketx session create \
+  -pubkey gpub1... \
+  -allow-paths bank/send \
+  -spend-limit 5000000ugnot -spend-period 86400 \
+  -expires-at 7d \
+  -gas-fee 4000ugnot -gas-wanted 2000000 -broadcast \
+  -chainid onyx-1 -remote https://rpc.onyx.testnets.gno.land:443 \
+  <owner key>
+```
+
+It uses about 1,360,000 gas on onyx-1, and the fee is twice the chain's price for the gas it
+reserves.
+
+The agent's wallet holds the session key, and the owner's address goes in `master`:
+
+```js
+const wallet = await GnoWallet.fromMnemonic(sessionMnemonic);
+wallet.connect(await GnoJSONRPCProvider.create(rpcURL));
+client.register("gno:*", new ExactGnoScheme(wallet, { master: "g1owner..." }));
+```
+
+Payments move the owner's coins, and the settlement names the owner as the payer. The session key
+holds no coins and is never an account of its own: the chain refuses to register a key whose
+address already holds an account, so make a fresh one. The wallet's provider must be a gno
+provider, such as `GnoJSONRPCProvider`: the signature covers the number and sequence the chain
+keeps for the session under the owner, and only a gno provider reads them.
+
+- **Fees count against the spend limit.** A payment spends its price plus its fee, 20000ugnot on
+  onyx-1.
+- **A payment over the limit is refused at verify.** The facilitator's simulation fails it as
+  `invalid_exact_gno_transaction_simulation_failed`, and nothing is broadcast.
+- **The limit caps an amount per period, not a set of payees.** `bank/send` names no recipient.
+  `maxAmountPerPayment` still caps each payment on the client's side.
+- **Each session has its own sequence.** Payments signed by different sessions of one owner do not
+  race each other, so use one session per concurrent stream of payments.
+- **Revoke a session** with `gnokey maketx session revoke -pubkey gpub1... <owner key>` and the
+  same fee, chain and remote flags. A revoked session's payments fail before they are signed.
+
 ## What it refuses
 
 The requirements arrive from a seller over the network, so they are validated rather than trusted —
