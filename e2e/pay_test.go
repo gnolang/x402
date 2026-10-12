@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gnolang/gno/gno.land/pkg/gnoclient"
@@ -73,17 +74,45 @@ func TestAStockClientPaysAGnoSeller(t *testing.T) {
 // cache GNOROOT otherwise resolves to is read-only.
 func writableGnoRoot(t *testing.T) {
 	t.Helper()
-
-	root, err := gnoenv.GuessRootDir()
+	mirror, err := gnoRootMirror()
 	require.NoError(t, err)
-	entries, err := os.ReadDir(root)
-	require.NoError(t, err)
-
-	mirror := t.TempDir()
-	for _, e := range entries {
-		require.NoError(t, os.Symlink(filepath.Join(root, e.Name()), filepath.Join(mirror, e.Name())))
-	}
 	t.Setenv("GNOROOT", mirror)
+}
+
+// gnoRootMirror makes the mirror once per process. gno caches the stdlib it
+// loads process-wide, keyed by the directory it loaded it from, so a second
+// mirror, made for a second run of the same test, panics on load.
+var gnoRootMirror = sync.OnceValues(func() (string, error) {
+	root, err := gnoenv.GuessRootDir()
+	if err != nil {
+		return "", err
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return "", err
+	}
+	mirror, err := os.MkdirTemp("", "x402-e2e-gnoroot-")
+	if err != nil {
+		return "", err
+	}
+	madeMirror = mirror
+	for _, e := range entries {
+		if err := os.Symlink(filepath.Join(root, e.Name()), filepath.Join(mirror, e.Name())); err != nil {
+			return "", err
+		}
+	}
+	return mirror, nil
+})
+
+// madeMirror is the mirror gnoRootMirror made, if any, for TestMain to remove.
+var madeMirror string
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if madeMirror != "" {
+		_ = os.RemoveAll(madeMirror)
+	}
+	os.Exit(code)
 }
 
 // buyerScript is the harness buyer. It reports what happened as JSON, which the
