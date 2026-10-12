@@ -17,6 +17,7 @@ make js                  # install and build the client bundle
 make fmt                 # gofmt the Go sources
 make clean               # remove build artifacts
 make help                # every target
+make -C examples/weather help   # the demo: facilitator, run and pay, each in its own terminal
 ```
 
 ## Map
@@ -30,8 +31,8 @@ names a language.
 | `server/exact/` | upstream's `SchemeNetworkServer` implemented for gno (package `exact`) |
 | `client/src/` | upstream's `SchemeNetworkClient`, TypeScript; emits to `client/dist/` |
 | `cmd/gnofacilitator/` | the binary |
-| `examples/weather/` | a priced endpoint you can run and curl |
-| `e2e/` | one real payment through a real node — its own Go module. `buyer.mjs` beside it is the buyer the scenarios drive |
+| `examples/weather/` | the demo: a priced endpoint (`main.go`), the buyer that pays it (`buy.mjs`), and a Makefile that runs them and a facilitator |
+| `e2e/` | one real payment through a real node — its own Go module. `buyer.mjs` beside it is the buyer the contract scenarios drive; the happy path drives `examples/weather/buy.mjs` |
 | `docs/releasing.md` | the two independent release lines |
 | `docs/deploying.md` | running the facilitator image: flags, endpoints, limits, failure modes |
 

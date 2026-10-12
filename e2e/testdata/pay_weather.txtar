@@ -1,6 +1,10 @@
 # A stock x402 client pays a gno seller for an ordinary HTTP resource, and the
 # chain agrees that it happened.
 #
+# The buyer is the weather example's own buy.mjs, so the file a reader meets
+# first is the one this scenario proves. The other scenarios drive the harness
+# buyer, whose JSON report their assertions grep; this one asserts on the chain.
+#
 # Everything the scenario decides is in this file: what is sold, what it costs,
 # and what the buyer gets back. x402seller reads seller.json and stands that up
 # behind the ecosystem's own middleware; the network is the chain the harness
@@ -20,17 +24,15 @@ stdout '1000000000ugnot'
 x402facilitator
 x402seller seller.json $seller_user_addr
 
-# A stock @x402/fetch client, taught about gno by one register() call. It reports
-# what happened as JSON so the outcome is checked rather than an exit code.
-exec node $X402_BUYER
-stdout '"status":200'
+# A stock @x402/fetch client, taught about gno by its register() call and a
+# spend control that admits ugnot.
+exec node $X402_EXAMPLE_BUYER
 
 # The resource was served: the body seller.json names, verbatim.
 stdout 'sunny'
 
-# The payment settled, and the report names the transaction that did it.
-stdout '"transaction":"[0-9a-zA-Z]'
-stdout '"payer":"g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5"'
+# The payment settled, and the settlement names the transaction and the payer.
+stdout 'paid: tx [0-9a-zA-Z]+ by g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5'
 
 # And the money moved, by exactly the price above. This is the assertion nothing
 # else in the repo can make.

@@ -23,7 +23,7 @@ middleware. This supplies the chain-specific parts:
 
 - **Seller mechanism** — list gno in a route's `accepts[]` and the middleware prices it, offers it and reads the payment.
 - **`gnofacilitator`** — verifies payments and broadcasts them. It holds no keys.
-- **Client mechanism** — one `register()` call lets a stock x402 client pay a gno chain.
+- **Client mechanism** — register it on a stock x402 client, list ugnot in the client's spend controls, and the client pays a gno chain.
 
 ## Sell something
 
@@ -53,7 +53,7 @@ carries them there, not in the body:
 ```json
 { "x402Version": 2,
   "error": "Payment required",
-  "resource": { "url": "http://localhost:8080/weather", "description": "Weather data",
+  "resource": { "url": "http://localhost:8401/weather", "description": "Weather data",
                 "mimeType": "application/json" },
   "accepts": [{
     "scheme": "exact", "network": "gno:dev", "asset": "ugnot", "amount": "250000",
@@ -78,10 +78,18 @@ npm i @gnoverse/x402-gno
 ```js
 import { ExactGnoScheme } from "@gnoverse/x402-gno/exact/client";
 
-const client = new x402Client().register("gno:*", new ExactGnoScheme(wallet));
+const client = new x402Client()
+  .register("gno:*", new ExactGnoScheme(wallet))
+  .setSpendControls({
+    allowedAssets: [{ network: "gno:*", asset: "ugnot", maxAmountPerPayment: "1000000" }],
+  });
 const paid = wrapFetchWithPayment(fetch, client);
 const res = await paid("https://api.example.com/weather");
 ```
+
+From `@x402/core` 2.23 a stock client pays only in USD-pegged assets unless an asset is listed in
+its spend controls, so the buyer lists ugnot. `maxAmountPerPayment` is the most one request may
+cost, in ugnot; the network fee is paid on top.
 
 Recognising the 402, selecting an entry, encoding `PAYMENT-SIGNATURE` and retrying are
 `@x402/fetch`'s own code, unmodified. The payment is signed against the chain id the **offer** names
@@ -102,11 +110,12 @@ implementation detail of the role, so no directory names one.
 | facilitator | `facilitator/` | verification, settlement, and the `/verify` `/settle` `/supported` service |
 | client | `client/src/exact/client.ts` | upstream's `SchemeNetworkClient`, TypeScript |
 
-Plus `cmd/gnofacilitator/` (the binary), `examples/weather/` (a priced endpoint you can run and
-curl) and `e2e/` (one real payment through a real node — its own Go module).
+Plus `cmd/gnofacilitator/` (the binary), `examples/weather/` (a seller and a buyer that make one
+payment end to end, with a Makefile to run them) and `e2e/` (one real payment through a real node —
+its own Go module).
 
 Both manifests — `go.mod` and `package.json` — live at the root, so `go test ./...`, `npm test` and
-every `make` target run from here.
+the root Makefile's targets run from here. The demo's Makefile runs from `examples/weather`.
 
 ## Payment model
 

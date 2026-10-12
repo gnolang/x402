@@ -1,11 +1,12 @@
-// A stock x402 client buys from a gno seller. This is the buyer the payment test
-// drives: pay_test.go hands it to the txtar scenarios as $X402_BUYER. Running it
+// A stock x402 client buys from a gno seller. This is the buyer the contract
+// scenarios drive: pay_test.go hands it to the txtar scenarios as $X402_BUYER. Running it
 // by hand against a live seller is the same path, with a real node.
 //
-// The only gno-aware line is the register() call. Everything the protocol
-// requires — issuing the request, recognising the 402, decoding the offer,
-// selecting an accepts[] entry, encoding PAYMENT-SIGNATURE, retrying — is
-// @x402/fetch's own code, unmodified, exactly as it does for Base or Solana.
+// The gno-aware lines are the register() call and the spend control that admits
+// ugnot. Everything the protocol requires — issuing the request, recognising the
+// 402, decoding the offer, selecting an accepts[] entry, encoding
+// PAYMENT-SIGNATURE, retrying — is @x402/fetch's own code, unmodified, exactly as
+// it does for Base or Solana.
 //
 // Prints a JSON report on stdout describing what happened, so a caller checks the
 // outcome rather than trusting an exit code. The scenarios assert on status,
@@ -76,7 +77,12 @@ wallet.connect(await GnoJSONRPCProvider.create(rpcURL));
 // Teach a stock client about gno. `register` validates nothing about the network
 // string — there is no chain allowlist — and lookup is glob-matched, so "gno:*"
 // covers every gno chain at once.
-const client = new x402Client().register("gno:*", new ExactGnoScheme(wallet));
+// A stock client only pays in USD-pegged assets until told otherwise, and ugnot
+// is not one. No cap: refused_payment_says_why prices a payment past the buyer's
+// balance so that the chain refuses it, which a cap would pre-empt.
+const client = new x402Client()
+  .register("gno:*", new ExactGnoScheme(wallet))
+  .setSpendControls({ allowedAssets: [{ network: "gno:*", asset: "ugnot" }] });
 const fetchWithPayment = wrapFetchWithPayment(fetch, client);
 
 console.error(`buying as ${await wallet.getAddress()}`);
