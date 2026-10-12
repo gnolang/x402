@@ -1,14 +1,15 @@
 name: Release
-# Manual-only: dispatch with a component + version. gnofacilitator and the client
-# mechanism release on INDEPENDENT cadences and version lines — releasing one never
-# rebuilds or re-tags the other. See docs/releasing.md.
+# Manual-only: dispatch with a component + version. gnofacilitator, the client
+# mechanism and the weather demo image release on INDEPENDENT cadences and version
+# lines — releasing one never rebuilds or re-tags another. See docs/releasing.md.
 #
 # gnofacilitator takes the plain semver tag (v<version>), which is also what
 # `go get github.com/gnoverse/x402@vX.Y.Z` resolves, so that tag versions the Go
 # library too. The client is an npm package whose version lives in package.json, so
 # its git tag is prefixed (client/v<version>) to keep an independent line: a bare
 # v<version> tag would publish a Go module version for a release containing no Go
-# change at all.
+# change at all. The weather image is prefixed (weather/v<version>) for the same
+# reason.
 on:
   workflow_dispatch:
     inputs:
@@ -16,7 +17,7 @@ on:
         description: "Which component to release"
         required: true
         type: choice
-        options: [facilitator, client]
+        options: [facilitator, client, weather]
       version:
         description: "Release version, e.g. 0.2.0 (v prefix optional)"
         required: true
@@ -274,3 +275,133 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG" -m "Release $TAG"
           git push origin "$TAG"
+
+  # ---- the weather demo seller: one multi-platform image, attested. No GitHub
+  # release, no archives: infra runs the image, pinned by digest.
+  #
+  # The tests run in a job of their own, with no token to mint: npm ci runs every
+  # dependency's install scripts, and the publishing job holds id-token.
+  weather-test:
+    if: ${{ inputs.component == 'weather' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The seller, and the page's payment logic the binary embeds.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with: { go-version: '1.26.5' }
+      - run: go test ./examples/weather/...
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with: { node-version: '24' }
+      - run: npm ci
+      - run: npm test
+
+  weather:
+    if: ${{ inputs.component == 'weather' }}
+    needs: weather-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # push the weather/v… tag
+      packages: write # push the image to ghcr.io
+      id-token: write # sign the build provenance attestation (keyless OIDC)
+      attestations: write # store the attestation
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 0 }
+
+      - name: Validate the version and compute the tag
+        id: version
+        env:
+          RAW_VERSION: ${{ inputs.version }} # via env, never inlined: injection hygiene
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != "refs/heads/${DEFAULT_BRANCH}" ]; then
+            echo "::error::release only from ${DEFAULT_BRANCH}, not ${GITHUB_REF}"
+            exit 1
+          fi
+          version="${RAW_VERSION#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            # On its own line: a dispatch input can contain newlines, and
+            # interpolating it into a ::error:: lets a caller forge workflow commands.
+            echo "::error::invalid version (want X.Y.Z or X.Y.Z-pre), got:"
+            printf '%s\n' "$RAW_VERSION"
+            exit 1
+          fi
+          tag="weather/v$version"
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            # Safe to suggest here, unlike the facilitator: weather/v… is not a Go
+            # module version, so deleting and re-cutting it breaks nothing.
+            echo "::error::tag ${tag} already exists; delete it to re-release: git push --delete origin ${tag}"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          image=ghcr.io/gnoverse/x402-weather
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
+          # latest names the newest plain release, never a pre-release.
+          {
+            echo "tags<<EOF"
+            echo "${image}:${version}"
+            if [[ "$version" != *-* ]]; then echo "${image}:latest"; fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # No QEMU: the Dockerfile cross-compiles on the runner and the final stage
+      # runs nothing, so neither platform is emulated.
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - name: Log in to ghcr.io
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # buildx's own provenance is off: the signed attestation below is the one
+      # this repository publishes, as for gnofacilitator, and buildx's would add
+      # an unsigned unknown/unknown entry to the image index.
+      - name: Build and push the image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/weather.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ steps.version.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=x402-weather
+            org.opencontainers.image.description=The x402 weather demo seller, paid in gno
+            org.opencontainers.image.source=https://github.com/gnoverse/x402
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - name: Attest the image
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      # After the image: both are reversible, but a tag with no image behind it
+      # names a release that does not exist, while an image with no tag is fixed
+      # by tagging the commit it was built from.
+      - name: Create and push the tag
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+      # What infra pins: the image by digest.
+      - name: Name the image
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: echo "${IMAGE}@${DIGEST} (${VERSION})" >> "$GITHUB_STEP_SUMMARY"

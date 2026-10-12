@@ -1,0 +1,8 @@
+# The weather image's build copies only the Go packages it compiles, so the
+# context holds those and nothing else.
+*
+!go.mod
+!go.sum
+!facilitator/
+!server/
+!examples/weather/

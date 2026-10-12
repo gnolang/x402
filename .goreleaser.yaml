@@ -1,20 +1,21 @@
 version: 2
 
-# gnofacilitator is the only releasable artifact here. The library and the JS
-# mechanism are consumed by version, not by download — `go get` reads the git tag
-# and npm has its own registry — so this releases one binary and one image on a
-# plain semver tag. No prefixed tag line, no second component.
+# This config releases gnofacilitator only. The library and the JS mechanism are
+# consumed by version, not by download — `go get` reads the git tag and npm has
+# its own registry — so this releases one binary and one image on a plain semver
+# tag. The weather demo image has its own line and is built by release.yml from
+# docker/weather.Dockerfile, without goreleaser.
 #
 # It is released as BOTH archives and an image on purpose: an operator running a
 # facilitator next to their own node usually wants the binary, and one running it
 # in a cluster wants the image.
 
-# client/v… tags are reachable from HEAD, and goreleaser resolves the PREVIOUS tag
-# with a bare `git describe --tags --abbrev=0` — no --match. Without this, a client
-# release becomes the changelog baseline and every Go commit before it silently
-# disappears from the release notes.
+# client/v… and weather/v… tags are reachable from HEAD, and goreleaser resolves
+# the PREVIOUS tag with a bare `git describe --tags --abbrev=0` — no --match.
+# Without this, either release becomes the changelog baseline and every Go commit
+# before it silently disappears from the release notes.
 git:
-  ignore_tags: ["client/v*"]
+  ignore_tags: ["client/v*", "weather/v*"]
 
 builds:
   - id: gnofacilitator

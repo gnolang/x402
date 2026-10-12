@@ -96,3 +96,39 @@ jobs:
             jq -r '.[] | select(.type | test("Docker")) | .type + "  " + .name + "  " + (.extra.Digest // "-")' dist/artifacts.json
             exit 1
           fi
+
+  # Build the weather demo image for both platforms and run it once, so a broken
+  # Dockerfile or base pin surfaces on a PR instead of on release day. The seller
+  # answers an unpaid request without reaching its facilitator, so the run needs
+  # no network.
+  weather-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - name: Build both platforms
+        run: docker buildx build --platform linux/amd64,linux/arm64 -f docker/weather.Dockerfile .
+      - name: Run the image and ask for the weather unpaid
+        run: |
+          set -euo pipefail
+          docker buildx build --load -f docker/weather.Dockerfile -t x402-weather:ci .
+          docker run -d --name weather -p 8401:8401 x402-weather:ci \
+            -network gno:onyx-1 -facilitator http://127.0.0.1:1 \
+            -pay-to g1u7y667z64x2h7vc6fmpcprgey4ck233jaww9zq
+          status=000
+          for _ in {1..30}; do
+            status="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8401/weather || true)"
+            [ "$status" != 000 ] && break
+            sleep 1
+          done
+          docker logs weather
+          if [ "$status" != 402 ]; then
+            echo "::error::the image answered $status, not 402"
+            exit 1
+          fi
+          headers="$(curl -s -D - -o /dev/null http://127.0.0.1:8401/weather)"
+          if ! grep -qi '^payment-required:' <<<"$headers"; then
+            echo "::error::the image's 402 carries no PAYMENT-REQUIRED header"
+            exit 1
+          fi
