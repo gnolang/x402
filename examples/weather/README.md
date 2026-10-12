@@ -149,8 +149,11 @@ an in-process node on every pull request, and asserts the seller's balance moved
 ## What happens when you pay
 
 `authorization` means the payment is checked, then the resource runs, then the payment is taken.
-Two consequences worth knowing, both visible in `main.go`:
+Three consequences worth knowing, all visible in `main.go`:
 
+- **A payment the facilitator refuses gets a 402, like an unpaid request.** The buyer's 402 names
+  the reason, and the middleware calls no handler for it. The seller's `OnVerifyFailure` hook logs
+  it as `payment refused`, with the reason and, once the signature verified, the payer.
 - **A resource that fails is never charged for.** The middleware buffers the response and skips
   settlement on any status ≥400.
 - **A settlement that fails withholds the response.** The buffered body is discarded, so the cost

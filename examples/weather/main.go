@@ -13,6 +13,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"html/template"
@@ -79,6 +80,7 @@ func main() {
 		network:        *network,
 		payTo:          *payTo,
 		price:          coin,
+		log:            slog.Default(),
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "weather: %v\n", err)
@@ -104,6 +106,7 @@ type sellerConfig struct {
 	network        string // gno:<chain-id>
 	payTo          string
 	price          std.Coin
+	log            *slog.Logger
 }
 
 // newSeller returns the weather resource behind the x402 middleware. It asks the
@@ -137,29 +140,41 @@ func newSeller(cfg sellerConfig) (http.Handler, error) {
 		},
 	}
 
-	return nethttpmw.X402Payment(nethttpmw.Config{
-		Routes:      routes,
-		Facilitator: x402http.NewHTTPFacilitatorClient(&x402http.FacilitatorConfig{URL: cfg.facilitatorURL}),
-		Schemes: []nethttpmw.SchemeConfig{
-			{Network: x402.Network(cfg.network), Server: gnoexact.NewExactGnoScheme()},
-		},
-		SyncFacilitatorOnStart: true,
-		Timeout:                paymentTimeout,
+	server := x402.Newx402ResourceServer(
+		x402.WithFacilitatorClient(x402http.NewHTTPFacilitatorClient(&x402http.FacilitatorConfig{URL: cfg.facilitatorURL})),
+
+		// The middleware answers a payment the facilitator refuses with a 402 and
+		// calls no handler for it, so this hook is the only place a seller learns of
+		// it. A payment that never reached the facilitator does not get here.
+		x402.WithOnVerifyFailureHook(func(failure x402.VerifyFailureContext) (*x402.VerifyFailureHookResult, error) {
+			if refusal, ok := errors.AsType[*x402.VerifyError](failure.Error); ok {
+				cfg.log.Warn("payment refused",
+					"reason", refusal.InvalidReason, "payer", refusal.Payer, "detail", refusal.InvalidMessage)
+			} else {
+				cfg.log.Error("payment not checked", "err", failure.Error)
+			}
+			return nil, nil
+		}),
+	).Register(x402.Network(cfg.network), gnoexact.NewExactGnoScheme())
+
+	return nethttpmw.PaymentMiddleware(routes, server,
+		nethttpmw.WithSyncFacilitatorOnStart(true),
+		nethttpmw.WithTimeout(paymentTimeout),
 
 		// Settlement runs after the resource has produced its response, so this is
 		// where a seller learns they were actually paid.
-		SettlementHandler: func(_ http.ResponseWriter, _ *http.Request, resp *x402.SettleResponse) {
-			slog.Info("paid", "tx", resp.Transaction, "payer", resp.Payer, "network", resp.Network)
-		},
+		nethttpmw.WithSettlementHandler(func(_ http.ResponseWriter, _ *http.Request, resp *x402.SettleResponse) {
+			cfg.log.Info("paid", "tx", resp.Transaction, "payer", resp.Payer, "network", resp.Network)
+		}),
 
-		// And this is where they learn they were not. The buyer is not served: the
-		// middleware buffers the resource and discards it when settlement fails, so
-		// the cost of a failure here is the work already done, not the data.
-		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
-			slog.Error("not paid; the response is withheld", "err", err)
+		// And this is where they learn a settlement failed. The buyer is not served:
+		// the middleware buffers the resource and discards it when settlement fails,
+		// so the cost of a failure here is the work already done, not the data.
+		nethttpmw.WithErrorHandler(func(w http.ResponseWriter, _ *http.Request, err error) {
+			cfg.log.Error("not paid; the response is withheld", "err", err)
 			w.WriteHeader(http.StatusPaymentRequired)
-		},
-	})(mux), nil
+		}),
+	)(mux), nil
 }
 
 func serveWeather(w http.ResponseWriter, _ *http.Request) {
