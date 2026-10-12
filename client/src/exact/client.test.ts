@@ -155,6 +155,13 @@ describe("ExactGnoScheme.createPaymentPayload", () => {
   // so it has to get past validation. Reaching signing is the proof: signing is
   // the first step that needs the provider this wallet does not have, so that is
   // the failure a well-formed offer produces here.
+  it("accepts an absent extra.memo and reaches signing", async () => {
+    const mechanism = await scheme();
+    await expect(mechanism.createPaymentPayload(2, offer())).rejects.toThrow(
+      /no provider connected/,
+    );
+  });
+
   // Naming the defaults is the same offer as omitting them, so it has to get
   // past validation too.
   it("accepts bank-send and authorization named explicitly and reaches signing", async () => {
@@ -187,13 +194,6 @@ describe("ExactGnoScheme.createPaymentPayload", () => {
       );
     });
   }
-
-  it("accepts an absent extra.memo and reaches signing", async () => {
-    const mechanism = await scheme();
-    await expect(mechanism.createPaymentPayload(2, offer())).rejects.toThrow(
-      /no provider connected/,
-    );
-  });
 });
 
 // The payment a connected buyer signs for the default offer, against a chain
