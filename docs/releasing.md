@@ -74,3 +74,14 @@ matches the request against the repository and the workflow filename.
 
 A mismatch surfaces as `E404 package not found` or `ENEEDAUTH`, neither of which reflects the
 real cause — check the workflow filename and the npm version in the job first.
+
+A matching trusted publisher can still fail the same way. GitHub repositories created after
+2026-07-15 send OIDC tokens with an immutable subject claim, and npm's token exchange rejects them
+as `package not found` ([npm/cli#9969](https://github.com/npm/cli/issues/9969), open). This
+repository is one, and that is the likely cause of its client publish failing with `E404` on the
+`PUT`. When the publish fails, the job's last step prints npm's `oidc` log lines, which npm
+otherwise hides.
+
+Until npm fixes it, release the client by hand: bump `package.json` in its own PR and merge it,
+then run `npm ci && npm publish --access public` on `main`, and push `client/vX.Y.Z` on that
+commit. A version published by hand carries no provenance.
