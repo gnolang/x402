@@ -1,6 +1,8 @@
 package exact_test
 
 import (
+	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -13,6 +15,7 @@ import (
 	"github.com/gnolang/gno/tm2/pkg/std"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	x402 "github.com/x402-foundation/x402/go/v2"
 	"github.com/x402-foundation/x402/go/v2/types"
 
 	"github.com/gnoverse/x402/facilitator/exact"
@@ -305,4 +308,28 @@ func TestVerifyStatic_MemoMatchAccepted(t *testing.T) {
 	tx, _, reason := exact.VerifyStatic(req, exacttest.PlaceholderTx(t, func(tx *std.Tx) { tx.Memo = "pay_1" }))
 	assert.Empty(t, reason)
 	assert.NotNil(t, tx)
+}
+
+// TestTheMechanismRefusesAPayloadCarryingNoTransaction pins the reason for a
+// payload whose transaction is absent or empty. Empty bytes decode as a
+// transaction with no message and no signature, which is not one the payer
+// sent, so the refusal names the transaction rather than its signatures.
+func TestTheMechanismRefusesAPayloadCarryingNoTransaction(t *testing.T) {
+	for name, payload := range map[string]map[string]any{
+		"absent": {},
+		"empty":  {"transaction": ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			requirements := exacttest.Requirements()
+			paymentPayload := exacttest.PaymentPayload(requirements, "")
+			paymentPayload.Payload = payload
+
+			_, err := exact.NewFacilitator(&exacttest.Node{}, exacttest.ChainID).
+				Verify(context.Background(), paymentPayload, requirements, nil)
+
+			refusal, ok := errors.AsType[*x402.VerifyError](err)
+			require.True(t, ok, "want *x402.VerifyError, got %v", err)
+			assert.Equal(t, exact.ReasonMalformedTransaction, refusal.InvalidReason)
+		})
+	}
 }

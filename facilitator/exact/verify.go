@@ -107,6 +107,11 @@ func VerifyStatic(req types.PaymentRequirements, transaction string) (tx *std.Tx
 // verifyStatic is VerifyStatic over the transaction's bytes, decoded once by a
 // caller that broadcasts them.
 func verifyStatic(req types.PaymentRequirements, raw []byte) (tx *std.Tx, payer, reason string) {
+	// Empty bytes decode as a transaction with no message and no signature, which
+	// is not one the payer sent.
+	if len(raw) == 0 {
+		return nil, "", ReasonMalformedTransaction
+	}
 	var decoded std.Tx
 	if err := amino.Unmarshal(raw, &decoded); err != nil {
 		return nil, "", ReasonMalformedTransaction
