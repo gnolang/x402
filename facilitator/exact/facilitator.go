@@ -424,12 +424,13 @@ func (f *Facilitator) checkOnChain(ctx context.Context, offline paymentCheck) pa
 
 // unsupportedTerms refuses an extra naming a transfer method or a payment flow
 // this mechanism does not implement. §6.1 reserves both keys, so a payment
-// offered under either is not one this mechanism may settle.
+// offered under either is not one this mechanism may settle. A key set to null
+// names nothing, as upstream's SDKs read it.
 func unsupportedTerms(extra map[string]any) error {
-	if v, ok := extra["assetTransferMethod"]; ok && v != AssetTransferMethod {
+	if v := extra["assetTransferMethod"]; v != nil && v != AssetTransferMethod {
 		return fmt.Errorf("x402: extra.assetTransferMethod is %v, want %q", v, AssetTransferMethod)
 	}
-	if v, ok := extra["paymentFlow"]; ok && v != string(x402.PaymentFlowAuthorization) {
+	if v := extra["paymentFlow"]; v != nil && v != string(x402.PaymentFlowAuthorization) {
 		return fmt.Errorf("x402: extra.paymentFlow is %v, want %q", v, x402.PaymentFlowAuthorization)
 	}
 	return nil

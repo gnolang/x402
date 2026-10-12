@@ -17,8 +17,8 @@ import (
 // extra.assetTransferMethod and extra.paymentFlow mean what the specification
 // says, so a payment offered under a transfer method or a flow this mechanism
 // does not implement is refused rather than settled under terms it never honored.
-// Omitting either key, or naming the mechanism's own, is the default and
-// verifies.
+// Omitting either key, setting it to null as upstream's SDKs read it, or naming
+// the mechanism's own, is the default and verifies.
 func TestTheMechanismRefusesTermsItDoesNotImplement(t *testing.T) {
 	cases := map[string]struct {
 		requirementsExtra map[string]any
@@ -28,6 +28,9 @@ func TestTheMechanismRefusesTermsItDoesNotImplement(t *testing.T) {
 		"no transfer method or flow named":    {},
 		"the mechanism's own transfer method": {requirementsExtra: map[string]any{"assetTransferMethod": exact.AssetTransferMethod}},
 		"the authorization flow named":        {requirementsExtra: map[string]any{"paymentFlow": "authorization"}},
+		"a null transfer method":              {requirementsExtra: map[string]any{"assetTransferMethod": nil}},
+		"a null flow":                         {requirementsExtra: map[string]any{"paymentFlow": nil}},
+		"a payload accepting a null flow":     {acceptedExtra: map[string]any{"paymentFlow": nil}},
 		"another transfer method": {
 			requirementsExtra: map[string]any{"assetTransferMethod": "eip3009"},
 			wantReason:        exact.ReasonInvalidRequirements,
