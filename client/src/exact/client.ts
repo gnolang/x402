@@ -126,13 +126,14 @@ export class ExactGnoScheme implements SchemeNetworkClient {
       throw new Error("x402-gno: requirements name no payTo");
     }
     // §6.1 reserves both keys: an offer naming a transfer method or a flow this
-    // mechanism does not implement is not one it may sign a payment for.
+    // mechanism does not implement is not one it may sign a payment for. A key
+    // set to null names nothing, as upstream's SDKs read it.
     const method = paymentRequirements.extra?.["assetTransferMethod"];
-    if (method !== undefined && method !== ASSET_TRANSFER_METHOD) {
+    if (method !== undefined && method !== null && method !== ASSET_TRANSFER_METHOD) {
       throw new Error(`x402-gno: assetTransferMethod ${String(method)} is not ${ASSET_TRANSFER_METHOD}`);
     }
     const flow = paymentRequirements.extra?.["paymentFlow"];
-    if (flow !== undefined && flow !== "authorization") {
+    if (flow !== undefined && flow !== null && flow !== "authorization") {
       throw new Error(`x402-gno: paymentFlow ${String(flow)} is not authorization`);
     }
 

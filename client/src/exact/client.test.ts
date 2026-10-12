@@ -167,6 +167,18 @@ describe("ExactGnoScheme.createPaymentPayload", () => {
     ).rejects.toThrow(/no provider connected/);
   });
 
+  // A null transfer method or flow names nothing, as upstream's SDKs read it, so
+  // it is the same offer as omitting them.
+  it("accepts a null transfer method and flow and reaches signing", async () => {
+    const mechanism = await scheme();
+    await expect(
+      mechanism.createPaymentPayload(
+        2,
+        offer({ extra: { assetTransferMethod: null, paymentFlow: null } }),
+      ),
+    ).rejects.toThrow(/no provider connected/);
+  });
+
   for (const asset of ["atom", "/gno.land/r/demo/foo20:foo"]) {
     it(`accepts the ${asset} denomination and reaches signing`, async () => {
       const mechanism = await scheme();
