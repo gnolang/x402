@@ -1,13 +1,8 @@
 # x402 on gno.land
 
 > [!WARNING]
-> **Work in progress.** Interfaces, the reason vocabulary and the payload shape are all still
-> moving, and releases may break each other.
-
-> [!WARNING]
-> **Unaudited and pre-release. Do not point it at real funds.**
->
-> Point it at testnets only. Nothing here has been reviewed for value at risk.
+> **Unaudited work in progress: point it at testnets only, never at real funds.** Interfaces, the
+> reason vocabulary and the payload shape are still moving, and releases may break each other.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Container](https://img.shields.io/badge/ghcr.io-gnoverse%2Fgnofacilitator-2496ED?logo=docker&logoColor=white)](https://github.com/gnoverse/x402/pkgs/container/gnofacilitator)
