@@ -134,9 +134,9 @@ The requirements arrive from a seller over the network, so they are validated ra
 a malformed amount or a missing `payTo` would otherwise become a signed transaction that pays the
 wrong thing. It throws on a network that is not `gno:<chain-id>`, a scheme that is not `exact`, an
 asset that is not a gno denomination, an amount that is not a positive integer, an absent `payTo`, an
-`extra.memo` that is present but not a string, an `extra.assetTransferMethod` other than
-`bank-send`, and an `extra.paymentFlow` other than `authorization`. A null transfer method or flow
-names nothing, as upstream's SDKs read it.
+`extra.memo` that is present but not a string or longer than 256 bytes, an
+`extra.assetTransferMethod` other than `bank-send`, and an `extra.paymentFlow` other than
+`authorization`. A null transfer method or flow names nothing, as upstream's SDKs read it.
 
 ## Development
 

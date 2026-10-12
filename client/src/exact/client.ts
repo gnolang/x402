@@ -66,6 +66,11 @@ export function gnoChainId(network: string): string | null {
   return chainId;
 }
 
+// The longest extra.memo, in UTF-8 bytes, the facilitator and the server accept
+// (MaxMemoBytes in facilitator/exact). A payment signed against a longer one
+// could never be accepted.
+const MAX_MEMO_BYTES = 256;
+
 /**
  * Reads extra.memo, the memo the requirements bind the payment's transaction to.
  *
@@ -80,6 +85,10 @@ function requiredMemo(extra: Record<string, unknown> | undefined): string {
   }
   if (typeof memo !== "string") {
     throw new Error(`x402-gno: extra.memo is ${typeof memo}, want string`);
+  }
+  const bytes = new TextEncoder().encode(memo).length;
+  if (bytes > MAX_MEMO_BYTES) {
+    throw new Error(`x402-gno: extra.memo is ${bytes} bytes, exceeding the ${MAX_MEMO_BYTES}-byte maximum`);
   }
   return memo;
 }
