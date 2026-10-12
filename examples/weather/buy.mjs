@@ -75,9 +75,15 @@ try {
 const body = await paid.text();
 
 if (!paid.ok) {
-  // A refusal names its reason in the challenge that answers it.
+  // A verify refusal carries its reason in the challenge, a settle failure in the
+  // receipt.
+  const receipt = paid.headers.get("PAYMENT-RESPONSE");
   const challenge = paid.headers.get("PAYMENT-REQUIRED");
-  const reason = challenge ? (decodePaymentRequiredHeader(challenge).error ?? "") : "";
+  const reason = (
+    (receipt && decodePaymentResponseHeader(receipt).errorReason) ||
+    (challenge && decodePaymentRequiredHeader(challenge).error) ||
+    ""
+  ).trim();
   console.log(`not paid (status ${paid.status})${reason ? `: ${reason}` : ""}`);
   process.exit(1);
 }
