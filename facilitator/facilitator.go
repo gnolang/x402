@@ -15,6 +15,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 
 	x402 "github.com/x402-foundation/x402/go/v2"
 
@@ -220,12 +221,9 @@ func (s *Server) specReason(code, scheme string) string {
 }
 
 func (s *Server) servesScheme(scheme string) bool {
-	for _, kind := range s.engine.GetSupported().Kinds {
-		if kind.Scheme == scheme {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(s.engine.GetSupported().Kinds, func(kind x402.SupportedKind) bool {
+		return kind.Scheme == scheme
+	})
 }
 
 // rejectionFields describes a rejected payment: the payer when verification
