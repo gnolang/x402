@@ -147,8 +147,8 @@ the response body and the transaction show below, the transaction linked to gnos
 and the page offers no second payment. A body that is not one of the four forecasts the page draws
 (sunny, cloudy, rain, snow) shows only as served. Without Adena, or without JavaScript, the page
 still shows how to pay from code, under a warning to read the buyer first: make a throwaway key
-with it, fund the key, then pay with one command. On `onyx-1` that command carries the chain's
-public RPC; on any other chain it names the RPC to fill in. `/` redirects to `/weather`.
+with it for the page's URL, fund the key, then run the pay command the key step printed.
+`/` redirects to `/weather`.
 
 ## Paying it
 

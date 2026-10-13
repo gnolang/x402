@@ -149,6 +149,7 @@ summary{width:fit-content;font-size:13px;cursor:pointer}
 .steps>li::before{content:counter(step,decimal-leading-zero);font:11px/2.3 var(--x-mono);letter-spacing:.06em;color:var(--x-ink)}
 .steps>li:last-child{border-bottom:1px solid var(--x-line)}
 .steps b,.steps code{color:var(--x-ink)}
+.nowrap{white-space:nowrap}
 footer{margin-top:40px;padding-top:15px;border-top:1px solid var(--x-line);color:var(--x-muted);font-size:12px}
 .documentation footer p{margin:0;color:inherit}
 
@@ -286,15 +287,13 @@ curl -si <span data-url>&lt;this page's URL&gt;</span></code></pre>
       </div>
       <ol class="steps">
         <li><div><b>Read the script.</b> <a href="https://github.com/gnoverse/x402/blob/main/examples/weather/buy.mjs">examples/weather/buy.mjs</a> is the whole buyer the commands below run.</div></li>
-        <li><div><b>Make a throwaway key.</b> This prints a new mnemonic and its address, and saves neither.
-          <pre data-copy><code>npx github:gnoverse/x402#client/v0.5.0 --new-key</code></pre></div></li>
-        <li><div><b>Fund its address</b> at <a href="https://faucet.gno.land">faucet.gno.land</a> with test GNOT on <code>{{.Network}}</code>: {{.Amount}} {{.Unit}} for the weather, and the network fee on top.</div></li>
-        <li><div><b>Pay</b> with the mnemonic from step 2. The buyer prints the transaction and the weather.
-          <pre data-copy><code>X402_MNEMONIC='&lt;mnemonic&gt;' \
-X402_GNO_RPC={{if .RPC}}{{.RPC}}{{else}}&lt;RPC of chain {{.ChainID}}&gt;{{end}} \
-npx github:gnoverse/x402#client/v0.5.0 <span data-url>&lt;this page's URL&gt;</span></code></pre></div></li>
+        <li><div><b>Make a throwaway key.</b> This prints a new mnemonic, its address and the command that pays this page with it, and saves none of them.
+          <pre data-copy><code>npx github:gnoverse/x402#client/v0.5.0 --new-key <span data-url>&lt;this page's URL&gt;</span></code></pre></div></li>
+        <li><div><b>Fund its address</b> at <a href="https://faucet.gno.land">faucet.gno.land</a> with test GNOT on <code class="nowrap">{{.Network}}</code>: {{.Amount}} {{.Unit}} for the weather, and the network fee on top.</div></li>
+        <li><div><b>Pay</b> by running the command step 2 printed, which looks like this. The buyer prints the transaction and the weather.
+          <pre><code>X402_MNEMONIC='&lt;mnemonic&gt;' npx github:gnoverse/x402#client/v0.5.0 <span data-url>&lt;this page's URL&gt;</span></code></pre></div></li>
       </ol>
-      <p>Both commands need git and Node 22.18+ or 24.11+: npx fetches the repository at the tag and builds the buyer before running it. To run it from a clone instead, <code>git clone https://github.com/gnoverse/x402</code>, run <code>make js</code> at its root, then run <code>node examples/weather/buy.mjs</code> in place of the npx command, with the same arguments and variables.</p>
+      <p>Both commands need git and Node 22.18+ or 24.11+: npx fetches the repository at the tag and builds the buyer before running it. The buyer reads the paying account from a node on the offer's chain: the one <code>X402_GNO_RPC</code> names, else the chain's public RPC where the buyer knows it (<code class="nowrap">onyx-1</code>), else a local node. To run it from a clone instead, <code>git clone https://github.com/gnoverse/x402</code>, run <code>make js</code> at its root, then run <code>node examples/weather/buy.mjs</code> in place of the npx command, with the same arguments and variables.</p>
       <p>A stock x402 client pays in gno after two lines: register the scheme, and admit <code>ugnot</code> (a millionth of a GNOT) to its spend controls, capped per request.</p>
       <pre data-copy><code>import { ExactGnoScheme } from "@gnoverse/x402-gno/exact/client";
 

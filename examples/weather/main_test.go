@@ -275,35 +275,38 @@ func TestThePageCarriesNoExplorerForALocalChain(t *testing.T) {
 	assert.Contains(t, page, `id="pay-status" role="status" data-tx=""`)
 }
 
-// pageOnChain is the page a browser gets from a seller on gno:<chainID>.
-func pageOnChain(t *testing.T, chainID string) string {
-	t.Helper()
-	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, chainID).Handler())
+// The key step hands the buyer this page's URL, which the page's script fills
+// in, so the pay command it prints needs nothing more.
+func TestThePageMakesAKeyForPayingThisPage(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
 	t.Cleanup(gnofacilitator.Close)
-	sellerURL, _ := weatherSeller(t, gnofacilitator.URL, func(cfg *sellerConfig) { cfg.network = "gno:" + chainID })
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
 	_, page := browserPage(t, sellerURL)
-	return page
+
+	assert.Contains(t, page, `--new-key <span data-url>`)
 }
 
-// The buyer reads its account from a node on the seller's chain, so the
-// command the page offers names one when the chain has a public RPC.
-func TestThePayCommandNamesTheRPCOfAChainItKnows(t *testing.T) {
-	page := pageOnChain(t, "onyx-1")
+// The pay step shows the command the key step prints: the mnemonic, the
+// pinned buyer and this page's URL.
+func TestThePageShowsThePayCommandTheKeyStepPrints(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
 
-	assert.Contains(t, page, "X402_GNO_RPC=https://rpc.onyx.testnets.gno.land:443")
-}
+	_, page := browserPage(t, sellerURL)
 
-func TestThePayCommandAsksForAnRPCOnAChainItDoesNotKnow(t *testing.T) {
-	page := pageOnChain(t, "dev")
-
-	assert.Contains(t, page, "X402_GNO_RPC=&lt;RPC of chain dev&gt;")
-	assert.NotContains(t, page, "rpc.onyx", "another chain's node would sign over the wrong account state")
+	assert.Regexp(t, `<code>X402_MNEMONIC='&lt;mnemonic&gt;' npx github:gnoverse/x402#client/v\d+\.\d+\.\d+ <span data-url>`, page)
 }
 
 // The commands run the buyer from a release tag, so the script a visitor read
 // is the one that runs; a branch can move between the two.
 func TestThePageRunsTheBuyerPinnedToARelease(t *testing.T) {
-	page := pageOnChain(t, "onyx-1")
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
 
 	runs := regexp.MustCompile(`npx github:gnoverse/x402(\S*)`).FindAllStringSubmatch(page, -1)
 	require.Len(t, runs, 2, "one command makes the key, one pays")
@@ -315,7 +318,11 @@ func TestThePageRunsTheBuyerPinnedToARelease(t *testing.T) {
 // The buyer signs with whatever mnemonic it is given, so the page links its
 // source and warns against a key that holds anything before any command.
 func TestThePageSaysToReadTheBuyerBeforeRunningIt(t *testing.T) {
-	page := pageOnChain(t, "onyx-1")
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
 
 	firstRun := strings.Index(page, "npx github:")
 	require.NotEqual(t, -1, firstRun, "the page offers no command")
