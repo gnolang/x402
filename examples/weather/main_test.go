@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -191,8 +192,74 @@ func TestABrowserIsToldWhatTheResourceCostsInGno(t *testing.T) {
 	assert.Contains(t, page, "gno:dev")
 	assert.Contains(t, page, "g1u7y667z64x2h7vc6fmpcprgey4ck233jaww9zq")
 	assert.Contains(t, page, "buy.mjs", "the page names a buyer that can pay it without a wallet")
-	assert.Contains(t, page, "Pay with Adena")
+	assert.Contains(t, page, "Pay 0.25 GNOT with Adena", "the button names what a click spends")
 	assert.Contains(t, page, "Testnet only")
+}
+
+// A visitor arrives from a link with no context, so before the terms the page
+// says it is a demo and where its source lives.
+func TestThePageOpensOnADemoBannerLinkingTheSource(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	banner, _, found := strings.Cut(page, `<header class="sky"`)
+	require.True(t, found, "the sky header is gone")
+	assert.Contains(t, banner, "<title>Payment Required · x402 on gno.land testnet demo</title>")
+	assert.Contains(t, banner, "testnet demo")
+	assert.Contains(t, banner, `href="https://github.com/gnoverse/x402"`)
+	assert.NotContains(t, banner, "live", "live next to weather reads as real data")
+}
+
+// The seller answers every request with the same reading, which a visitor
+// would otherwise take for the forecast they paid for.
+func TestThePageSaysTheWeatherIsSampleData(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	banner, _, _ := strings.Cut(page, `<header class="sky"`)
+	assert.Contains(t, banner, "sample weather data", "before paying")
+	assert.Contains(t, page, "Sample data, not a forecast", "beside the paid reading")
+	assert.Equal(t, "Sample weather data (demo)", termsOf(t, sellerURL).Resource.Description,
+		"the only label a script or an agent reads")
+}
+
+// Adena hides the no-wallet note, so the network and where test GNOT comes
+// from must sit outside it to stay on screen.
+func TestThePageNamesTheNetworkAndTheFaucetWithOrWithoutAdena(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	hero, _, found := strings.Cut(page, `id="no-adena"`)
+	require.True(t, found, "the no-wallet note is gone")
+	hero = hero[strings.Index(hero, `<header class="sky"`):]
+	assert.Contains(t, hero, "Test GNOT on <code>gno:dev</code>")
+	assert.Contains(t, hero, `href="https://faucet.gno.land"`)
+}
+
+func TestATransactionLinksToTheExplorerOfTheChainsItKnows(t *testing.T) {
+	assert.Equal(t, "https://gnoscan.io/transactions/details?chainId=onyx-1&txhash=", explorerTxURL("onyx-1"))
+	assert.Empty(t, explorerTxURL("dev"), "a local chain has no explorer")
+}
+
+// The page hands the explorer to the script on the status line, and an empty
+// one leaves the transaction as text.
+func TestThePageCarriesNoExplorerForALocalChain(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	assert.Contains(t, page, `id="pay-status" role="status" data-tx=""`)
 }
 
 // The page pays through the script the seller inlines, so it must arrive

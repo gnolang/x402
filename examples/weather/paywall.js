@@ -286,6 +286,14 @@ export function start(document, window) {
       });
       status.textContent = statusLine(paid);
       if (paid.paid) {
+        // data-tx is the chain's explorer page for a transaction, less its hash;
+        // empty on a chain without one.
+        if (status.dataset.tx) {
+          const link = document.createElement("a");
+          link.setAttribute("href", status.dataset.tx + encodeURIComponent(paid.transaction));
+          link.textContent = paid.transaction;
+          status.replaceChildren("Paid. Transaction ", link, ".");
+        }
         button.hidden = true;
         result.querySelector("code").textContent = paid.body;
         result.hidden = false;

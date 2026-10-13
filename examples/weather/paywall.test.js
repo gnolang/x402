@@ -390,6 +390,9 @@ function fakePage() {
       },
       querySelector: () => code,
       append() {},
+      replaceChildren(...nodes) {
+        this.textContent = nodes.map((n) => (typeof n === "string" ? n : n.textContent)).join("");
+      },
     };
   };
   const elements = {
@@ -449,9 +452,11 @@ describe("start", () => {
   });
 });
 
-// paidPage is the page after a click that paid, with the seller serving body.
-async function paidPage(body) {
+// paidPage is the page after a click that paid, with the seller serving body,
+// on a page whose status line names explorer for the chain's transactions.
+async function paidPage(body, explorer = "") {
   const page = fakePage();
+  page.elements["pay-status"].dataset.tx = explorer;
   page.window.adena = fakeAdena();
   page.window.fetch = fakeSeller(terms(), () => settledWith(body));
   start(page.document, page.window);
@@ -463,12 +468,24 @@ describe("start, paying", () => {
   // A button still offered after the weather arrived would sign a second
   // payment for the same reading.
   it("pays on a click, shows the weather and the transaction, and offers no second payment", async () => {
-    const { elements } = await paidPage(WEATHER);
+    const { elements, made } = await paidPage(WEATHER);
 
     expect(elements["pay-status"].textContent).toBe(`Paid. Transaction ${TX_HASH}.`);
+    expect(made.filter((e) => e.attributes.href !== undefined)).toEqual([]);
     expect(elements["pay-result"].hidden).toBe(false);
     expect(elements["pay-result"].querySelector("code").textContent).toBe(WEATHER);
     expect(elements.pay.hidden).toBe(true);
+  });
+
+  it("links the transaction to the explorer the page names", async () => {
+    const explorer = "https://gnoscan.io/transactions/details?chainId=onyx-1&txhash=";
+    const { elements, made } = await paidPage(WEATHER, explorer);
+
+    const links = made.filter((e) => e.attributes.href !== undefined);
+    expect(links).toHaveLength(1);
+    expect(links[0].attributes.href).toBe(explorer + TX_HASH);
+    expect(links[0].textContent).toBe(TX_HASH);
+    expect(elements["pay-status"].textContent).toBe(`Paid. Transaction ${TX_HASH}.`);
   });
 
   it("writes the reading into the sky: its forecast, its icon and its temperature", async () => {
