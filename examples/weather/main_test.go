@@ -73,6 +73,22 @@ func (l *sellerLog) recordsWith(t *testing.T, key string) []map[string]any {
 	return found
 }
 
+// logged reports whether the seller logged a record with message msg. It fails
+// no test, so a condition polled from another goroutine can call it.
+func (l *sellerLog) logged(msg string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for line := range bytes.Lines(l.buf.Bytes()) {
+		var record struct {
+			Msg string `json:"msg"`
+		}
+		if json.Unmarshal(line, &record) == nil && record.Msg == msg {
+			return true
+		}
+	}
+	return false
+}
+
 // weatherSeller serves the weather seller for exacttest's offer through the
 // facilitator at facilitatorURL, after adjust edits its configuration, and
 // returns its URL and what it logs.
@@ -89,7 +105,7 @@ func weatherSeller(t *testing.T, facilitatorURL string, adjust ...func(*sellerCo
 	for _, edit := range adjust {
 		edit(&cfg)
 	}
-	handler, err := newSeller(cfg)
+	handler, err := newSeller(t.Context(), cfg)
 	require.NoError(t, err)
 	seller := httptest.NewServer(handler)
 	t.Cleanup(seller.Close)
@@ -237,7 +253,7 @@ func TestASellerRefusesAPublicURLBuyersCannotReach(t *testing.T) {
 		"https://weather.example?", "https://user:secret@weather.example",
 	} {
 		t.Run(publicURL, func(t *testing.T) {
-			_, err := newSeller(sellerConfig{
+			_, err := newSeller(t.Context(), sellerConfig{
 				facilitatorURL: "http://127.0.0.1:1",
 				network:        "gno:" + exacttest.ChainID,
 				payTo:          exacttest.PayTo,
