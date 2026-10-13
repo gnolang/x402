@@ -241,23 +241,31 @@ func newSeller(ctx context.Context, cfg sellerConfig) (http.Handler, error) {
 	limited := http.NewServeMux()
 	limited.Handle(route, newRateLimit(cfg.ratePerSecond, cfg.rateBurst).guard(paid))
 
-	// Someone who types the host alone gets the demo. The Location is relative,
-	// so a proxy serving the seller under /prefix/ sends the browser to
-	// /prefix/weather.
+	// Someone who types the host alone gets the demo: at the public URL when the
+	// seller knows it, since a proxy that strips a prefix with no trailing slash
+	// would send a relative Location outside the prefix, and relative otherwise.
+	location := strings.TrimPrefix(weatherPath, "/")
+	if resource != "" {
+		location = resource
+	}
 	limited.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Location", strings.TrimPrefix(weatherPath, "/"))
+		w.Header().Set("Location", location)
 		w.WriteHeader(http.StatusSeeOther)
 	})
 	return limited, nil
 }
 
+// ugnotPerGNOT is how many ugnot make a GNOT; the %06d below writes the
+// fraction in as many digits.
+const ugnotPerGNOT = 1_000_000
+
 // shownAmount is how the page writes a price: ugnot in GNOT, the unit people
-// read (1 GNOT is 1,000,000 ugnot), and any other denomination as it is.
+// read, and any other denomination as it is.
 func shownAmount(coin std.Coin) (amount, unit string) {
 	if coin.Denom != "ugnot" {
 		return strconv.FormatInt(coin.Amount, 10), coin.Denom
 	}
-	whole, fraction := coin.Amount/1_000_000, coin.Amount%1_000_000
+	whole, fraction := coin.Amount/ugnotPerGNOT, coin.Amount%ugnotPerGNOT
 	if fraction == 0 {
 		return strconv.FormatInt(whole, 10), "GNOT"
 	}

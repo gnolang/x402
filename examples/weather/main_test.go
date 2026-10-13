@@ -237,8 +237,9 @@ func TestTheAmountIsShownInGNOT(t *testing.T) {
 	}
 }
 
-// Someone who types the host alone lands on the demo. The redirect is relative,
-// so it also holds behind a proxy that serves the seller under a path.
+// Someone who types the host alone lands on the demo. Without a public URL the
+// redirect is relative, so it holds behind a proxy that serves the seller under
+// a path ending in a slash.
 func TestTheRootRedirectsToTheWeather(t *testing.T) {
 	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
 	t.Cleanup(gnofacilitator.Close)
@@ -251,6 +252,25 @@ func TestTheRootRedirectsToTheWeather(t *testing.T) {
 
 	assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
 	assert.Equal(t, "weather", resp.Header.Get("Location"))
+}
+
+// Behind a proxy that strips a prefix with no trailing slash, a relative
+// Location would leave the prefix, so a seller that knows its public URL
+// redirects to the weather there.
+func TestTheRootRedirectsToThePublicWeather(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL, func(cfg *sellerConfig) {
+		cfg.publicURL = "https://weather.example/demo"
+	})
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+
+	resp, err := client.Get(sellerURL + "/")
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
+	assert.Equal(t, "https://weather.example/demo/weather", resp.Header.Get("Location"))
 }
 
 // TestASellerLogsWhyAPaymentWasRefused pays from an account that cannot cover
