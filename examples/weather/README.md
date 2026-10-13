@@ -163,8 +163,7 @@ it without a clone.
 ```sh
 npx github:gnoverse/x402#client/v0.5.0 --new-key   # prints a new mnemonic and its address, saves neither
 # fund the address at https://faucet.gno.land, then:
-X402_MNEMONIC='<mnemonic>' X402_GNO_RPC=https://rpc.onyx.testnets.gno.land:443 \
-  npx github:gnoverse/x402#client/v0.5.0 https://<seller>/weather
+X402_MNEMONIC='<mnemonic>' npx github:gnoverse/x402#client/v0.5.0 https://<seller>/weather
 ```
 
 npx resolves the tag with git, fetches the repository at it, builds the client mechanism and runs
@@ -176,7 +175,7 @@ root:
 ```sh
 make js               # build the client mechanism buy.mjs imports
 node examples/weather/buy.mjs --new-key
-X402_MNEMONIC='<mnemonic>' X402_GNO_RPC=<RPC URL> node examples/weather/buy.mjs http://localhost:8401/weather
+X402_MNEMONIC='<mnemonic>' node examples/weather/buy.mjs http://localhost:8401/weather
 ```
 
 `--new-key` prints a fresh 24-word mnemonic, the address it pays from and the command that pays
@@ -190,9 +189,13 @@ to an account's address, `X402_MNEMONIC` is a session key that account registere
 moves that account's coins within the session's limits.
 [client/README.md](../../client/README.md#paying-with-a-session-key) shows how to register one. The
 paying account must be **funded** on the chain the offer names
-([faucet.gno.land](https://faucet.gno.land) funds the public testnets). Point `X402_GNO_RPC` at the
-same node the facilitator uses: the buyer reads its account sequence from the chain, so this leg
-needs a real node rather than the unreachable one a 402 tolerates.
+([faucet.gno.land](https://faucet.gno.land) funds the public testnets).
+
+The buyer reads its account sequence from a node on the chain the offer names, so this leg needs a
+real node rather than the unreachable one a 402 tolerates. It connects once it has read the offer:
+to `X402_GNO_RPC` when that is set, else to the chain's public RPC when `buy.mjs` lists one
+(`onyx-1`), else to a local node at `http://127.0.0.1:26657`. Set `X402_GNO_RPC` for any other
+chain, to the node the facilitator uses.
 
 The loop is covered: the e2e suite runs this seller configuration and this same `buy.mjs` against
 an in-process node on every pull request, and asserts the seller's balance moved.

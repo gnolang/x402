@@ -39,6 +39,79 @@ describe("buy.mjs, run as the package's x402-gno command", () => {
   });
 });
 
+describe("buy.mjs paying", () => {
+  let seller;
+  let node;
+  let seen;
+
+  // An offer for a chain whose public RPC the buyer knows, so a buyer that
+  // reaches the node at X402_GNO_RPC did not fall back to its own table.
+  const terms = {
+    x402Version: 2,
+    error: "Payment required",
+    resource: { url: "http://seller.test/weather", description: "Weather data", mimeType: "application/json" },
+    accepts: [
+      {
+        scheme: "exact",
+        network: "gno:onyx-1",
+        asset: "ugnot",
+        amount: "250000",
+        payTo: "g1nmzz8jc66mgfswfqhuze5ulmyde3ql5hsyffud",
+        maxTimeoutSeconds: 300,
+        extra: { areFeesSponsored: false },
+      },
+    ],
+  };
+
+  // The seller answers every request with the offer. The node answers nothing
+  // the wallet can use, so the buyer stops once it has asked it.
+  beforeEach(async () => {
+    seen = [];
+    seller = createServer((_req, res) => {
+      seen.push("seller");
+      res.writeHead(402, { "PAYMENT-REQUIRED": Buffer.from(JSON.stringify(terms)).toString("base64") });
+      res.end("{}");
+    });
+    node = createServer((_req, res) => {
+      seen.push("node");
+      res.writeHead(500);
+      res.end();
+    });
+    await Promise.all([seller, node].map((server) => new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))));
+  });
+
+  afterEach(async () => {
+    await Promise.all([seller, node].map((server) => new Promise((resolve) => server.close(resolve))));
+  });
+
+  // Runs the buyer against the seller with X402_GNO_RPC naming the node, and
+  // waits for it to exit.
+  async function buy() {
+    await new Promise((resolve) => {
+      execFile(
+        process.execPath,
+        [fileURLToPath(BUYER), `http://127.0.0.1:${seller.address().port}/weather`],
+        { env: { PATH: process.env.PATH, X402_GNO_RPC: `http://127.0.0.1:${node.address().port}` } },
+        resolve,
+      );
+    });
+  }
+
+  // The offer names the chain, and so the node the payment's account state must
+  // come from.
+  it("reads the offer before it asks a node anything", async () => {
+    await buy();
+
+    expect(seen[0]).toBe("seller");
+  });
+
+  it("reads the account from X402_GNO_RPC when it is set, whatever chain the offer names", async () => {
+    await buy();
+
+    expect(seen).toContain("node");
+  });
+});
+
 describe("buy.mjs --new-key", () => {
   let home;
   let node;

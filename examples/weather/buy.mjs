@@ -3,17 +3,19 @@
 // a human. The x402 flow is the five numbered steps below: ask, read the terms
 // from the 402, sign, ask again with the payment, read the receipt. @x402/core's
 // stock client encodes and decodes each message; the gno-aware lines are the
-// register() call and the spend control that admits ugnot.
+// register() call, the spend control that admits ugnot, and the node the wallet
+// connects to.
 //
 //   node buy.mjs [seller URL]
 //   node buy.mjs --new-key
 //
 // The buyer signs with the mnemonic in X402_MNEMONIC — a funded account on the
-// chain the seller's offer names — and reads its account sequence from the chain,
-// so X402_GNO_RPC must serve that same chain. With X402_SESSION_MASTER set to an
-// account's address, X402_MNEMONIC is instead a session key that account
-// registered, and payments move that account's coins. --new-key prints a fresh
-// mnemonic to pay with, and pays nothing.
+// chain the seller's offer names — and reads its account sequence from a node on
+// that chain: X402_GNO_RPC when set, else the chain's public RPC listed below,
+// else a local node. With X402_SESSION_MASTER set to an account's address,
+// X402_MNEMONIC is instead a session key that account registered, and payments
+// move that account's coins. --new-key prints a fresh mnemonic to pay with, and
+// pays nothing.
 import { readFileSync } from "node:fs";
 import { relative } from "node:path";
 
@@ -37,12 +39,19 @@ const master = process.env.X402_SESSION_MASTER || undefined;
 const MAX_PRICE = "1000000";
 
 const sellerURL = process.argv[2] ?? process.env.X402_SELLER_URL ?? "http://localhost:8401/weather";
-// The node reports its address in tm2's own form, which names the transport
-// rather than the scheme an HTTP client needs.
-const rpcURL = (process.env.X402_GNO_RPC ?? "http://127.0.0.1:26657").replace(
-  /^tcp:\/\//,
-  "http://",
-);
+
+// The public RPC of each chain a buyer reads its account from when X402_GNO_RPC
+// is unset. Any other chain, such as a local dev chain, falls back to LOCAL_RPC.
+const PUBLIC_RPC = new Map([["onyx-1", "https://rpc.onyx.testnets.gno.land:443"]]);
+const LOCAL_RPC = "http://127.0.0.1:26657";
+
+// rpcFor returns the node to read the account from for a payment on network,
+// "gno:<chain id>". A node reports its address in tm2's own form, which names
+// the transport rather than the scheme an HTTP client needs.
+function rpcFor(network) {
+  const rpc = process.env.X402_GNO_RPC ?? PUBLIC_RPC.get(network.replace(/^gno:/, "")) ?? LOCAL_RPC;
+  return rpc.replace(/^tcp:\/\//, "http://");
+}
 
 // --new-key writes nothing and sends no request: the mnemonic it prints is the
 // key's only copy.
@@ -79,18 +88,17 @@ function notPaid(err) {
 }
 
 const wallet = await GnoWallet.fromMnemonic(mnemonic);
-try {
-  wallet.connect(await GnoJSONRPCProvider.create(rpcURL));
-} catch (err) {
-  notPaid(err);
-}
 
 // A stock client only pays in USD-pegged assets until told otherwise, and ugnot
-// is not one.
+// is not one. The wallet connects once the client has picked the offer it pays,
+// to a node on the chain that offer names.
 const client = new x402Client()
   .register("gno:*", new ExactGnoScheme(wallet, { master }))
   .setSpendControls({
     allowedAssets: [{ network: "gno:*", asset: "ugnot", maxAmountPerPayment: MAX_PRICE }],
+  })
+  .onBeforePaymentCreation(async ({ selectedRequirements }) => {
+    wallet.connect(await GnoJSONRPCProvider.create(rpcFor(selectedRequirements.network)));
   });
 const http = new x402HTTPClient(client);
 
@@ -113,7 +121,8 @@ try {
     // 2. Read the terms, which the 402 carries in its PAYMENT-REQUIRED header.
     const terms = http.getPaymentRequiredResponse((name) => unpaid.headers.get(name));
     // 3. Sign a payment that meets them: a bank send of the price to the payee,
-    // within MAX_PRICE. Nothing is broadcast here.
+    // within MAX_PRICE, over the account state the offer's chain reports.
+    // Nothing is broadcast here.
     const payment = await client.createPaymentPayload(terms);
     // 4. Ask again with the signed payment in PAYMENT-SIGNATURE. The seller has
     // its facilitator check it and settle it on chain before answering. The
@@ -127,8 +136,8 @@ try {
     });
   }
 } catch (err) {
-  // Thrown when the seller cannot be reached or no payment can be signed, such as
-  // for an account the chain has never funded.
+  // Thrown when the seller or the node cannot be reached, or no payment can be
+  // signed, such as for an account the chain has never funded.
   notPaid(err);
 }
 
