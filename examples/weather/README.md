@@ -55,7 +55,7 @@ paid: tx a0a66524832960c26ad3110d998f8ad87c3ee1166ca1faac145e7e1ee9ab8b8f by g1j
 
 The seller uses the public facilitator for `onyx-1`, so no local node or facilitator runs. The buyer
 pays from your own key, funded at [faucet.gno.land](https://faucet.gno.land). Use a throwaway key:
-the mnemonic stays in your shell history.
+the mnemonic stays in your shell history. `node buy.mjs --new-key` makes one.
 
 ```sh
 make run NETWORK=gno:onyx-1 FACILITATOR=https://facilitator.onyx.testnets.gno.land PAY_TO=g1...
@@ -146,24 +146,50 @@ temperature and the forecast, marked as sample data, and the page takes on the f
 the response body and the transaction show below, the transaction linked to gnoscan.io on `onyx-1`,
 and the page offers no second payment. A body that is not one of the four forecasts the page draws
 (sunny, cloudy, rain, snow) shows only as served. Without Adena, or without JavaScript, the page
-still names everything needed to pay from code. `/` redirects to `/weather`.
+still shows how to pay from code, under a warning to read the buyer first: make a throwaway key
+with it, fund the key, then pay with one command. On `onyx-1` that command carries the chain's
+public RPC; on any other chain it names the RPC to fill in. `/` redirects to `/weather`.
 
 ## Paying it
 
-There is no Go client mechanism, so a Go buyer cannot pay this. `buy.mjs` can, from the repository
+There is no Go client mechanism, so a Go buyer cannot pay this. `buy.mjs` can, and one command runs
+it without a clone.
+
+> **Read [`buy.mjs`](buy.mjs) before you run it.** It signs with the mnemonic you give it, so never
+> give it one that holds anything. Make a throwaway key with it, or use a
+> [session key](../../client/README.md#paying-with-a-session-key), which the chain holds to its
+> spend limit and expiry. Testnet only.
+
+```sh
+npx github:gnoverse/x402#client/v0.5.0 --new-key   # prints a new mnemonic and its address, saves neither
+# fund the address at https://faucet.gno.land, then:
+X402_MNEMONIC='<mnemonic>' X402_GNO_RPC=https://rpc.onyx.testnets.gno.land:443 \
+  npx github:gnoverse/x402#client/v0.5.0 https://<seller>/weather
+```
+
+npx resolves the tag with git, fetches the repository at it, builds the client mechanism and runs
+the root package's `x402-gno` command, which is this `buy.mjs`. It needs git and Node 22.18+ or
+24.11+. The build is the package's `prepare` script, so an npm configured with `ignore-scripts` or
+`strict-allow-scripts` stops before it; run the buyer from a clone instead, from the repository
 root:
 
 ```sh
 make js               # build the client mechanism buy.mjs imports
-X402_GNO_RPC=<RPC URL> node examples/weather/buy.mjs http://localhost:8401/weather
+node examples/weather/buy.mjs --new-key
+X402_MNEMONIC='<mnemonic>' X402_GNO_RPC=<RPC URL> node examples/weather/buy.mjs http://localhost:8401/weather
 ```
 
-It registers `ExactGnoScheme` with `@x402/core`'s stock client, admits ugnot to the client's spend
-controls with a 1 GNOT cap per request, and signs with the mnemonic in `X402_MNEMONIC`, or as gno's
-public test1 key when that is unset. With `X402_SESSION_MASTER` set to an account's address,
-`X402_MNEMONIC` is a session key that account registered, and the payment moves that account's
-coins within the session's limits. [client/README.md](../../client/README.md#paying-with-a-session-key)
-shows how to register one. The paying account must be **funded** on the chain the offer names
+`--new-key` prints a fresh 24-word mnemonic, the address it pays from and the command that pays
+with it, then exits: it sends no request and writes no file, so the printed mnemonic is the only
+copy.
+
+To pay, it registers `ExactGnoScheme` with `@x402/core`'s stock client, admits ugnot to the
+client's spend controls with a 1 GNOT cap per request, and signs with the mnemonic in
+`X402_MNEMONIC`, or as gno's public test1 key when that is unset. With `X402_SESSION_MASTER` set
+to an account's address, `X402_MNEMONIC` is a session key that account registered, and the payment
+moves that account's coins within the session's limits.
+[client/README.md](../../client/README.md#paying-with-a-session-key) shows how to register one. The
+paying account must be **funded** on the chain the offer names
 ([faucet.gno.land](https://faucet.gno.land) funds the public testnets). Point `X402_GNO_RPC` at the
 same node the facilitator uses: the buyer reads its account sequence from the chain, so this leg
 needs a real node rather than the unreachable one a 402 tolerates.

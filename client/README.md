@@ -3,7 +3,10 @@
 Pay a gno.land chain with x402, from a stock client — no fork, no patch, no upstream change.
 
 Install it with `npm i @gnoverse/x402-gno`, or build it from the repository root with `make js`.
-[`examples/weather/buy.mjs`](../examples/weather/buy.mjs) is a working buyer.
+[`examples/weather/buy.mjs`](../examples/weather/buy.mjs) is a working buyer, and the package
+installs it as the `x402-gno` command: `npx github:gnoverse/x402#client/v0.5.0 <seller URL>` runs it
+without a clone. Read it first, since it signs with the mnemonic it is given;
+[Paying it](../examples/weather/README.md#paying-it) shows how to make a throwaway key with it.
 
 ```js
 import { x402Client } from "@x402/core/client";

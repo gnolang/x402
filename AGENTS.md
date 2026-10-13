@@ -94,7 +94,7 @@ accident and needs no build tag to stay out of the way.
 | Bump the Go toolchain | `go-version` in `.github/workflows/*.yml` · the `golang` image pin in `docker/weather.Dockerfile` |
 | Change a flag, default, timeout, limit or exit code in `cmd/gnofacilitator` | `docs/deploying.md` |
 | Follow the target testnet to a new `gnolang/gno` chain tag | `github.com/gnolang/gno` in `go.mod` and `e2e/go.mod` · re-record `facilitator/exact/testdata/onyx_simulate_send.json` |
-| Release the client | bump `package.json`'s version — the workflow refuses a dispatch that disagrees with it. The facilitator's version is its git tag alone, so it needs no bump |
+| Release the client | bump `package.json`'s version — the workflow refuses a dispatch that disagrees with it. The facilitator's version is its git tag alone, so it needs no bump. Bump the `client/vX.Y.Z` the `npx github:gnoverse/x402#…` commands pin in `examples/weather/paywall.html`, `examples/weather/README.md` and `client/README.md` in the same change; `buy.mjs --new-key` reads it from the version |
 | Add a make target | this file (Commands) |
 | Import a new package in `examples/weather/buy.mjs` | declare it in `dependencies` (exact version) or `peerDependencies`. The buyer runs as the package's `x402-gno` command, where devDependencies are not installed; `buy.test.js` fails otherwise |
 

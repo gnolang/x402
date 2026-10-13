@@ -181,8 +181,8 @@ func newSeller(ctx context.Context, cfg sellerConfig) (http.Handler, error) {
 	chainID := strings.TrimPrefix(cfg.network, "gno:")
 	var page strings.Builder
 	err := paywall.Execute(&page, struct {
-		Amount, Unit, Coin, Network, ChainID, PayTo, TxURL string
-		Script                                             template.JS
+		Amount, Unit, Coin, Network, ChainID, PayTo, TxURL, RPC string
+		Script                                                  template.JS
 	}{
 		Amount:  amount,
 		Unit:    unit,
@@ -191,6 +191,7 @@ func newSeller(ctx context.Context, cfg sellerConfig) (http.Handler, error) {
 		ChainID: chainID,
 		PayTo:   cfg.payTo,
 		TxURL:   explorerTxURL(chainID),
+		RPC:     publicRPC(chainID),
 		Script:  template.JS(paywallScript),
 	})
 	if err != nil {
@@ -320,6 +321,16 @@ func explorerTxURL(chainID string) string {
 	switch chainID {
 	case "onyx-1":
 		return "https://gnoscan.io/transactions/details?chainId=onyx-1&txhash="
+	}
+	return ""
+}
+
+// publicRPC returns a public RPC of chainID for a buyer to read its account
+// from, or "" for a chain without one this seller knows.
+func publicRPC(chainID string) string {
+	switch chainID {
+	case "onyx-1":
+		return "https://rpc.onyx.testnets.gno.land:443"
 	}
 	return ""
 }

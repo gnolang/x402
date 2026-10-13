@@ -275,6 +275,55 @@ func TestThePageCarriesNoExplorerForALocalChain(t *testing.T) {
 	assert.Contains(t, page, `id="pay-status" role="status" data-tx=""`)
 }
 
+// pageOnChain is the page a browser gets from a seller on gno:<chainID>.
+func pageOnChain(t *testing.T, chainID string) string {
+	t.Helper()
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, chainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL, func(cfg *sellerConfig) { cfg.network = "gno:" + chainID })
+	_, page := browserPage(t, sellerURL)
+	return page
+}
+
+// The buyer reads its account from a node on the seller's chain, so the
+// command the page offers names one when the chain has a public RPC.
+func TestThePayCommandNamesTheRPCOfAChainItKnows(t *testing.T) {
+	page := pageOnChain(t, "onyx-1")
+
+	assert.Contains(t, page, "X402_GNO_RPC=https://rpc.onyx.testnets.gno.land:443")
+}
+
+func TestThePayCommandAsksForAnRPCOnAChainItDoesNotKnow(t *testing.T) {
+	page := pageOnChain(t, "dev")
+
+	assert.Contains(t, page, "X402_GNO_RPC=&lt;RPC of chain dev&gt;")
+	assert.NotContains(t, page, "rpc.onyx", "another chain's node would sign over the wrong account state")
+}
+
+// The commands run the buyer from a release tag, so the script a visitor read
+// is the one that runs; a branch can move between the two.
+func TestThePageRunsTheBuyerPinnedToARelease(t *testing.T) {
+	page := pageOnChain(t, "onyx-1")
+
+	runs := regexp.MustCompile(`npx github:gnoverse/x402(\S*)`).FindAllStringSubmatch(page, -1)
+	require.Len(t, runs, 2, "one command makes the key, one pays")
+	for _, run := range runs {
+		assert.Regexp(t, `^#client/v\d+\.\d+\.\d+$`, run[1])
+	}
+}
+
+// The buyer signs with whatever mnemonic it is given, so the page links its
+// source and warns against a key that holds anything before any command.
+func TestThePageSaysToReadTheBuyerBeforeRunningIt(t *testing.T) {
+	page := pageOnChain(t, "onyx-1")
+
+	firstRun := strings.Index(page, "npx github:")
+	require.NotEqual(t, -1, firstRun, "the page offers no command")
+	before := page[:firstRun]
+	assert.Contains(t, before, `href="https://github.com/gnoverse/x402/blob/main/examples/weather/buy.mjs"`)
+	assert.Contains(t, before, "never give it a mnemonic that holds anything")
+}
+
 // The page pays through the script the seller inlines, so it must arrive
 // intact: html/template escapes a string it does not know to be JavaScript.
 func TestTheBrowserPageCarriesItsPaymentScriptIntact(t *testing.T) {
