@@ -29,15 +29,18 @@ The middleware, the route matching, the 402 and the header encoding are all the 
 ## Run it
 
 Needs Go, Node 22.18+ or 24.11+, and `gnodev` (`make install.gnodev` in a
-[gnolang/gno](https://github.com/gnolang/gno) checkout). From this directory, one command per
-terminal:
+[gnolang/gno](https://github.com/gnolang/gno) checkout). From this directory:
 
 ```sh
-gnodev              # a local node (chain id "dev", RPC :26657)
-make facilitator    # the facilitator, on :8402
-make run            # the seller, on :8401
-make pay            # buy.mjs pays it, as gno's public test1 key
+make demo           # a local node, the facilitator and the seller; Ctrl-C stops all three
+make pay            # in a second terminal: buy.mjs pays the seller, as gno's public test1 key
 ```
+
+`make demo` starts a node (chain id `dev`, RPC `:26657`), then the facilitator on `:8402`, then the
+seller on `:8401`, each once the one before it answers, and keeps their logs in a temporary
+directory it names. It refuses to start when something already answers at one of those addresses;
+`RPC`, `FACILITATOR_LISTEN` and `LISTEN` move the node, the facilitator and the seller.
+The same pieces also run one per terminal: `gnodev`, `make facilitator`, `make run`.
 
 `make pay` prints the payment and the weather it bought:
 
