@@ -196,21 +196,32 @@ func TestABrowserIsToldWhatTheResourceCostsInGno(t *testing.T) {
 	assert.Contains(t, page, "Testnet only")
 }
 
+// headAndMasthead splits off what precedes the page's masthead, the head with
+// its title and styles, and the masthead itself: the strip a visitor reads
+// first.
+func headAndMasthead(t *testing.T, page string) (head, masthead string) {
+	t.Helper()
+	head, rest, found := strings.Cut(page, `<header class="masthead"`)
+	require.True(t, found, "the masthead is gone")
+	masthead, _, found = strings.Cut(rest, "</header>")
+	require.True(t, found, "the masthead never closes")
+	return head, masthead
+}
+
 // A visitor arrives from a link with no context, so before the terms the page
 // says it is a demo and where its source lives.
-func TestThePageOpensOnADemoBannerLinkingTheSource(t *testing.T) {
+func TestThePageOpensOnADemoMastheadLinkingTheSource(t *testing.T) {
 	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
 	t.Cleanup(gnofacilitator.Close)
 	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
 
 	_, page := browserPage(t, sellerURL)
 
-	banner, _, found := strings.Cut(page, `<header class="sky"`)
-	require.True(t, found, "the sky header is gone")
-	assert.Contains(t, banner, "<title>Payment Required · x402 on gno.land testnet demo</title>")
-	assert.Contains(t, banner, "testnet demo")
-	assert.Contains(t, banner, `href="https://github.com/gnoverse/x402"`)
-	assert.NotContains(t, banner, "live", "live next to weather reads as real data")
+	head, masthead := headAndMasthead(t, page)
+	assert.Contains(t, head, "<title>Payment required · x402 on Gno testnet demo</title>")
+	assert.Contains(t, masthead, "testnet demo", "on the page, not only in the tab")
+	assert.Contains(t, masthead, `href="https://github.com/gnoverse/x402"`)
+	assert.NotContains(t, head+masthead, "live", "live next to weather reads as real data")
 }
 
 // The seller answers every request with the same reading, which a visitor
@@ -222,8 +233,8 @@ func TestThePageSaysTheWeatherIsSampleData(t *testing.T) {
 
 	_, page := browserPage(t, sellerURL)
 
-	banner, _, _ := strings.Cut(page, `<header class="sky"`)
-	assert.Contains(t, banner, "sample weather data", "before paying")
+	_, masthead := headAndMasthead(t, page)
+	assert.Contains(t, masthead, "sample weather data", "before paying")
 	assert.Contains(t, page, "Sample data, not a forecast", "beside the paid reading")
 	assert.Equal(t, "Sample weather data (demo)", termsOf(t, sellerURL).Resource.Description,
 		"the only label a script or an agent reads")
@@ -238,11 +249,13 @@ func TestThePageNamesTheNetworkAndTheFaucetWithOrWithoutAdena(t *testing.T) {
 
 	_, page := browserPage(t, sellerURL)
 
-	hero, _, found := strings.Cut(page, `id="no-adena"`)
+	offer, _, found := strings.Cut(page, `id="no-adena"`)
 	require.True(t, found, "the no-wallet note is gone")
-	hero = hero[strings.Index(hero, `<header class="sky"`):]
-	assert.Contains(t, hero, "Test GNOT on <code>gno:dev</code>")
-	assert.Contains(t, hero, `href="https://faucet.gno.land"`)
+	start := strings.Index(offer, `<section class="offer"`)
+	require.NotEqual(t, -1, start, "the offer panel is gone, or follows the no-wallet note")
+	offer = offer[start:]
+	assert.Contains(t, offer, "Test GNOT on <code>gno:dev</code>")
+	assert.Contains(t, offer, `href="https://faucet.gno.land"`)
 }
 
 func TestATransactionLinksToTheExplorerOfTheChainsItKnows(t *testing.T) {

@@ -135,18 +135,18 @@ the facilitator holds no key. The mechanism sets it, so no seller writes it. The
 `paymentFlow` key because the flow is `authorization`, the specification's default, which may be
 omitted.
 
-A browser gets a page instead (`paywall.html`): a bar naming it a testnet demo with sample weather
-data and linking this repository, then a clouded sky over the roofs of Paris with the price in GNOT
-as its headline, the network and the faucet, and how to pay. The middleware's own paywall supports
-EVM and Solana chains only. In a browser with the [Adena](https://adena.app) wallet, a visitor pays
-from the page. `paywall.js` works as a stock x402 client does: it reads the terms, has Adena sign
-the bank send without broadcasting it, and repeats the request with the payment. Once the payment
-settles, the clouds part, the sky takes the forecast's colours and the headline becomes the
-temperature, marked as sample data; the response body and the transaction show below it, the
-transaction linked to gnoscan.io on `onyx-1`, and the page offers no second payment. A body that is
-not one of the four forecasts the page draws (sunny, cloudy, rain, snow) shows only as served.
-Without Adena, or without JavaScript, the page still names everything needed to pay from code. `/`
-redirects to `/weather`.
+A browser gets a page instead (`paywall.html`): a masthead naming it a testnet demo with sample
+weather data and linking this repository, then the 402, a dial waiting for the reading, and the
+terms beside it: the price in GNOT, the network and the faucet, the payee, and how to pay. The
+middleware's own paywall supports EVM and Solana chains only. In a browser with the
+[Adena](https://adena.app) wallet, a visitor pays from the page. `paywall.js` works as a stock x402
+client does: it reads the terms, has Adena sign the bank send without broadcasting it, and repeats
+the request with the payment. Once the payment settles, the badge reads 200, the dial shows the
+temperature and the forecast, marked as sample data, and the page takes on the forecast's weather;
+the response body and the transaction show below, the transaction linked to gnoscan.io on `onyx-1`,
+and the page offers no second payment. A body that is not one of the four forecasts the page draws
+(sunny, cloudy, rain, snow) shows only as served. Without Adena, or without JavaScript, the page
+still names everything needed to pay from code. `/` redirects to `/weather`.
 
 ## Paying it
 
