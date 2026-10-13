@@ -1,5 +1,6 @@
 // The browser half of the weather seller's 402 page: it pays the resource with
-// the Adena wallet the way a stock x402 client does, and shows the live terms.
+// the Adena wallet the way a stock x402 client does, shows the live terms, and
+// writes the weather it bought into the page's sky.
 // The seller inlines this file into the page, so it stays one self-contained
 // module: no imports, no build step, no request beyond the seller itself.
 
@@ -187,6 +188,25 @@ export function statusLine(result) {
   return `Not paid (${result.status})${result.reason === "" ? "" : `: ${result.reason}`}`;
 }
 
+// The forecasts the page has a sky and an icon for; the icon of each is the
+// symbol #i-<forecast>.
+const FORECASTS = ["sunny", "cloudy", "rain", "snow"];
+
+// readingOf returns the reading the sky can draw from a paid body, or null for
+// any other body, which the page then shows only as served.
+function readingOf(body) {
+  let weather;
+  try {
+    weather = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  if (typeof weather?.celsius !== "number" || !FORECASTS.includes(weather.forecast)) {
+    return null;
+  }
+  return { celsius: weather.celsius, forecast: weather.forecast };
+}
+
 // How long the page waits for Adena to inject window.adena: it does so from a
 // script it loads itself, which can land after the page's load event.
 const ADENA_WAIT_MS = 5000;
@@ -266,8 +286,24 @@ export function start(document, window) {
       });
       status.textContent = statusLine(paid);
       if (paid.paid) {
+        // data-tx is the chain's explorer page for a transaction, less its hash;
+        // empty on a chain without one.
+        if (status.dataset.tx) {
+          const link = document.createElement("a");
+          link.setAttribute("href", status.dataset.tx + encodeURIComponent(paid.transaction));
+          link.textContent = paid.transaction;
+          status.replaceChildren("Paid. Transaction ", link, ".");
+        }
+        button.hidden = true;
         result.querySelector("code").textContent = paid.body;
         result.hidden = false;
+        const reading = readingOf(paid.body);
+        if (reading !== null) {
+          document.getElementById("paid-temp").textContent = String(reading.celsius);
+          document.getElementById("paid-forecast").textContent = reading.forecast;
+          document.getElementById("paid-icon").setAttribute("href", `#i-${reading.forecast}`);
+          document.getElementById("sky").dataset.forecast = reading.forecast;
+        }
       }
     } catch (err) {
       status.textContent = err instanceof Error ? err.message : String(err);

@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -190,8 +192,87 @@ func TestABrowserIsToldWhatTheResourceCostsInGno(t *testing.T) {
 	assert.Contains(t, page, "gno:dev")
 	assert.Contains(t, page, "g1u7y667z64x2h7vc6fmpcprgey4ck233jaww9zq")
 	assert.Contains(t, page, "buy.mjs", "the page names a buyer that can pay it without a wallet")
-	assert.Contains(t, page, "Pay with Adena")
+	assert.Contains(t, page, "Pay 0.25 GNOT with Adena", "the button names what a click spends")
 	assert.Contains(t, page, "Testnet only")
+}
+
+// headAndMasthead splits off what precedes the page's masthead, the head with
+// its title and styles, and the masthead itself: the strip a visitor reads
+// first.
+func headAndMasthead(t *testing.T, page string) (head, masthead string) {
+	t.Helper()
+	head, rest, found := strings.Cut(page, `<header class="masthead"`)
+	require.True(t, found, "the masthead is gone")
+	masthead, _, found = strings.Cut(rest, "</header>")
+	require.True(t, found, "the masthead never closes")
+	return head, masthead
+}
+
+// A visitor arrives from a link with no context, so before the terms the page
+// says it is a demo and where its source lives.
+func TestThePageOpensOnADemoMastheadLinkingTheSource(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	head, masthead := headAndMasthead(t, page)
+	assert.Contains(t, head, "<title>Payment required · x402 on Gno testnet demo</title>")
+	assert.Contains(t, masthead, "testnet demo", "on the page, not only in the tab")
+	assert.Contains(t, masthead, `href="https://github.com/gnoverse/x402"`)
+	assert.NotContains(t, head+masthead, "live", "live next to weather reads as real data")
+}
+
+// The seller answers every request with the same reading, which a visitor
+// would otherwise take for the forecast they paid for.
+func TestThePageSaysTheWeatherIsSampleData(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	_, masthead := headAndMasthead(t, page)
+	assert.Contains(t, masthead, "sample weather data", "before paying")
+	assert.Contains(t, page, "Sample data, not a forecast", "beside the paid reading")
+	assert.Equal(t, "Sample weather data (demo)", termsOf(t, sellerURL).Resource.Description,
+		"the only label a script or an agent reads")
+}
+
+// Adena hides the no-wallet note, so the network and where test GNOT comes
+// from must sit outside it to stay on screen.
+func TestThePageNamesTheNetworkAndTheFaucetWithOrWithoutAdena(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	offer, _, found := strings.Cut(page, `id="no-adena"`)
+	require.True(t, found, "the no-wallet note is gone")
+	start := strings.Index(offer, `<section class="offer"`)
+	require.NotEqual(t, -1, start, "the offer panel is gone, or follows the no-wallet note")
+	offer = offer[start:]
+	assert.Contains(t, offer, "Test GNOT on <code>gno:dev</code>")
+	assert.Contains(t, offer, `href="https://faucet.gno.land"`)
+}
+
+func TestATransactionLinksToTheExplorerOfTheChainsItKnows(t *testing.T) {
+	assert.Equal(t, "https://gnoscan.io/transactions/details?chainId=onyx-1&txhash=", explorerTxURL("onyx-1"))
+	assert.Empty(t, explorerTxURL("dev"), "a local chain has no explorer")
+}
+
+// The page hands the explorer to the script on the status line, and an empty
+// one leaves the transaction as text.
+func TestThePageCarriesNoExplorerForALocalChain(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	assert.Contains(t, page, `id="pay-status" role="status" data-tx=""`)
 }
 
 // The page pays through the script the seller inlines, so it must arrive
@@ -219,6 +300,40 @@ func TestTheBrowserPageIsSelfContained(t *testing.T) {
 		assert.NotContains(t, page, fetches)
 	}
 	t.Logf("page: %d bytes", len(page))
+}
+
+// An id the script looks up and the page lacks is a null it throws on, and in
+// the paid branch the error replaces the line that names the transaction.
+func TestEveryElementThePaymentScriptFindsIsOnThePage(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	lookups := regexp.MustCompile(`getElementById\("([^"]+)"\)`).FindAllStringSubmatch(paywallScript, -1)
+	require.NotEmpty(t, lookups)
+	for _, lookup := range lookups {
+		assert.Contains(t, page, `id="`+lookup[1]+`"`)
+	}
+}
+
+// The script points the paid icon at #i-<forecast> for each forecast it draws,
+// so a forecast without its symbol on the page parts the clouds over nothing.
+func TestThePageHasAnIconForEveryForecastTheScriptDraws(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	list := regexp.MustCompile(`const FORECASTS = \[([^\]]*)\]`).FindStringSubmatch(paywallScript)
+	require.NotNil(t, list, "paywall.js no longer declares FORECASTS")
+	forecasts := regexp.MustCompile(`"([^"]+)"`).FindAllStringSubmatch(list[1], -1)
+	require.NotEmpty(t, forecasts)
+	for _, forecast := range forecasts {
+		assert.Contains(t, page, `id="i-`+forecast[1]+`"`)
+	}
 }
 
 func TestTheAmountIsShownInGNOT(t *testing.T) {

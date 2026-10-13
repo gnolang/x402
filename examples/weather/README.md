@@ -1,8 +1,9 @@
 # weather — an HTTP resource that takes gno
 
-The x402 seller example, with gno listed as a way to pay. The resource is weather data: it is not
-a realm, it makes no contract call, and it does not know a chain exists. Everything gno-specific is
-a network string, one registered scheme and the page a browser gets.
+The x402 seller example, with gno listed as a way to pay. The resource is weather data, a sample
+reading that is the same on every request: it is not a realm, it makes no contract call, and it
+does not know a chain exists. Everything gno-specific is a network string, one registered scheme
+and the page a browser gets.
 
 ```go
 routes := x402http.RoutesConfig{
@@ -12,7 +13,7 @@ routes := x402http.RoutesConfig{
             Price:   x402.AssetAmount{Asset: "ugnot", Amount: "250000"},
             Network: "gno:dev",
         }},
-        Description: "Weather data",
+        Description: "Sample weather data (demo)",
     },
 }
 
@@ -114,7 +115,7 @@ not in the body:
   "error": "Payment required",
   "resource": {
     "url": "http://localhost:8401/weather",
-    "description": "Weather data",
+    "description": "Sample weather data (demo)",
     "mimeType": "application/json"
   },
   "accepts": [{
@@ -134,12 +135,18 @@ the facilitator holds no key. The mechanism sets it, so no seller writes it. The
 `paymentFlow` key because the flow is `authorization`, the specification's default, which may be
 omitted.
 
-A browser gets a page instead (`paywall.html`): the price in GNOT, the network, the payee and how
-to pay. The middleware's own paywall supports EVM and Solana chains only. In a browser with the
+A browser gets a page instead (`paywall.html`): a masthead naming it a testnet demo with sample
+weather data and linking this repository, then the 402, a dial waiting for the reading, and the
+terms beside it: the price in GNOT, the network and the faucet, the payee, and how to pay. The
+middleware's own paywall supports EVM and Solana chains only. In a browser with the
 [Adena](https://adena.app) wallet, a visitor pays from the page. `paywall.js` works as a stock x402
 client does: it reads the terms, has Adena sign the bank send without broadcasting it, and repeats
-the request with the payment. Without Adena, or without JavaScript, the page still names everything needed to pay
-from a script. `/` redirects to `/weather`.
+the request with the payment. Once the payment settles, the badge reads 200, the dial shows the
+temperature and the forecast, marked as sample data, and the page takes on the forecast's weather;
+the response body and the transaction show below, the transaction linked to gnoscan.io on `onyx-1`,
+and the page offers no second payment. A body that is not one of the four forecasts the page draws
+(sunny, cloudy, rain, snow) shows only as served. Without Adena, or without JavaScript, the page
+still names everything needed to pay from code. `/` redirects to `/weather`.
 
 ## Paying it
 

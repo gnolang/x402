@@ -177,17 +177,19 @@ func newSeller(ctx context.Context, cfg sellerConfig) (http.Handler, error) {
 	}
 
 	amount, unit := shownAmount(cfg.price)
+	chainID := strings.TrimPrefix(cfg.network, "gno:")
 	var page strings.Builder
 	err := paywall.Execute(&page, struct {
-		Amount, Unit, Coin, Network, ChainID, PayTo string
-		Script                                      template.JS
+		Amount, Unit, Coin, Network, ChainID, PayTo, TxURL string
+		Script                                             template.JS
 	}{
 		Amount:  amount,
 		Unit:    unit,
 		Coin:    cfg.price.String(),
 		Network: cfg.network,
-		ChainID: strings.TrimPrefix(cfg.network, "gno:"),
+		ChainID: chainID,
 		PayTo:   cfg.payTo,
+		TxURL:   explorerTxURL(chainID),
 		Script:  template.JS(paywallScript),
 	})
 	if err != nil {
@@ -203,7 +205,7 @@ func newSeller(ctx context.Context, cfg sellerConfig) (http.Handler, error) {
 				Price:   x402.AssetAmount{Asset: cfg.price.Denom, Amount: fmt.Sprint(cfg.price.Amount)},
 				Network: x402.Network(cfg.network),
 			}},
-			Description:       "Weather data",
+			Description:       "Sample weather data (demo)",
 			MimeType:          "application/json",
 			CustomPaywallHTML: page.String(),
 		},
@@ -290,4 +292,14 @@ func serveWeather(w http.ResponseWriter, _ *http.Request) {
 		"forecast": "sunny",
 		"celsius":  24,
 	})
+}
+
+// explorerTxURL returns the page that shows one of chainID's transactions once
+// its hash is appended, or "" for a chain with no public explorer.
+func explorerTxURL(chainID string) string {
+	switch chainID {
+	case "onyx-1":
+		return "https://gnoscan.io/transactions/details?chainId=onyx-1&txhash="
+	}
+	return ""
 }

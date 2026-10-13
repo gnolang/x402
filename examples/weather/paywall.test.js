@@ -7,6 +7,7 @@ const PAYER = "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5";
 const PAY_TO = "g1nmzz8jc66mgfswfqhuze5ulmyde3ql5hsyffud";
 const SIGNED = "c2lnbmVkIHR4"; // what Adena hands back; the page never decodes it
 const TX_HASH = "a23105cf9c5ab595e041427d4df85a00b42d8535a7dab19b8a8e07364009ba2a";
+const WEATHER = '{"celsius":24,"forecast":"sunny","location":"Paris"}';
 
 function offer(extra = {}) {
   return {
@@ -62,7 +63,11 @@ function fakeSeller(offered, paid) {
 }
 
 function settled() {
-  return new Response('{"celsius":24,"forecast":"sunny","location":"Paris"}', {
+  return settledWith(WEATHER);
+}
+
+function settledWith(body) {
+  return new Response(body, {
     status: 200,
     headers: {
       "PAYMENT-RESPONSE": encodeHeader({ success: true, transaction: TX_HASH, network: "gno:onyx-1", payer: PAYER }),
@@ -112,7 +117,7 @@ describe("payWithAdena", () => {
     expect(result).toEqual({
       paid: true,
       status: 200,
-      body: '{"celsius":24,"forecast":"sunny","location":"Paris"}',
+      body: WEATHER,
       transaction: TX_HASH,
       reason: "",
     });
@@ -368,17 +373,26 @@ describe("statusLine", () => {
 function fakePage() {
   const element = (hidden = false) => {
     const listeners = {};
+    const attributes = {};
     const code = { textContent: "", innerText: "" };
     return {
       hidden,
       textContent: "",
       disabled: false,
+      dataset: {},
       listeners,
+      attributes,
       addEventListener(type, fn) {
         listeners[type] = fn;
       },
+      setAttribute(name, value) {
+        attributes[name] = value;
+      },
       querySelector: () => code,
       append() {},
+      replaceChildren(...nodes) {
+        this.textContent = nodes.map((n) => (typeof n === "string" ? n : n.textContent)).join("");
+      },
     };
   };
   const elements = {
@@ -389,6 +403,10 @@ function fakePage() {
     "pay-result": element(true),
     terms: element(),
     "terms-json": element(),
+    sky: element(),
+    "paid-temp": element(),
+    "paid-forecast": element(),
+    "paid-icon": element(),
   };
   const copyable = element();
   const made = [];
@@ -434,19 +452,76 @@ describe("start", () => {
   });
 });
 
-describe("start, paying", () => {
-  it("pays on a click, shows the weather and the transaction, and frees the button", async () => {
-    const { document, window, elements } = fakePage();
-    window.adena = fakeAdena();
-    window.fetch = fakeSeller(terms(), settled);
-    start(document, window);
+// paidPage is the page after a click that paid, with the seller serving body,
+// on a page whose status line names explorer for the chain's transactions.
+async function paidPage(body, explorer = "") {
+  const page = fakePage();
+  page.elements["pay-status"].dataset.tx = explorer;
+  page.window.adena = fakeAdena();
+  page.window.fetch = fakeSeller(terms(), () => settledWith(body));
+  start(page.document, page.window);
+  await page.elements.pay.listeners.click();
+  return page;
+}
 
-    await elements.pay.listeners.click();
+describe("start, paying", () => {
+  // A button still offered after the weather arrived would sign a second
+  // payment for the same reading.
+  it("pays on a click, shows the weather and the transaction, and offers no second payment", async () => {
+    const { elements, made } = await paidPage(WEATHER);
 
     expect(elements["pay-status"].textContent).toBe(`Paid. Transaction ${TX_HASH}.`);
+    expect(made.filter((e) => e.attributes.href !== undefined)).toEqual([]);
     expect(elements["pay-result"].hidden).toBe(false);
-    expect(elements["pay-result"].querySelector("code").textContent).toContain("sunny");
-    expect(elements.pay.disabled).toBe(false);
+    expect(elements["pay-result"].querySelector("code").textContent).toBe(WEATHER);
+    expect(elements.pay.hidden).toBe(true);
+  });
+
+  it("links the transaction to the explorer the page names", async () => {
+    const explorer = "https://gnoscan.io/transactions/details?chainId=onyx-1&txhash=";
+    const { elements, made } = await paidPage(WEATHER, explorer);
+
+    const links = made.filter((e) => e.attributes.href !== undefined);
+    expect(links).toHaveLength(1);
+    expect(links[0].attributes.href).toBe(explorer + TX_HASH);
+    expect(links[0].textContent).toBe(TX_HASH);
+    expect(elements["pay-status"].textContent).toBe(`Paid. Transaction ${TX_HASH}.`);
+  });
+
+  it("writes the reading into the sky: its forecast, its icon and its temperature", async () => {
+    for (const [forecast, celsius, shown] of [
+      ["sunny", 24, "24"],
+      ["cloudy", 17, "17"],
+      ["rain", 12.5, "12.5"],
+      ["snow", -1, "-1"],
+    ]) {
+      const { elements } = await paidPage(JSON.stringify({ celsius, forecast, location: "Paris" }));
+
+      expect(elements.sky.dataset.forecast).toBe(forecast);
+      expect(elements["paid-icon"].attributes.href).toBe(`#i-${forecast}`);
+      expect(elements["paid-temp"].textContent).toBe(shown);
+      expect(elements["paid-forecast"].textContent).toBe(forecast);
+    }
+  });
+
+  // The sky only draws the four forecasts it has colours and an icon for. Any
+  // other body is still the weather that was paid for, so it shows as served.
+  it("shows a body the sky cannot draw as served, with the transaction", async () => {
+    for (const body of [
+      "sunny, 24 degrees",
+      "null",
+      '{"forecast":"sunny"}',
+      '{"celsius":"24","forecast":"sunny"}',
+      '{"celsius":24}',
+      '{"celsius":9,"forecast":"fog","location":"Paris"}',
+    ]) {
+      const { elements } = await paidPage(body);
+
+      expect(elements["pay-status"].textContent).toBe(`Paid. Transaction ${TX_HASH}.`);
+      expect(elements["pay-result"].hidden).toBe(false);
+      expect(elements["pay-result"].querySelector("code").textContent).toBe(body);
+      expect(elements.sky.dataset.forecast).toBeUndefined();
+    }
   });
 
   it("says why a click paid nothing, and frees the button", async () => {
@@ -462,6 +537,7 @@ describe("start, paying", () => {
     expect(elements["pay-status"].textContent).toBe("Adena: User rejected");
     expect(elements["pay-result"].hidden).toBe(true);
     expect(elements.pay.disabled).toBe(false);
+    expect(elements.pay.hidden).toBe(false);
   });
 
   it("says a copy failed rather than leaving the button silent", async () => {
