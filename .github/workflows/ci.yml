@@ -79,6 +79,10 @@ jobs:
         with:
           version: 'v2.17.1' # exact, so CI validates the same build the release runs
           args: release --snapshot --clean
+        env:
+          # Named, so a client/v… or weather/v… tag pushed on the commit cannot
+          # become the snapshot's version: its slash is not legal in an image tag.
+          GORELEASER_CURRENT_TAG: v0.0.0
       # Guard the release workflow's attestation contract: it resolves the image
       # digest by filtering artifacts.json on type "Docker Image" plus
       # .extra.Digest. Assert that shape here so a goreleaser rename breaks a PR
