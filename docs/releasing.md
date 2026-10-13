@@ -87,6 +87,9 @@ locally.
 npm publishing uses OIDC trusted publishing: no npm token exists in this repository. npmjs.com
 matches the request against the repository and the workflow filename.
 
+The `client` job installs with `npm ci --ignore-scripts` and restores no Actions cache, so no
+dependency install script and no cache written by another job runs beside the credential.
+
 A mismatch surfaces as `E404 package not found` or `ENEEDAUTH`, neither of which reflects the
 real cause — check the workflow filename and the npm version in the job first.
 

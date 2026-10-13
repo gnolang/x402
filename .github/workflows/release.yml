@@ -262,8 +262,10 @@ jobs:
 
       # The e2e is the only test that proves this client can actually pay a chain,
       # and it drives the built bundle through a real node. Its harness is Go.
+      # No cache: jobs that run dependency code write this repository's Actions
+      # cache, and a restored build cache entry would run here, beside id-token.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with: { go-version: '1.26.5' }
+        with: { go-version: '1.26.5', cache: false }
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
           node-version: '24'
@@ -289,7 +291,9 @@ jobs:
             exit 1
           fi
 
-      - run: npm ci
+      # This job holds id-token, and no dependency needs an install script to
+      # build or test.
+      - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm test
       - run: make test-e2e
