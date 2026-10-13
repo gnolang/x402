@@ -20,11 +20,14 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gnolang/gno/tm2/pkg/std"
@@ -111,14 +114,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := newServer(*listen, seller)
+	ln, err := net.Listen("tcp", *listen)
+	if err != nil {
+		slog.Error("listen", "err", err)
+		os.Exit(1)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	slog.Info("weather seller listening",
 		"addr", *listen, "network", *network, "price", coin.String(), "payTo", *payTo)
-	if err := srv.ListenAndServe(); err != nil {
+	if err := serve(ctx, newServer(*listen, seller), ln, drainTimeout); err != nil {
 		slog.Error("serve", "err", err)
 		os.Exit(1)
 	}
+	slog.Info("weather seller stopped")
 }
 
 type sellerConfig struct {
