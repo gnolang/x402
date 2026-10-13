@@ -38,7 +38,8 @@ make pay            # in a second terminal: buy.mjs pays the seller, as gno's pu
 
 `make demo` starts a node (chain id `dev`, RPC `:26657`), then the facilitator on `:8402`, then the
 seller on `:8401`, each once the one before it answers, and keeps their logs in a temporary
-directory it names. It refuses to start when something already answers at one of those addresses.
+directory it names. It refuses to start when something already answers at one of those addresses;
+`RPC`, `FACILITATOR_LISTEN` and `LISTEN` move the node, the facilitator and the seller.
 The same pieces also run one per terminal: `gnodev`, `make facilitator`, `make run`.
 
 `make pay` prints the payment and the weather it bought:

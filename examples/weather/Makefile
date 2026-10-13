@@ -11,7 +11,8 @@ SHELL := /bin/sh
 
 GO ?= go
 
-FACILITATOR ?= http://localhost:8402
+FACILITATOR_LISTEN ?= :8402
+FACILITATOR ?= http://localhost$(FACILITATOR_LISTEN)
 NETWORK ?= gno:dev
 RPC ?= http://127.0.0.1:26657
 PAY_TO ?= g1u7y667z64x2h7vc6fmpcprgey4ck233jaww9zq
@@ -19,7 +20,7 @@ PRICE ?= 250000ugnot
 LISTEN ?= :8401
 SELLER_URL ?= http://localhost$(LISTEN)/weather
 
-FACILITATOR_ARGS := -rpc $(RPC) -chain-id $(subst gno:,,$(NETWORK))
+FACILITATOR_ARGS := -listen $(FACILITATOR_LISTEN) -rpc $(RPC) -chain-id $(subst gno:,,$(NETWORK))
 SELLER_ARGS := -listen $(LISTEN) -facilitator $(FACILITATOR) -network $(NETWORK) -pay-to $(PAY_TO) -price $(PRICE)
 
 .PHONY: all demo facilitator run pay help
