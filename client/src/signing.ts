@@ -13,6 +13,8 @@ import {
   stringToUTF8,
 } from "@gnolang/tm2-js-client";
 
+import { readChain } from "./chain-read.js";
+
 /** Expands encoded message values so the sign doc can sort them. */
 export type DecodeTxMessages = (messages: Any[]) => unknown[];
 
@@ -62,7 +64,7 @@ export async function signForChain(
   const address = await wallet.getAddress();
   const account =
     master === undefined
-      ? (await provider.getAccount(address)).BaseAccount
+      ? (await readChain(() => provider.getAccount(address))).BaseAccount
       : await sessionAccount(provider, master, address);
 
   const payload: TxSignPayload = {
@@ -117,7 +119,7 @@ async function sessionAccount(
       "x402-gno: paying as a session needs a gno provider, such as GnoJSONRPCProvider, to read the session account",
     );
   }
-  const { account_number, sequence } = await provider.getSession(master, session);
+  const { account_number, sequence } = await readChain(() => provider.getSession(master, session));
   if (account_number === undefined || sequence === undefined) {
     throw new Error(
       `x402-gno: the chain reports no account number or sequence for session ${session} of ${master}`,

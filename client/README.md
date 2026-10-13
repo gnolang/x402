@@ -21,7 +21,10 @@ const res = await paid("https://api.example.com/weather");
 ```
 
 `wallet` is a `GnoWallet` from `@gnolang/gno-js-client`, connected to a provider. The connection is
-required: a gno sequence is sequential, so only the chain knows the next one.
+required: a gno sequence is sequential, so only the chain knows the next one. Those reads happen
+before anything is signed, so a read that fails or goes 10 s unanswered is made again, three times
+in all. A refusal, such as an account the chain has never seen, is thrown after the third, and
+nothing is retried once a payment is signed.
 
 `setSpendControls` admits ugnot. It exists from `@x402/core` 2.23, and from that version a stock
 client pays only in USD-pegged assets unless they are listed there; ugnot is not one.

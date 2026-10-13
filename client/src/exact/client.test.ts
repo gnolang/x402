@@ -1,5 +1,5 @@
 import { MsgEndpoint, MsgSend } from "@gnolang/gno-js-client";
-import { type GasPrice, Tx, Wallet, base64ToUint8Array } from "@gnolang/tm2-js-client";
+import { type ABCIAccount, type GasPrice, Tx, Wallet, base64ToUint8Array } from "@gnolang/tm2-js-client";
 import type { PaymentRequirements } from "@x402/core/types";
 import { describe, expect, it } from "vitest";
 
@@ -275,6 +275,33 @@ describe("ExactGnoScheme payment", () => {
     const { tx } = await signedPayment({ amount: 3, denom: "ugnot", gas: 7 });
 
     expect(tx.fee?.gas_fee).toBe("8571429ugnot");
+  });
+
+  // A request dropped before anything is signed loses nothing, so the payment
+  // survives the node failing to answer its first reads.
+  it("signs through reads that failed the first time", async () => {
+    class Lossy extends FakeProvider {
+      private answered = new Set<string>();
+      private once<T>(name: string, read: () => Promise<T>): Promise<T> {
+        if (!this.answered.has(name)) {
+          this.answered.add(name);
+          return Promise.reject(new Error("socket hang up"));
+        }
+        return read();
+      }
+      override getGasPrice(): Promise<GasPrice | null> {
+        return this.once("gas", () => super.getGasPrice());
+      }
+      override getAccount(address: string): Promise<ABCIAccount> {
+        return this.once("account", () => super.getAccount(address));
+      }
+    }
+    const wallet = await Wallet.fromMnemonic(MNEMONIC);
+    wallet.connect(new Lossy("dev", ONYX_GAS_PRICE));
+
+    const { payload } = await new ExactGnoScheme(wallet).createPaymentPayload(2, offer());
+
+    expect(transactionOf(payload).signatures).toHaveLength(1);
   });
 
   // A chain with no minimum gas price may still have nodes that set one of their

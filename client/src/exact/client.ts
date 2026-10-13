@@ -17,6 +17,7 @@ import type {
   SchemeNetworkClient,
 } from "@x402/core/types";
 
+import { readChain } from "../chain-read.js";
 import { connectedProvider, signForChain } from "../signing.js";
 
 const NAMESPACE = "gno";
@@ -165,7 +166,8 @@ export class ExactGnoScheme implements SchemeNetworkClient {
     const memo = requiredMemo(paymentRequirements.extra);
     const { master } = this.options;
     const from = master ?? (await this.wallet.getAddress());
-    const fee = gasFee(await connectedProvider(this.wallet).getGasPrice());
+    const provider = connectedProvider(this.wallet);
+    const fee = gasFee(await readChain(() => provider.getGasPrice()));
     const tx: Tx = {
       messages: [
         {
