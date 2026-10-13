@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -219,6 +220,40 @@ func TestTheBrowserPageIsSelfContained(t *testing.T) {
 		assert.NotContains(t, page, fetches)
 	}
 	t.Logf("page: %d bytes", len(page))
+}
+
+// An id the script looks up and the page lacks is a null it throws on, and in
+// the paid branch the error replaces the line that names the transaction.
+func TestEveryElementThePaymentScriptFindsIsOnThePage(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	lookups := regexp.MustCompile(`getElementById\("([^"]+)"\)`).FindAllStringSubmatch(paywallScript, -1)
+	require.NotEmpty(t, lookups)
+	for _, lookup := range lookups {
+		assert.Contains(t, page, `id="`+lookup[1]+`"`)
+	}
+}
+
+// The script points the paid icon at #i-<forecast> for each forecast it draws,
+// so a forecast without its symbol on the page parts the clouds over nothing.
+func TestThePageHasAnIconForEveryForecastTheScriptDraws(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	list := regexp.MustCompile(`const FORECASTS = \[([^\]]*)\]`).FindStringSubmatch(paywallScript)
+	require.NotNil(t, list, "paywall.js no longer declares FORECASTS")
+	forecasts := regexp.MustCompile(`"([^"]+)"`).FindAllStringSubmatch(list[1], -1)
+	require.NotEmpty(t, forecasts)
+	for _, forecast := range forecasts {
+		assert.Contains(t, page, `id="i-`+forecast[1]+`"`)
+	}
 }
 
 func TestTheAmountIsShownInGNOT(t *testing.T) {
