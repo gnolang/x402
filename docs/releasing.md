@@ -5,10 +5,11 @@ Three components, three independent version lines. Releasing one does not touch 
 | Component | Tag | Produces |
 |---|---|---|
 | `facilitator` | `vX.Y.Z` | archives + GitHub release + `ghcr.io/gnoverse/gnofacilitator`, attested. Also the Go module version. |
-| `client` | `client/vX.Y.Z` | `@gnoverse/x402-gno` on npm, with provenance |
+| `client` | `client/vX.Y.Z` | `@gnoverse/x402-gno` on npm, with provenance when the workflow publishes it |
 | `weather` | `weather/vX.Y.Z` | `ghcr.io/gnoverse/x402-weather`, the demo seller's image for amd64 and arm64, attested; `latest` follows plain releases only |
 
-All three run from the manual `release.yml` workflow. Nothing releases on push or merge.
+All three run from the manual `release.yml` workflow, except the client while npm/cli#9969 is open
+(see [Credentials](#credentials)). Nothing releases on push or merge.
 
 ## Release the facilitator
 
@@ -17,6 +18,9 @@ gh workflow run release.yml --ref main -f component=facilitator -f version=0.2.0
 ```
 
 ## Release the client
+
+Until [npm/cli#9969](https://github.com/npm/cli/issues/9969) is fixed the dispatch fails at
+publish: release by hand as described under [Credentials](#credentials).
 
 The published version comes from `package.json`. Bump it first, in its own PR:
 
@@ -56,8 +60,9 @@ locally.
 
 ## If a release fails
 
-- **client** — publish runs before the tag, so a failed publish leaves nothing; re-dispatch.
-  A published version with no tag is fixed by tagging the commit it was published from:
+- **client** — publish runs before the tag, so a failed publish leaves nothing; re-dispatch, or
+  publish by hand while npm/cli#9969 is open. A published version with no tag is fixed by tagging
+  the commit it was published from:
   `git tag -a client/vX.Y.Z -m "Release client/vX.Y.Z" <sha> && git push origin client/vX.Y.Z`.
 - **facilitator** — the tag is pushed before goreleaser, so a failure can leave the tag, and
   possibly a release and image, in place. Delete the GitHub release if one exists and cut the
@@ -79,9 +84,16 @@ A matching trusted publisher can still fail the same way. GitHub repositories cr
 2026-07-15 send OIDC tokens with an immutable subject claim, and npm's token exchange rejects them
 as `package not found` ([npm/cli#9969](https://github.com/npm/cli/issues/9969), open). This
 repository is one, and that is the likely cause of its client publish failing with `E404` on the
-`PUT`. When the publish fails, the job's last step prints npm's `oidc` log lines, which npm
-otherwise hides.
+`PUT`. When the publish fails, the `Show npm's OIDC exchange` step prints npm's `oidc` log lines,
+which npm otherwise hides.
 
-Until npm fixes it, release the client by hand: bump `package.json` in its own PR and merge it,
-then run `npm ci && npm publish --access public` on `main`, and push `client/vX.Y.Z` on that
-commit. A version published by hand carries no provenance.
+Until npm fixes it, an owner of `@gnoverse/x402-gno`, logged in with `npm login`, releases the
+client by hand:
+
+1. Bump `package.json` in its own PR and merge it.
+2. Once CI passes on the merge commit, run `npm ci && npm publish --access public` from a clean
+   checkout of it. npm asks for a 2FA code. `prepublishOnly` builds; the tests are CI's.
+3. Push `client/vX.Y.Z` on that commit:
+   `git tag -a client/vX.Y.Z -m "Release client/vX.Y.Z" <sha> && git push origin client/vX.Y.Z`.
+
+A version published by hand carries no provenance.
