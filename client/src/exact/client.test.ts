@@ -254,14 +254,13 @@ describe("ExactGnoScheme payment", () => {
 
   // A request dropped before anything is signed loses nothing, so the payment
   // survives the node failing to answer its first reads.
-  it("signs through reads that got no answer the first time", async () => {
-    const dropped = () => Object.assign(new Error("socket hang up"), { isAxiosError: true });
+  it("signs through reads that failed the first time", async () => {
     class Lossy extends FakeProvider {
       private answered = new Set<string>();
       private once<T>(name: string, read: () => Promise<T>): Promise<T> {
         if (!this.answered.has(name)) {
           this.answered.add(name);
-          return Promise.reject(dropped());
+          return Promise.reject(new Error("socket hang up"));
         }
         return read();
       }

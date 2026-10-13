@@ -1,6 +1,11 @@
 // How the client mechanism reads the chain before it signs: each read bounded in
-// time, and read again when no answer came back. Nothing is signed yet, so a
-// repeated read costs nothing; once a payment exists, nothing here applies.
+// time, and made again when it fails. Nothing is signed yet, so a repeated read
+// costs nothing; once a payment exists, nothing here applies.
+//
+// Every failure is read again, the chain's own answers included. What the
+// provider throws when no answer came back is decided by the HTTP stack beneath
+// it, which differs between Node and a browser and is not part of its API, while
+// a refusal asked three times is still thrown, a second and a half later.
 
 export type ChainReadOptions = {
   /** Reads in total, the first included. */
@@ -12,27 +17,13 @@ export type ChainReadOptions = {
 };
 
 // A node that never answers fails the payment in about half a minute.
-const DEFAULTS: ChainReadOptions = { attempts: 3, timeoutMs: 10_000, backoffMs: 500 };
+const DEFAULTS = { attempts: 3, timeoutMs: 10_000, backoffMs: 500 } as const satisfies ChainReadOptions;
 
 class Unanswered extends Error {}
 
-// Whether err means the request got no answer, as opposed to the chain's own
-// answer. tm2-js-client's provider sends every RPC through axios, which marks
-// its errors and attaches a response only when one came back.
-function gotNoAnswer(err: unknown): boolean {
-  if (err instanceof Unanswered) {
-    return true;
-  }
-  if (typeof err !== "object" || err === null || !("isAxiosError" in err) || err.isAxiosError !== true) {
-    return false;
-  }
-  if (!("response" in err) || err.response === undefined || err.response === null) {
-    return true;
-  }
-  const { response } = err;
-  return typeof response === "object" && "status" in response && typeof response.status === "number" && response.status >= 500;
-}
-
+// Stops waiting for pending after ms. It does not cancel the request: the
+// provider takes no abort signal, so an abandoned request runs on until the node
+// or the operating system closes it.
 function withTimeout<T>(pending: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -42,9 +33,8 @@ function withTimeout<T>(pending: Promise<T>, ms: number): Promise<T> {
 }
 
 /**
- * Returns what read resolves to, reading again when a read times out or its
- * request got no answer, up to options.attempts reads. The chain's own answer,
- * such as an account it has never seen, is thrown at once.
+ * Returns what read resolves to, reading again when a read fails or times out,
+ * up to options.attempts reads, and throws the last failure.
  */
 export async function readChain<T>(read: () => Promise<T>, options: ChainReadOptions = DEFAULTS): Promise<T> {
   let lastError: unknown;
@@ -52,9 +42,6 @@ export async function readChain<T>(read: () => Promise<T>, options: ChainReadOpt
     try {
       return await withTimeout(read(), options.timeoutMs);
     } catch (err) {
-      if (!gotNoAnswer(err)) {
-        throw err;
-      }
       lastError = err;
       if (made < options.attempts) {
         await new Promise((resolve) => setTimeout(resolve, options.backoffMs * made));
