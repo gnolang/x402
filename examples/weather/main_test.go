@@ -327,12 +327,54 @@ func TestThePageHasAnIconForEveryForecastTheScriptDraws(t *testing.T) {
 
 	_, page := browserPage(t, sellerURL)
 
+	for _, forecast := range forecastsThePageDraws(t) {
+		assert.Contains(t, page, `id="i-`+forecast+`"`)
+	}
+}
+
+// forecastsThePageDraws returns the forecasts paywall.js has a dial and an
+// icon for.
+func forecastsThePageDraws(t *testing.T) []string {
+	t.Helper()
 	list := regexp.MustCompile(`const FORECASTS = \[([^\]]*)\]`).FindStringSubmatch(paywallScript)
 	require.NotNil(t, list, "paywall.js no longer declares FORECASTS")
-	forecasts := regexp.MustCompile(`"([^"]+)"`).FindAllStringSubmatch(list[1], -1)
+	var forecasts []string
+	for _, quoted := range regexp.MustCompile(`"([^"]+)"`).FindAllStringSubmatch(list[1], -1) {
+		forecasts = append(forecasts, quoted[1])
+	}
 	require.NotEmpty(t, forecasts)
-	for _, forecast := range forecasts {
-		assert.Contains(t, page, `id="i-`+forecast[1]+`"`)
+	return forecasts
+}
+
+func TestTheSellerServesItsSampleReadingsInTurn(t *testing.T) {
+	serve := rotatingWeather([]reading{
+		{Celsius: 24, Forecast: "sunny", Location: "Paris"},
+		{Celsius: 14, Forecast: "rain", Location: "Paris"},
+	})
+
+	var served []string
+	for range 3 {
+		rec := httptest.NewRecorder()
+		serve(rec, httptest.NewRequest(http.MethodGet, weatherPath, nil))
+		assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+		served = append(served, strings.TrimSpace(rec.Body.String()))
+	}
+
+	assert.Equal(t, []string{
+		`{"celsius":24,"forecast":"sunny","location":"Paris"}`,
+		`{"celsius":14,"forecast":"rain","location":"Paris"}`,
+		`{"celsius":24,"forecast":"sunny","location":"Paris"}`,
+	}, served)
+}
+
+// A reading the page cannot draw shows only as raw JSON, which the sample
+// set exists to avoid.
+func TestEverySampleReadingIsOneThePageDraws(t *testing.T) {
+	drawn := forecastsThePageDraws(t)
+	readings := sampleReadings()
+	require.NotEmpty(t, readings)
+	for _, r := range readings {
+		assert.Contains(t, drawn, r.Forecast)
 	}
 }
 

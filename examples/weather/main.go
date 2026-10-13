@@ -27,6 +27,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -162,7 +163,7 @@ func newServer(addr string, h http.Handler) *http.Server {
 func newSeller(ctx context.Context, cfg sellerConfig) (http.Handler, error) {
 	route := "GET " + weatherPath
 	mux := http.NewServeMux()
-	mux.HandleFunc(route, serveWeather)
+	mux.HandleFunc(route, rotatingWeather(sampleReadings()))
 
 	// Behind a TLS proxy the middleware would name an http:// URL on the
 	// seller's own address, so the 402 names the public one instead.
@@ -285,13 +286,32 @@ func shownAmount(coin std.Coin) (amount, unit string) {
 	return fmt.Sprintf("%d.%s", whole, strings.TrimRight(fmt.Sprintf("%06d", fraction), "0")), "GNOT"
 }
 
-func serveWeather(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"location": "Paris",
-		"forecast": "sunny",
-		"celsius":  24,
-	})
+// reading is the weather resource's body.
+type reading struct {
+	Celsius  int    `json:"celsius"`
+	Forecast string `json:"forecast"`
+	Location string `json:"location"`
+}
+
+// sampleReadings are the made-up readings the seller serves: it is a demo and
+// reads no weather.
+func sampleReadings() []reading {
+	return []reading{
+		{Celsius: 24, Forecast: "sunny", Location: "Paris"},
+		{Celsius: 14, Forecast: "rain", Location: "Paris"},
+		{Celsius: 1, Forecast: "snow", Location: "Paris"},
+	}
+}
+
+// rotatingWeather serves readings in turn, one per request it is handed. Behind
+// the middleware that is one per paid request, a refused settlement included.
+func rotatingWeather(readings []reading) http.HandlerFunc {
+	var served atomic.Uint64
+	return func(w http.ResponseWriter, _ *http.Request) {
+		r := readings[(served.Add(1)-1)%uint64(len(readings))]
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(r)
+	}
 }
 
 // explorerTxURL returns the page that shows one of chainID's transactions once

@@ -1,9 +1,9 @@
 # weather — an HTTP resource that takes gno
 
-The x402 seller example, with gno listed as a way to pay. The resource is weather data, a sample
-reading that is the same on every request: it is not a realm, it makes no contract call, and it
-does not know a chain exists. Everything gno-specific is a network string, one registered scheme
-and the page a browser gets.
+The x402 seller example, with gno listed as a way to pay. The resource is weather data, made up:
+each paid request gets the next of three sample readings for Paris (sunny, rain, snow). It is not a
+realm, it makes no contract call, and it does not know a chain exists. Everything gno-specific is a
+network string, one registered scheme and the page a browser gets.
 
 ```go
 routes := x402http.RoutesConfig{
@@ -43,7 +43,7 @@ directory it names. It refuses to start when something already answers at one of
 `RPC`, `FACILITATOR_LISTEN` and `LISTEN` move the node, the facilitator and the seller.
 The same pieces also run one per terminal: `gnodev`, `make facilitator`, `make run`.
 
-`make pay` prints the payment and the weather it bought:
+`make pay` prints the payment and the reading it bought:
 
 ```text
 buying as g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5, gno's public test1 key; set X402_MNEMONIC to pay from your own account
