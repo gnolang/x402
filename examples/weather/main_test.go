@@ -151,15 +151,10 @@ func payWith(t *testing.T, sellerURL, txB64 string) *http.Response {
 	return paid
 }
 
-// TestABrowserIsToldWhatTheResourceCostsInGno opens the priced route the way a
-// browser does. The middleware answers a browser with an HTML paywall, and its
-// built-in one is a wallet app for EVM and Solana chains that renders nothing
-// for a gno network.
-func TestABrowserIsToldWhatTheResourceCostsInGno(t *testing.T) {
-	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
-	t.Cleanup(gnofacilitator.Close)
-	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
-
+// browserPage opens the priced route the way a browser does and returns the
+// response and the page it carries.
+func browserPage(t *testing.T, sellerURL string) (*http.Response, string) {
+	t.Helper()
 	req, err := http.NewRequest(http.MethodGet, sellerURL+"/weather", nil)
 	require.NoError(t, err)
 	req.Header.Set("Accept", "text/html")
@@ -170,17 +165,112 @@ func TestABrowserIsToldWhatTheResourceCostsInGno(t *testing.T) {
 	t.Cleanup(func() { _ = resp.Body.Close() })
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
+	return resp, string(body)
+}
+
+// TestABrowserIsToldWhatTheResourceCostsInGno opens the priced route the way a
+// browser does. The middleware answers a browser with an HTML paywall, and its
+// built-in one is a wallet app for EVM and Solana chains that renders nothing
+// for a gno network.
+func TestABrowserIsToldWhatTheResourceCostsInGno(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	resp, page := browserPage(t, sellerURL)
 
 	require.Equal(t, http.StatusPaymentRequired, resp.StatusCode)
 	assert.Contains(t, resp.Header.Get("Content-Type"), "text/html")
 	assert.NotEmpty(t, resp.Header.Get("PAYMENT-REQUIRED"), "the terms still travel in the header")
 
-	page := string(body)
 	assert.NotContains(t, page, "window.x402", "the built-in EVM/Solana paywall was served")
+	assert.Contains(t, page, ">0.25<", "the amount a person reads")
+	assert.Contains(t, page, "GNOT")
 	assert.Contains(t, page, "250000ugnot")
 	assert.Contains(t, page, "gno:dev")
 	assert.Contains(t, page, "g1u7y667z64x2h7vc6fmpcprgey4ck233jaww9zq")
-	assert.Contains(t, page, "buy.mjs", "the page names a buyer that can pay it")
+	assert.Contains(t, page, "buy.mjs", "the page names a buyer that can pay it without a wallet")
+	assert.Contains(t, page, "Pay with Adena")
+	assert.Contains(t, page, "Testnet only")
+}
+
+// The page pays through the script the seller inlines, so it must arrive
+// intact: html/template escapes a string it does not know to be JavaScript.
+func TestTheBrowserPageCarriesItsPaymentScriptIntact(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	assert.Contains(t, page, paywallScript)
+}
+
+// The page makes no request beyond the seller: no script, style, font or image
+// from anywhere else. Links are navigation, not requests.
+func TestTheBrowserPageIsSelfContained(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	for _, fetches := range []string{" src=", "<link", "<iframe", "@import", "url("} {
+		assert.NotContains(t, page, fetches)
+	}
+	t.Logf("page: %d bytes", len(page))
+}
+
+func TestTheAmountIsShownInGNOT(t *testing.T) {
+	for coin, want := range map[string][2]string{
+		"250000ugnot":  {"0.25", "GNOT"},
+		"1000000ugnot": {"1", "GNOT"},
+		"1500000ugnot": {"1.5", "GNOT"},
+		"1ugnot":       {"0.000001", "GNOT"},
+		// GNOT is a name for ugnot only; another denomination is shown as is.
+		"500atom": {"500", "atom"},
+	} {
+		t.Run(coin, func(t *testing.T) {
+			amount, unit := shownAmount(std.MustParseCoin(coin))
+			assert.Equal(t, want, [2]string{amount, unit})
+		})
+	}
+}
+
+// Someone who types the host alone lands on the demo. Without a public URL the
+// redirect is relative, so it holds behind a proxy that serves the seller under
+// a path ending in a slash.
+func TestTheRootRedirectsToTheWeather(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+
+	resp, err := client.Get(sellerURL + "/")
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
+	assert.Equal(t, "weather", resp.Header.Get("Location"))
+}
+
+// Behind a proxy that strips a prefix with no trailing slash, a relative
+// Location would leave the prefix, so a seller that knows its public URL
+// redirects to the weather there.
+func TestTheRootRedirectsToThePublicWeather(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL, func(cfg *sellerConfig) {
+		cfg.publicURL = "https://weather.example/demo"
+	})
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+
+	resp, err := client.Get(sellerURL + "/")
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
+	assert.Equal(t, "https://weather.example/demo/weather", resp.Header.Get("Location"))
 }
 
 // TestASellerLogsWhyAPaymentWasRefused pays from an account that cannot cover

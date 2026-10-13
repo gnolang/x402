@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Payment required: Weather data, {{.Amount}} {{.Unit}} on {{.Network}}</title>
+<style>
+:root{
+  --x-bg:#fff;--x-surface:#f0f0f0;--x-line:#e2e2e2;
+  --x-text:#090909;--x-text-2:#585858;--x-muted:#696969;
+  --x-link:#226c57;--x-warn:#7b4807;
+  --x-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+  --x-mono:ui-monospace,Menlo,Consolas,"DejaVu Sans Mono",monospace;
+  --x-r:6px;--x-r-sm:4px;
+  --x-s1:4px;--x-s2:8px;--x-s3:12px;--x-s4:16px;--x-s6:24px;--x-s8:32px;--x-s12:48px;--x-s16:64px;
+  --x-fs-sm:13px;--x-fs:16px;--x-fs-unit:20px;--x-fs-h1:32px;--x-fs-display:42px;
+  --x-t:150ms cubic-bezier(.4,0,.2,1);
+}
+@media (prefers-color-scheme:dark){:root{
+  --x-bg:#0e0e0e;--x-surface:#141414;--x-line:#292929;
+  --x-text:#e2e2e2;--x-text-2:#bdbdbd;--x-muted:#999;
+  --x-link:#60ab96;--x-warn:#facc32;
+}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--x-bg);color:var(--x-text);font:var(--x-fs)/1.5 var(--x-sans);-webkit-font-smoothing:antialiased}
+main{max-width:680px;margin:0 auto;padding:var(--x-s12) var(--x-s4) var(--x-s16)}
+h1,h2{margin:0;line-height:1.2;text-wrap:balance}
+h1{font-size:var(--x-fs-h1);font-weight:700;margin-top:var(--x-s2)}
+h2{font-size:var(--x-fs-unit);font-weight:600;margin-top:var(--x-s12)}
+p{margin:var(--x-s3) 0 0;color:var(--x-text-2);text-wrap:pretty}
+a{color:var(--x-link);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px}
+a:hover{text-decoration-thickness:2px}
+:focus-visible{outline:2px solid var(--x-link);outline-offset:2px}
+code{font-family:var(--x-mono);font-size:.9em}
+pre{position:relative;margin:var(--x-s3) 0 0;padding:var(--x-s4);background:var(--x-surface);border-radius:var(--x-r);color:var(--x-text-2);font:var(--x-fs-sm)/1.5 var(--x-mono);white-space:pre-wrap;overflow-wrap:anywhere}
+pre[data-copy]{padding-right:var(--x-s16)}
+pre code{font-size:inherit}
+.status{margin:0;color:var(--x-muted);font:var(--x-fs-sm)/1.5 var(--x-mono)}
+.lede{font-size:var(--x-fs);margin-top:var(--x-s4)}
+
+.offer{margin:var(--x-s8) 0 0;border-bottom:1px solid var(--x-line)}
+.offer>div{display:grid;grid-template-columns:128px 1fr;gap:var(--x-s2) var(--x-s4);padding:var(--x-s3) 0;border-top:1px solid var(--x-line)}
+.offer dt{color:var(--x-muted);font-size:var(--x-fs-sm);padding-top:2px}
+.offer dd{margin:0;color:var(--x-text-2)}
+.offer .addr{overflow-wrap:anywhere;color:var(--x-text)}
+.offer .fine{color:var(--x-muted);font-size:var(--x-fs-sm)}
+.offer>.amount{padding:var(--x-s4) 0}
+.amount dd{color:var(--x-text)}
+.amount .display{display:block;font-size:var(--x-fs-display);font-weight:700;line-height:1.1;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.amount .unit{font-size:var(--x-fs-unit);font-weight:500;color:var(--x-text-2);margin-left:var(--x-s1)}
+.amount code{display:block;margin-top:var(--x-s1);color:var(--x-muted);font-size:var(--x-fs-sm)}
+@media (max-width:479px){.offer>div{grid-template-columns:1fr;gap:var(--x-s1)}}
+
+.pay{margin-top:var(--x-s6)}
+.pay button{padding:var(--x-s3) var(--x-s6);border:0;border-radius:var(--x-r);background:var(--x-text);color:var(--x-bg);font:600 var(--x-fs)/1.25 var(--x-sans);cursor:pointer}
+.pay button:disabled{opacity:.6;cursor:progress}
+#pay-status{overflow-wrap:anywhere}
+#pay-status:empty{display:none}
+
+details{margin-top:var(--x-s6)}
+summary{cursor:pointer;color:var(--x-link);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;width:fit-content}
+summary::marker{color:var(--x-muted)}
+
+.flow{margin:var(--x-s4) 0 0;padding:0;list-style:none}
+.flow li{display:grid;grid-template-columns:72px 1fr;gap:var(--x-s4);padding:var(--x-s3) 0;border-top:1px solid var(--x-line);color:var(--x-text-2)}
+.flow li:last-child{border-bottom:1px solid var(--x-line)}
+.flow code{color:var(--x-text);font-size:var(--x-fs-sm);padding-top:2px}
+.flow b{color:var(--x-text);font-weight:600}
+@media (max-width:479px){.flow li{grid-template-columns:1fr;gap:var(--x-s1)}}
+
+.warn{color:var(--x-warn)}
+footer{margin-top:var(--x-s12);padding-top:var(--x-s4);border-top:1px solid var(--x-line);color:var(--x-muted);font-size:var(--x-fs-sm)}
+footer p{margin:0;color:inherit}
+footer p+p{margin-top:var(--x-s1)}
+
+.copy{position:absolute;top:var(--x-s2);right:var(--x-s2);padding:var(--x-s1) var(--x-s2);border:1px solid var(--x-line);border-radius:var(--x-r-sm);background:var(--x-bg);color:var(--x-text-2);font:12px/1.4 var(--x-sans);cursor:pointer;transition:color var(--x-t),border-color var(--x-t)}
+.copy:hover{color:var(--x-text);border-color:var(--x-muted)}
+@media (prefers-reduced-motion:reduce){.copy{transition:none}}
+</style>
+
+<main>
+  <p class="status">HTTP/1.1 402 Payment Required</p>
+  <h1>Weather data costs {{.Amount}} {{.Unit}} per request.</h1>
+  <p class="lede">You asked for a priced resource without paying, so the terms came back instead of the weather. The seller is the example on <a href="https://www.x402.org">x402.org</a>'s front page, with <a href="https://gno.land">gno.land</a> listed as a way to pay.</p>
+
+  <dl class="offer">
+    <div class="amount">
+      <dt>Amount</dt>
+      <dd><strong class="display">{{.Amount}}<span class="unit">{{.Unit}}</span></strong><code>{{.Coin}}</code></dd>
+    </div>
+    <div>
+      <dt>Network</dt>
+      <dd><code>{{.Network}}</code> <span class="fine">chain id {{.ChainID}}</span></dd>
+    </div>
+    <div>
+      <dt>Pay to</dt>
+      <dd><code class="addr">{{.PayTo}}</code></dd>
+    </div>
+    <div>
+      <dt>Scheme</dt>
+      <dd><code>exact</code>, flow <code>authorization</code>: the payment is checked before the weather is produced and taken after.</dd>
+    </div>
+    <div>
+      <dt>Network fee</dt>
+      <dd>Paid by the payer, on top of the amount. <span class="fine"><code>areFeesSponsored: false</code></span></dd>
+    </div>
+  </dl>
+
+  <section id="pay-adena" class="pay" hidden>
+    <button id="pay" type="button">Pay with Adena</button>
+    <p id="pay-status" role="status"></p>
+    <pre id="pay-result" hidden><code></code></pre>
+  </section>
+  <p id="no-adena" class="pay">To pay from this page, open it in a browser with the <a href="https://adena.app">Adena</a> wallet and an account funded on <code>{{.Network}}</code> (<a href="https://faucet.gno.land">faucet.gno.land</a> funds the public testnets).</p>
+
+  <details id="terms">
+    <summary>The <code>PAYMENT-REQUIRED</code> header, decoded</summary>
+    <pre><code id="terms-json">Opening this reads it from the seller. Without JavaScript:
+curl -si <span data-url>&lt;this page's URL&gt;</span></code></pre>
+  </details>
+
+  <h2>Pay it from a script</h2>
+  <p>An x402 client reads the terms, signs a transfer of the amount to the payee (a gno bank send), and repeats the request with the payment attached. <code>buy.mjs</code>, beside this seller in the repository, is one such client:</p>
+  <pre data-copy><code>node buy.mjs <span data-url>&lt;this page's URL&gt;</span></code></pre>
+  <p>It needs <code>make js</code> run once at the repository root, <code>X402_MNEMONIC</code> set to the mnemonic of an account funded on <code>{{.Network}}</code>, and <code>X402_GNO_RPC</code> set to a node to read its sequence from.</p>
+  <p>A stock x402 client pays in gno after two lines: register the scheme, and admit <code>ugnot</code> (a millionth of a GNOT) to its spend controls, capped per request.</p>
+  <pre data-copy><code>import { ExactGnoScheme } from "@gnoverse/x402-gno/exact/client";
+
+const client = new x402Client()
+  .register("gno:*", new ExactGnoScheme(wallet))
+  .setSpendControls({
+    allowedAssets: [{ network: "gno:*", asset: "ugnot", maxAmountPerPayment: "1000000" }],
+  });</code></pre>
+
+  <h2>What happens when it pays</h2>
+  <ol class="flow">
+    <li><code>402</code><div><b>The unpaid request.</b> <code>GET /weather</code> answers 402 with the terms above in <code>PAYMENT-REQUIRED</code>.</div></li>
+    <li><code>sign</code><div><b>The buyer signs.</b> A bank send of {{.Coin}} to the payee, signed by the buyer's wallet or key and placed in <code>PAYMENT-SIGNATURE</code>. Nothing is broadcast yet.</div></li>
+    <li><code>retry</code><div><b>The same request, paid.</b> The seller hands the signed transaction to its facilitator, which checks it against the terms. Only then does the weather get produced.</div></li>
+    <li><code>200</code><div><b>Settled, then served.</b> The facilitator broadcasts the transaction, then the weather goes out and <code>PAYMENT-RESPONSE</code> carries the transaction hash. A resource that fails is never charged; a settlement that fails withholds the response.</div></li>
+  </ol>
+
+  <h2>Read more</h2>
+  <p>The seller, the buyer and a facilitator you can run yourself are in <a href="https://github.com/gnoverse/x402/tree/main/examples/weather">examples/weather</a>. The mechanism and its payment model are in the <a href="https://github.com/gnoverse/x402#readme">gnoverse/x402 README</a>; the protocol is at <a href="https://www.x402.org">x402.org</a>.</p>
+  <p class="warn">Testnet only. The mechanism is unaudited and pre-release; do not point it at real funds.</p>
+
+  <footer>
+    <p>x402 v2, scheme <code>exact</code>, network <code>{{.Network}}</code>.</p>
+  </footer>
+</main>
+
+<script type="module">
+{{.Script}}
+start(document, window);
+</script>
+</html>

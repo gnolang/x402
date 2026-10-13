@@ -128,8 +128,12 @@ the facilitator holds no key. The mechanism sets it, so no seller writes it. The
 `paymentFlow` key because the flow is `authorization`, the specification's default, which may be
 omitted.
 
-A browser gets an HTML page naming the price, the network and the payee, which `main.go` builds.
-The middleware's own paywall supports EVM and Solana chains only.
+A browser gets a page instead (`paywall.html`): the price in GNOT, the network, the payee and how
+to pay. The middleware's own paywall supports EVM and Solana chains only. In a browser with the
+[Adena](https://adena.app) wallet, a visitor pays from the page. `paywall.js` works as a stock x402
+client does: it reads the terms, has Adena sign the bank send without broadcasting it, and repeats
+the request with the payment. Without Adena, or without JavaScript, the page still names everything needed to pay
+from a script. `/` redirects to `/weather`.
 
 ## Paying it
 
