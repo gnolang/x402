@@ -17,6 +17,13 @@ All three run from the manual `release.yml` workflow, except the client while np
 gh workflow run release.yml --ref main -f component=facilitator -f version=0.2.0
 ```
 
+The run has two jobs. `facilitator-test` holds a read-only token and runs `go test ./...` and the
+e2e, after `npm ci` installs exactly the lockfile. Only when it passes does `facilitator` start:
+it validates the version, builds the release as a snapshot, pushes the tag, publishes and attests.
+The tests run code from every Go and npm dependency, install scripts included, so they never run
+in the job that can push to the repository and to ghcr.io and mint OIDC tokens. That job restores
+no Actions cache either, because the jobs that run dependency code write it.
+
 ## Release the client
 
 Until [npm/cli#9969](https://github.com/npm/cli/issues/9969) is fixed the dispatch fails at
@@ -66,10 +73,10 @@ locally.
   `git tag -a client/vX.Y.Z -m "Release client/vX.Y.Z" <sha> && git push origin client/vX.Y.Z`.
 - **facilitator** — the tag is pushed before goreleaser, so a failure can leave the tag, and
   possibly a release and image, in place. Delete the GitHub release if one exists and cut the
-  next patch number. The job builds the release as a snapshot before pushing the tag, so a
-  build that cannot succeed stops there. What can still fail after the tag is goreleaser's
-  changelog and publish (the GitHub release, the multi-arch image and its SBOM), then the
-  attestation steps.
+  next patch number. A failed `facilitator-test` stops the run before anything is pushed. The
+  `facilitator` job builds the release as a snapshot before pushing the tag, so a build that
+  cannot succeed stops there. What can still fail after the tag is goreleaser's changelog and
+  publish (the GitHub release, the multi-arch image and its SBOM), then the attestation steps.
 - **weather** — the image is pushed before the tag, so a failure before the tag leaves at most
   an image under that version, and under `latest` for a plain release, which a re-dispatch
   overwrites. An image with no tag is fixed by tagging the commit it was built from:
