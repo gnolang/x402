@@ -82,14 +82,20 @@ const body = await paid.text();
 if (!paid.ok) {
   // A verify refusal carries its reason in the challenge, a settle failure in the
   // receipt.
-  const receipt = paid.headers.get("PAYMENT-RESPONSE");
+  const receiptHeader = paid.headers.get("PAYMENT-RESPONSE");
   const challenge = paid.headers.get("PAYMENT-REQUIRED");
-  const reason = (
-    (receipt && decodePaymentResponseHeader(receipt).errorReason) ||
-    (challenge && decodePaymentRequiredHeader(challenge).error) ||
-    ""
-  ).trim();
-  console.log(`not paid (status ${paid.status})${reason ? `: ${reason}` : ""}`);
+  const receipt = receiptHeader ? decodePaymentResponseHeader(receiptHeader) : {};
+  const reason = (receipt.errorReason || (challenge && decodePaymentRequiredHeader(challenge).error) || "").trim();
+  if (receipt.transaction) {
+    // The chain admitted the payment and has not executed it yet: the weather is
+    // withheld, but the payment may still go through, and the hash is how to
+    // find out.
+    console.log(
+      `not confirmed yet: tx ${receipt.transaction}${reason ? ` (${reason})` : ""}; the weather was withheld, and the payment may still go through`,
+    );
+  } else {
+    console.log(`not paid (status ${paid.status})${reason ? `: ${reason}` : ""}`);
+  }
   process.exit(1);
 }
 
