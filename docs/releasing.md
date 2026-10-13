@@ -66,8 +66,10 @@ locally.
   `git tag -a client/vX.Y.Z -m "Release client/vX.Y.Z" <sha> && git push origin client/vX.Y.Z`.
 - **facilitator** — the tag is pushed before goreleaser, so a failure can leave the tag, and
   possibly a release and image, in place. Delete the GitHub release if one exists and cut the
-  next patch number. The job builds the whole release as a snapshot before pushing the tag, so
-  a build that cannot succeed stops there, and what remains is a publish that fails.
+  next patch number. The job builds the release as a snapshot before pushing the tag, so a
+  build that cannot succeed stops there. What can still fail after the tag is goreleaser's
+  changelog and publish (the GitHub release, the multi-arch image and its SBOM), then the
+  attestation steps.
 - **weather** — the image is pushed before the tag, so a failure before the tag leaves at most
   an image under that version, and under `latest` for a plain release, which a re-dispatch
   overwrites. An image with no tag is fixed by tagging the commit it was built from:
