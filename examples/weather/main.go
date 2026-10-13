@@ -12,6 +12,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -94,7 +95,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	seller, err := newSeller(sellerConfig{
+	seller, err := newSeller(context.Background(), sellerConfig{
 		facilitatorURL: *facilitator,
 		network:        *network,
 		payTo:          *payTo,
@@ -142,10 +143,11 @@ func newServer(addr string, h http.Handler) *http.Server {
 }
 
 // newSeller returns the weather resource behind the x402 middleware, behind a
-// rate limit. It asks the facilitator what it supports before returning: an
-// unreachable facilitator is warned about and asked again in the background
-// until it answers, and one without exact on cfg.network exits the process.
-func newSeller(cfg sellerConfig) (http.Handler, error) {
+// rate limit. It asks the facilitator what it supports before returning: a
+// facilitator it cannot reach then is warned about and asked again in the
+// background, until it serves exact on cfg.network or ctx ends. Only one
+// reachable then without exact on cfg.network exits the process.
+func newSeller(ctx context.Context, cfg sellerConfig) (http.Handler, error) {
 	route := "GET " + weatherPath
 	mux := http.NewServeMux()
 	mux.HandleFunc(route, serveWeather)
@@ -187,8 +189,9 @@ func newSeller(cfg sellerConfig) (http.Handler, error) {
 		},
 	}
 
+	facilitator := x402http.NewHTTPFacilitatorClient(&x402http.FacilitatorConfig{URL: cfg.facilitatorURL})
 	server := x402.Newx402ResourceServer(
-		x402.WithFacilitatorClient(x402http.NewHTTPFacilitatorClient(&x402http.FacilitatorConfig{URL: cfg.facilitatorURL})),
+		x402.WithFacilitatorClient(facilitator),
 
 		// The middleware answers a payment the facilitator refuses with a 402 and
 		// calls no handler for it, so this hook is the only place a seller learns of
@@ -222,7 +225,7 @@ func newSeller(cfg sellerConfig) (http.Handler, error) {
 			w.WriteHeader(http.StatusPaymentRequired)
 		}),
 	)(mux)
-	keepSyncing(server, x402.Network(cfg.network), paymentScheme, cfg.log)
+	keepSyncing(ctx, server, facilitator, cfg)
 
 	// The limit runs before the middleware, so a refused request costs the
 	// facilitator nothing.
