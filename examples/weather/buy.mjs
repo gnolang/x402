@@ -86,15 +86,18 @@ if (!paid.ok) {
   const challenge = paid.headers.get("PAYMENT-REQUIRED");
   const receipt = receiptHeader ? decodePaymentResponseHeader(receiptHeader) : {};
   const reason = (receipt.errorReason || (challenge && decodePaymentRequiredHeader(challenge).error) || "").trim();
-  if (receipt.transaction) {
+  if (receipt.errorReason === "settlement_pending") {
     // The chain admitted the payment and has not executed it yet: the weather is
     // withheld, but the payment may still go through, and the hash is how to
     // find out.
     console.log(
-      `not confirmed yet: tx ${receipt.transaction}${reason ? ` (${reason})` : ""}; the weather was withheld, and the payment may still go through`,
+      `not confirmed yet: tx ${receipt.transaction} (${reason}); the weather was withheld, and the payment may still go through`,
     );
   } else {
-    console.log(`not paid (status ${paid.status})${reason ? `: ${reason}` : ""}`);
+    // A refusal may name a transaction as well, such as one a block executed
+    // and aborted, which still charged the network fee.
+    const tx = receipt.transaction ? `; tx ${receipt.transaction}` : "";
+    console.log(`not paid (status ${paid.status})${reason ? `: ${reason}` : ""}${tx}`);
   }
   process.exit(1);
 }
