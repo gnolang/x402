@@ -332,6 +332,13 @@ jobs:
             exit 1
           fi
           tag="weather/v$version"
+          # The image is pushed before the tag, so a name git refuses, such as
+          # 0.2.0-rc..1, must stop here rather than at git tag.
+          if ! git check-ref-format "refs/tags/${tag}"; then
+            echo "::error::invalid version: weather/v… is not a valid tag name for:"
+            printf '%s\n' "$RAW_VERSION"
+            exit 1
+          fi
           if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
             # Safe to suggest here, unlike the facilitator: weather/v… is not a Go
             # module version, so deleting and re-cutting it breaks nothing.
@@ -353,6 +360,10 @@ jobs:
       # No QEMU: the Dockerfile cross-compiles on the runner and the final stage
       # runs nothing, so neither platform is emulated.
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        with:
+          # The BuildKit that builds the image, which buildx otherwise pulls by a
+          # floating tag, in a job that can push to ghcr.io and mint attestations.
+          driver-opts: image=moby/buildkit:buildx-stable-1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
       - name: Log in to ghcr.io
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -388,6 +399,9 @@ jobs:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+          # A storage record needs artifact-metadata: write, which the job does
+          # not hold; the attestation itself does not need one.
+          create-storage-record: false
 
       # After the image: both are reversible, but a tag with no image behind it
       # names a release that does not exist, while an image with no tag is fixed

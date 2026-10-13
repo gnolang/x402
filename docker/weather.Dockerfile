@@ -17,8 +17,6 @@
 # The compiler runs on the build host and cross-compiles, so a multi-platform
 # build never emulates the Go toolchain.
 FROM --platform=$BUILDPLATFORM golang:1.26.5@sha256:705e964a93a2fd2e75c7d59bb7d781b57e30f12293ffde5175c69229e18fb678 AS build
-ARG TARGETOS
-ARG TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -27,6 +25,9 @@ RUN go mod download
 COPY facilitator/ facilitator/
 COPY server/ server/
 COPY examples/weather/ examples/weather/
+# Declared after the download, so both platforms share its layer.
+ARG TARGETOS
+ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags="-s -w" -o /out/weather ./examples/weather
 
