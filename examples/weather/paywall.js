@@ -11,6 +11,10 @@ const NETWORK_PREFIX = "gno:";
 const DENOMINATION = /^[a-z/][a-z0-9_.:/-]{2,273}$/;
 const AMOUNT = /^[1-9][0-9]*$/;
 
+// The longest memo a payment may carry, in UTF-8 bytes, as the facilitator
+// counts it.
+const MAX_MEMO_BYTES = 256;
+
 /** Encodes value as an x402 header carries it: base64 of its JSON, UTF-8. */
 export function encodeHeader(value) {
   const bytes = new TextEncoder().encode(JSON.stringify(value));
@@ -39,8 +43,14 @@ export async function readTerms(fetchFn, url) {
   return decodeHeader(header);
 }
 
-// The gno entry of the offer, checked the way the client mechanism checks it
-// before anything is signed.
+// firstText returns the first of values that is a non-empty string, or "".
+function firstText(...values) {
+  return values.find((v) => typeof v === "string" && v !== "") ?? "";
+}
+
+// The gno entry of the offer and the memo its payment carries, checked the way
+// the client mechanism checks them before anything is signed. A key of extra
+// set to null names nothing, as upstream's SDKs read it.
 function gnoOffer(terms) {
   const accepted = (terms.accepts ?? []).find(
     (a) => a.scheme === "exact" && typeof a.network === "string" && a.network.startsWith(NETWORK_PREFIX),
@@ -54,7 +64,26 @@ function gnoOffer(terms) {
   if (typeof accepted.payTo !== "string" || accepted.payTo === "") {
     throw new Error("the offer names no payee");
   }
-  return accepted;
+  const method = accepted.extra?.assetTransferMethod;
+  if (method !== undefined && method !== null && method !== "bank-send") {
+    throw new Error(`the offer pays by ${String(method)}, not by a bank send`);
+  }
+  const flow = accepted.extra?.paymentFlow;
+  if (flow !== undefined && flow !== null && flow !== "authorization") {
+    throw new Error(`the offer's payment flow is ${String(flow)}, not authorization`);
+  }
+  const memo = accepted.extra?.memo;
+  if (memo === undefined) {
+    return { accepted, memo: "" };
+  }
+  if (typeof memo !== "string") {
+    throw new Error(`the offer's memo is a ${typeof memo}, not text`);
+  }
+  const bytes = new TextEncoder().encode(memo).length;
+  if (bytes > MAX_MEMO_BYTES) {
+    throw new Error(`the offer's memo is ${bytes} bytes, over the ${MAX_MEMO_BYTES} a payment can carry`);
+  }
+  return { accepted, memo };
 }
 
 // Adena answers ALREADY_CONNECTED and REDUNDANT_CHANGE_REQUEST as failures
@@ -63,7 +92,8 @@ function expectSuccess(response, alsoFine = []) {
   if (response?.status === "success" || alsoFine.includes(response?.type)) {
     return response.data;
   }
-  throw new Error(`Adena: ${response?.message || response?.type || "no answer"}`);
+  const said = firstText(response?.message, response?.type);
+  throw new Error(`Adena: ${said === "" ? "no answer" : said}`);
 }
 
 /**
@@ -78,7 +108,7 @@ function expectSuccess(response, alsoFine = []) {
 export async function payWithAdena({ adena, fetch: fetchFn, url, report = () => {} }) {
   report("Reading the terms…");
   const terms = await readTerms(fetchFn, url);
-  const accepted = gnoOffer(terms);
+  const { accepted, memo } = gnoOffer(terms);
   const chainId = accepted.network.slice(NETWORK_PREFIX.length);
 
   report("Connecting to Adena…");
@@ -95,7 +125,6 @@ export async function payWithAdena({ adena, fetch: fetchFn, url, report = () => 
   const account = expectSuccess(await adena.GetAccount());
 
   report("Confirm the payment in Adena…");
-  const memo = typeof accepted.extra?.memo === "string" ? accepted.extra.memo : "";
   const signed = expectSuccess(
     await adena.SignTx({
       messages: [
@@ -140,7 +169,7 @@ export async function payWithAdena({ adena, fetch: fetchFn, url, report = () => 
     status: response.status,
     body,
     transaction: receipt.transaction ?? "",
-    reason: receipt.errorReason || challenge.error || "",
+    reason: firstText(receipt.errorReason, challenge.error),
   };
 }
 
@@ -176,8 +205,12 @@ export function start(document, window) {
       button.className = "copy";
       button.textContent = "Copy";
       button.addEventListener("click", async () => {
-        await window.navigator.clipboard.writeText(pre.querySelector("code").innerText);
-        button.textContent = "Copied";
+        try {
+          await window.navigator.clipboard.writeText(pre.querySelector("code").innerText);
+          button.textContent = "Copied";
+        } catch {
+          button.textContent = "Copy failed";
+        }
         window.setTimeout(() => (button.textContent = "Copy"), 1500);
       });
       pre.append(button);

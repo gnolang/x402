@@ -217,6 +217,49 @@ describe("payWithAdena", () => {
     }
   });
 
+  // The client mechanism refuses these offers before signing; the page pays the
+  // same offers it does.
+  it("refuses an offer it would sign a different payment for", async () => {
+    for (const extra of [
+      { assetTransferMethod: "permit2" },
+      { paymentFlow: "settlement" },
+      { memo: 42 },
+      { memo: "é".repeat(129) },
+    ]) {
+      const adena = fakeAdena();
+
+      await expect(
+        payWithAdena({ adena, fetch: fakeSeller(terms(offer(extra)), settled), url: URL }),
+      ).rejects.toThrow();
+      expect(adena.SignTx).not.toHaveBeenCalled();
+    }
+  });
+
+  it("pays an offer that names the method, the flow and a memo of 256 bytes", async () => {
+    const adena = fakeAdena();
+    const accepted = offer({ assetTransferMethod: "bank-send", paymentFlow: "authorization", memo: "é".repeat(128) });
+
+    const result = await payWithAdena({ adena, fetch: fakeSeller(terms(accepted), settled), url: URL });
+
+    expect(result.paid).toBe(true);
+  });
+
+  it("signs nothing when the switch to the offer's chain is declined", async () => {
+    const adena = fakeAdena({ chainId: "dev" });
+    adena.SwitchNetwork.mockResolvedValue({
+      code: 4000,
+      status: "failure",
+      type: "SWITCH_NETWORK_REJECTED",
+      message: "User rejected",
+      data: null,
+    });
+
+    await expect(payWithAdena({ adena, fetch: fakeSeller(terms(), settled), url: URL })).rejects.toThrow(
+      /User rejected/,
+    );
+    expect(adena.SignTx).not.toHaveBeenCalled();
+  });
+
   it("asks for the terms as JSON, so the seller answers with the header rather than this page", async () => {
     const seller = fakeSeller(terms(), settled);
 
@@ -259,6 +302,22 @@ describe("payWithAdena, again", () => {
     const result = await payWithAdena({ adena: fakeAdena(), fetch: fakeSeller(terms(), failed), url: URL });
 
     expect(result).toMatchObject({ paid: false, reason: "invalid_exact_gno_transaction_failed" });
+  });
+
+  // The seller withholds the weather and passes on the hash, the only way to
+  // find out whether the payment still goes through.
+  it("keeps the hash of a settlement still pending", async () => {
+    const pending = () =>
+      new Response("", {
+        status: 402,
+        headers: {
+          "PAYMENT-RESPONSE": encodeHeader({ success: false, errorReason: "settlement_pending", transaction: TX_HASH }),
+        },
+      });
+
+    const result = await payWithAdena({ adena: fakeAdena(), fetch: fakeSeller(terms(), pending), url: URL });
+
+    expect(result).toMatchObject({ paid: false, transaction: TX_HASH, reason: "settlement_pending" });
   });
 
   // The node may have admitted the payment before the connection dropped, so
@@ -304,9 +363,24 @@ describe("statusLine", () => {
   });
 });
 
-// The parts of the page start() touches, and nothing else.
+// The parts of the page start() touches, and nothing else. Each element keeps
+// the listener start() gives it, so a test can click.
 function fakePage() {
-  const element = (hidden = false) => ({ hidden, textContent: "", disabled: false, addEventListener() {} });
+  const element = (hidden = false) => {
+    const listeners = {};
+    const code = { textContent: "", innerText: "" };
+    return {
+      hidden,
+      textContent: "",
+      disabled: false,
+      listeners,
+      addEventListener(type, fn) {
+        listeners[type] = fn;
+      },
+      querySelector: () => code,
+      append() {},
+    };
+  };
   const elements = {
     "pay-adena": element(true),
     "no-adena": element(),
@@ -316,9 +390,16 @@ function fakePage() {
     terms: element(),
     "terms-json": element(),
   };
+  const copyable = element();
+  const made = [];
   const document = {
     getElementById: (id) => elements[id],
-    querySelectorAll: () => [],
+    querySelectorAll: (selector) => (selector === "pre[data-copy]" ? [copyable] : []),
+    createElement: () => {
+      const e = element();
+      made.push(e);
+      return e;
+    },
   };
   const window = {
     location: { href: URL },
@@ -329,7 +410,7 @@ function fakePage() {
     clearInterval,
     addEventListener() {},
   };
-  return { document, window, elements };
+  return { document, window, elements, made };
 }
 
 describe("start", () => {
@@ -350,6 +431,48 @@ describe("start", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("start, paying", () => {
+  it("pays on a click, shows the weather and the transaction, and frees the button", async () => {
+    const { document, window, elements } = fakePage();
+    window.adena = fakeAdena();
+    window.fetch = fakeSeller(terms(), settled);
+    start(document, window);
+
+    await elements.pay.listeners.click();
+
+    expect(elements["pay-status"].textContent).toBe(`Paid. Transaction ${TX_HASH}.`);
+    expect(elements["pay-result"].hidden).toBe(false);
+    expect(elements["pay-result"].querySelector("code").textContent).toContain("sunny");
+    expect(elements.pay.disabled).toBe(false);
+  });
+
+  it("says why a click paid nothing, and frees the button", async () => {
+    const { document, window, elements } = fakePage();
+    window.adena = fakeAdena({
+      sign: { code: 4001, status: "failure", type: "TRANSACTION_REJECTED", message: "User rejected", data: null },
+    });
+    window.fetch = fakeSeller(terms(), settled);
+    start(document, window);
+
+    await elements.pay.listeners.click();
+
+    expect(elements["pay-status"].textContent).toBe("Adena: User rejected");
+    expect(elements["pay-result"].hidden).toBe(true);
+    expect(elements.pay.disabled).toBe(false);
+  });
+
+  it("says a copy failed rather than leaving the button silent", async () => {
+    const { document, window, made } = fakePage();
+    window.navigator.clipboard = { writeText: vi.fn(async () => Promise.reject(new Error("denied"))) };
+    start(document, window);
+    const [copy] = made;
+
+    await copy.listeners.click();
+
+    expect(copy.textContent).toBe("Copy failed");
   });
 });
 
