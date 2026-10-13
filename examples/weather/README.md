@@ -93,7 +93,8 @@ Behind a TLS proxy, set `-public-url https://<host>`: without it, every 402 name
 `-rate-burst` (5 and 10 by default), and answers 429 past it before the payment is checked. It is a
 backstop: throttle each client at the proxy, the only place that knows a client's address.
 SIGINT or SIGTERM stops it after the requests in flight finish, for up to 70 s, the longest a paid
-request may run; give a deployment a stop grace period above that.
+request may run; give a deployment a stop grace period above that. A clean stop exits 0 and a drain
+that runs out exits 1. A second signal during the drain is ignored; SIGKILL ends it at once.
 
 ## What you get
 
