@@ -79,8 +79,8 @@ func writableGnoRoot(t *testing.T) {
 	t.Setenv("GNOROOT", mirror)
 }
 
-// gnoRootMirror makes the mirror once per process. gno caches the stdlib it
-// loads process-wide, keyed by the directory it loaded it from, so a second
+// gnoRootMirror makes the mirror once per process. gno loads the stdlib once per
+// process and panics when a later load names another directory, so a second
 // mirror, made for a second run of the same test, panics on load.
 var gnoRootMirror = sync.OnceValues(func() (string, error) {
 	root, err := gnoenv.GuessRootDir()
