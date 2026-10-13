@@ -264,7 +264,15 @@ jobs:
       # --access public because scoped packages default to private, and --provenance
       # so the version carries a signed link back to this run. prepublishOnly
       # rebuilds once more here; that is deliberate.
-      - run: npm publish --access public --provenance
+      - id: publish
+        run: npm publish --access public --provenance
+
+      # npm logs its OIDC token exchange below the console's level, so a failed
+      # trusted publish shows a bare E404. The debug log it leaves keeps those
+      # lines, and they carry messages, never a token.
+      - name: Show npm's OIDC exchange
+        if: failure() && steps.publish.outcome == 'failure'
+        run: grep -hi oidc "$HOME"/.npm/_logs/*-debug-0.log || echo "no npm debug log mentions OIDC"
 
       # Left unrecoverable-by-retry only in one direction now: a published version
       # with no tag, which one push fixes.
