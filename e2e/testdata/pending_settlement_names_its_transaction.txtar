@@ -1,0 +1,32 @@
+# A payment the chain admitted, and no block was seen executing in time, comes
+# back to the buyer with its transaction hash: the weather is withheld, but the
+# payment may still go through, and the hash is how to find out.
+#
+# x402facilitator pending reads a node that never reports the block, so the
+# facilitator broadcasts the payment and answers settlement_pending with its
+# hash, which the seller's middleware passes on in PAYMENT-RESPONSE.
+adduser seller
+
+gnoland start
+
+x402facilitator pending
+x402seller seller.json $seller_user_addr
+
+! exec node $X402_EXAMPLE_BUYER
+
+# Withheld, and named by its hash and the reason.
+! stdout 'sunny'
+stdout 'not confirmed yet: tx [0-9a-zA-Z]+ \(settlement_pending\)'
+
+-- seller.json --
+{
+  "route": "GET /weather",
+  "price": { "asset": "ugnot", "amount": "250000" },
+  "description": "Weather data",
+  "mimeType": "application/json",
+  "body": {
+    "location": "Paris",
+    "forecast": "sunny",
+    "celsius": 24
+  }
+}

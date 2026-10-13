@@ -14,7 +14,9 @@
 package e2e
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -111,9 +113,9 @@ func buyerScript(t *testing.T) string {
 	return buyer
 }
 
-// exampleBuyerScript is the buyer shipped with the weather example. The happy-path
-// and session scenarios drive it instead of the harness buyer, so the file a
-// reader lands on first is the one CI proves — the example depends on nothing,
+// exampleBuyerScript is the buyer shipped with the weather example. The happy-path,
+// session and pending-settlement scenarios drive it instead of the harness buyer,
+// so the file a reader lands on first is the one CI proves — the example depends on nothing,
 // and this test is what may depend on the example.
 func exampleBuyerScript(t *testing.T) string {
 	t.Helper()
@@ -128,10 +130,13 @@ func exampleBuyerScript(t *testing.T) string {
 }
 
 // x402facilitator stands up the facilitator against the running node. It holds no
-// key: it verifies offline and broadcasts what the payer signed.
+// key: it verifies offline and broadcasts what the payer signed. With pending, the
+// node it reads never reports a block executing a payment, so every settlement is
+// broadcast and answered settlement_pending.
 func facilitatorCmd(ts *testscript.TestScript, neg bool, args []string) {
-	if neg || len(args) != 0 {
-		ts.Fatalf("usage: x402facilitator")
+	pending := len(args) == 1 && args[0] == "pending"
+	if neg || (len(args) != 0 && !pending) {
+		ts.Fatalf("usage: x402facilitator [pending]")
 	}
 
 	rpcAddr := ts.Getenv("RPC_ADDR")
@@ -142,11 +147,21 @@ func facilitatorCmd(ts *testscript.TestScript, neg bool, args []string) {
 	rpc, err := rpcclient.NewHTTPClient(httpURL(rpcAddr))
 	ts.Check(err)
 
-	node := exact.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc})
+	var node exact.Node = exact.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc})
+	if pending {
+		node = blindNode{node}
+	}
 	server := httptest.NewServer(facilitator.New(node, chainID).Handler())
 	ts.Defer(server.Close)
 
 	ts.Setenv("FACILITATOR_URL", server.URL)
+}
+
+// blindNode never sees a block execute the payment it is asked about.
+type blindNode struct{ exact.Node }
+
+func (blindNode) AwaitDelivery(context.Context, string) error {
+	return errors.New("no block seen executing the payment")
 }
 
 // sellerOffer is a scenario's whole seller: the route, what it costs, and what a
