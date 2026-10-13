@@ -157,6 +157,31 @@ describe("ExactGnoScheme.createPaymentPayload", () => {
     ).rejects.toThrow(/extra\.memo is number, want string/);
   });
 
+  // The facilitator and the server refuse an offer whose memo is longer than
+  // 256 bytes, so a payment signed against one could never be accepted.
+  it("refuses an extra.memo over 256 bytes", async () => {
+    const mechanism = await scheme();
+    await expect(
+      mechanism.createPaymentPayload(2, offer({ extra: { memo: "a".repeat(257) } })),
+    ).rejects.toThrow(/extra\.memo is 257 bytes, exceeding the 256-byte maximum/);
+  });
+
+  // The cap is on the bytes the transaction carries, which a character count
+  // undercounts for anything outside ASCII.
+  it("counts extra.memo in UTF-8 bytes", async () => {
+    const mechanism = await scheme();
+    await expect(
+      mechanism.createPaymentPayload(2, offer({ extra: { memo: "é".repeat(129) } })),
+    ).rejects.toThrow(/extra\.memo is 258 bytes/);
+  });
+
+  it("accepts an extra.memo of exactly 256 bytes and reaches signing", async () => {
+    const mechanism = await scheme();
+    await expect(
+      mechanism.createPaymentPayload(2, offer({ extra: { memo: "a".repeat(256) } })),
+    ).rejects.toThrow(/no provider connected/);
+  });
+
   // An absent memo binds nothing and must not be confused with a malformed one,
   // so it has to get past validation. Reaching signing is the proof: signing is
   // the first step that needs the provider this wallet does not have, so that is
