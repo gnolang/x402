@@ -6,13 +6,20 @@
 // register() call and the spend control that admits ugnot.
 //
 //   node buy.mjs [seller URL]
+//   node buy.mjs --new-key
 //
 // The buyer signs with the mnemonic in X402_MNEMONIC — a funded account on the
 // chain the seller's offer names — and reads its account sequence from the chain,
 // so X402_GNO_RPC must serve that same chain. With X402_SESSION_MASTER set to an
 // account's address, X402_MNEMONIC is instead a session key that account
-// registered, and payments move that account's coins.
+// registered, and payments move that account's coins. --new-key prints a fresh
+// mnemonic to pay with, and pays nothing.
+import { readFileSync } from "node:fs";
+import { relative } from "node:path";
+
+import { Bip39 } from "@cosmjs/crypto";
 import { GnoJSONRPCProvider, GnoWallet } from "@gnolang/gno-js-client";
+import { generateEntropy } from "@gnolang/tm2-js-client";
 import { x402Client, x402HTTPClient } from "@x402/core/client";
 import { decodePaymentRequiredHeader, decodePaymentResponseHeader } from "@x402/core/http";
 
@@ -36,6 +43,31 @@ const rpcURL = (process.env.X402_GNO_RPC ?? "http://127.0.0.1:26657").replace(
   /^tcp:\/\//,
   "http://",
 );
+
+// --new-key writes nothing and sends no request: the mnemonic it prints is the
+// key's only copy.
+if (process.argv[2] === "--new-key") {
+  // Drawn as @gnolang/tm2-js-client's Wallet.createRandom draws one: 32 random
+  // bytes, 24 words. The address comes from the wallet a payment signs with.
+  const fresh = Bip39.encode(generateEntropy()).toString();
+  const freshAddress = await (await GnoWallet.fromMnemonic(fresh)).getAddress();
+  // The pay command runs this file the way this run did: through npx, pinned to
+  // the release tag of this version, or with node at this path.
+  const { version } = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
+  const command =
+    process.env.npm_lifecycle_event === "npx"
+      ? `npx github:gnoverse/x402#client/v${version}`
+      : `node ${relative(process.cwd(), process.argv[1])}`;
+  console.log(`a new key for the testnet, saved nowhere: this is the only copy of its mnemonic
+use it as a throwaway, and never send it anything you would mind losing
+
+mnemonic: ${fresh}
+address:  ${freshAddress}
+
+fund the address at https://faucet.gno.land, then pay with it:
+  X402_MNEMONIC='${fresh}' X402_GNO_RPC=<RPC of the seller's chain> ${command} <seller URL>`);
+  process.exit(0);
+}
 
 // Prints why nothing was paid, then exits. fetch reports every network failure
 // as "fetch failed" and keeps the reason in err.cause.

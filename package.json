@@ -51,8 +51,9 @@
     "prepare": "npm run build",
     "prepublishOnly": "npm run build"
   },
-  "//dependencies": "Versions are exact so a signed payment changes only when a dependency is deliberately bumped. @x402/core is a peer: only its types are used, and a mechanism must not pull in a second copy of the client its consumer already has.",
+  "//dependencies": "Versions are exact so a signed payment changes only when a dependency is deliberately bumped. @x402/core is a peer: the mechanism uses only its types and the x402-gno command its stock client, and neither may pull in a second copy of the client a consumer already has. @cosmjs/crypto, which the command draws a new key's mnemonic with, is the version @gnolang/tm2-js-client pins, so it adds nothing to an install.",
   "dependencies": {
+    "@cosmjs/crypto": "0.39.0",
     "@gnolang/gno-js-client": "3.1.0",
     "@gnolang/tm2-js-client": "3.3.0"
   },
