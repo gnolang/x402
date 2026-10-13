@@ -9,7 +9,7 @@
 # The test layers are separate on purpose, cheapest first:
 #   test       the library. No network, no chain, no npm.
 #   js-test    the buyer mechanism, including the sign doc byte-equality check,
-#              and the weather page's payment logic.
+#              the weather page's payment logic and the weather buyer.
 #   test-e2e   real payments through real in-memory nodes: the JS buyer paying a
 #              seller, one payment handed to two facilitators at once, and a replay.
 #
@@ -66,7 +66,7 @@ test-e2e: $(JS_CLIENT) ## Pay gno sellers end to end against real in-memory node
 # built and not merely installed.
 js: $(JS_CLIENT) ## Install and build the JS mechanism
 
-js-test: $(JS_CLIENT) ## Run the JS tests: the client mechanism and the weather page
+js-test: $(JS_CLIENT) ## Run the JS tests: the client mechanism, the weather page and buyer
 	$(NPM) test
 
 node_modules: package.json package-lock.json

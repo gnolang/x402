@@ -1,7 +1,8 @@
 // Buys the weather from the seller in this directory: one paid GET, printed for
-// a human. The x402 flow — recognising the 402, decoding the offer, signing,
-// retrying — is a stock @x402/fetch client; the gno-aware lines are the
-// register() call below and the spend control that admits ugnot.
+// a human. The x402 flow is the five numbered steps below: ask, read the terms
+// from the 402, sign, ask again with the payment, read the receipt. @x402/core's
+// stock client encodes and decodes each message; the gno-aware lines are the
+// register() call and the spend control that admits ugnot.
 //
 //   node buy.mjs [seller URL]
 //
@@ -11,8 +12,8 @@
 // account's address, X402_MNEMONIC is instead a session key that account
 // registered, and payments move that account's coins.
 import { GnoJSONRPCProvider, GnoWallet } from "@gnolang/gno-js-client";
-import { decodePaymentRequiredHeader } from "@x402/core/http";
-import { decodePaymentResponseHeader, wrapFetchWithPayment, x402Client } from "@x402/fetch";
+import { x402Client, x402HTTPClient } from "@x402/core/client";
+import { decodePaymentRequiredHeader, decodePaymentResponseHeader } from "@x402/core/http";
 
 import { ExactGnoScheme } from "@gnoverse/x402-gno/exact/client";
 
@@ -58,7 +59,7 @@ const client = new x402Client()
   .setSpendControls({
     allowedAssets: [{ network: "gno:*", asset: "ugnot", maxAmountPerPayment: MAX_PRICE }],
   });
-const fetchWithPayment = wrapFetchWithPayment(fetch, client);
+const http = new x402HTTPClient(client);
 
 const address = await wallet.getAddress();
 if (master !== undefined) {
@@ -71,12 +72,35 @@ if (master !== undefined) {
 
 let paid;
 try {
-  paid = await fetchWithPayment(sellerURL);
+  // 1. Ask without paying. A priced resource answers 402; any other answer is
+  // the final one.
+  paid = await fetch(sellerURL);
+  if (paid.status === 402) {
+    const unpaid = paid;
+    // 2. Read the terms, which the 402 carries in its PAYMENT-REQUIRED header.
+    const terms = http.getPaymentRequiredResponse((name) => unpaid.headers.get(name));
+    // 3. Sign a payment that meets them: a bank send of the price to the payee,
+    // within MAX_PRICE. Nothing is broadcast here.
+    const payment = await client.createPaymentPayload(terms);
+    // 4. Ask again with the signed payment in PAYMENT-SIGNATURE. The seller has
+    // its facilitator check it and settle it on chain before answering. The
+    // second header is one @x402/fetch adds to every payment, so a seller gets
+    // the same request from this buyer as from that client.
+    paid = await fetch(sellerURL, {
+      headers: {
+        ...http.encodePaymentSignatureHeader(payment),
+        "Access-Control-Expose-Headers": "PAYMENT-RESPONSE,X-PAYMENT-RESPONSE",
+      },
+    });
+  }
 } catch (err) {
   // Thrown when the seller cannot be reached or no payment can be signed, such as
   // for an account the chain has never funded.
   notPaid(err);
 }
+
+// 5. Read the answer: the weather once the payment settled, and the receipt in
+// PAYMENT-RESPONSE.
 const body = await paid.text();
 
 if (!paid.ok) {

@@ -8,7 +8,7 @@ x402, its facilitator, and the harnesses that prove a payment happens. If you're
 
 ```bash
 make test                # library tests. No network, no chain, no npm
-make js-test             # the client mechanism, incl. the sign-doc byte-equality check, and the weather page's payment logic
+make js-test             # the client mechanism, incl. the sign-doc byte-equality check, the weather page's payment logic and the weather buyer
 make test-e2e            # real payments against in-memory nodes
 make lint                # go vet (both modules) + gofmt
 make build               # bin/gnofacilitator

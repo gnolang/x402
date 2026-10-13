@@ -158,7 +158,7 @@ make js               # build the client mechanism buy.mjs imports
 X402_GNO_RPC=<RPC URL> node examples/weather/buy.mjs http://localhost:8401/weather
 ```
 
-It registers `ExactGnoScheme` with a stock `@x402/fetch` client, admits ugnot to the client's spend
+It registers `ExactGnoScheme` with `@x402/core`'s stock client, admits ugnot to the client's spend
 controls with a 1 GNOT cap per request, and signs with the mnemonic in `X402_MNEMONIC`, or as gno's
 public test1 key when that is unset. With `X402_SESSION_MASTER` set to an account's address,
 `X402_MNEMONIC` is a session key that account registered, and the payment moves that account's
