@@ -90,6 +90,7 @@ accident and needs no build tag to stay out of the way.
 | Change the payload | `facilitator/exact` (`transactionOf`, `VerifyStatic`) · the client's payload builder in `client/src/exact/client.ts` — both halves sign the same bytes · the weather page's `payWithAdena` in `examples/weather/paywall.js`, which builds the same envelope around what Adena signs |
 | Rename `.github/workflows/release.yml` | the npm **trusted publisher** on npmjs.com, which matches the filename exactly. Publishing breaks until it does |
 | Change the release flow or a tag scheme | `docs/releasing.md` |
+| Bump the Go toolchain | `go-version` in `.github/workflows/*.yml` · the `golang` image pin in `docker/weather.Dockerfile` |
 | Change a flag, default, timeout, limit or exit code in `cmd/gnofacilitator` | `docs/deploying.md` |
 | Follow the target testnet to a new `gnolang/gno` chain tag | `github.com/gnolang/gno` in `go.mod` and `e2e/go.mod` · re-record `facilitator/exact/testdata/onyx_simulate_send.json` |
 | Release the client | bump `package.json`'s version — the workflow refuses a dispatch that disagrees with it. The facilitator's version is its git tag alone, so it needs no bump |
