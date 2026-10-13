@@ -89,6 +89,7 @@ accident and needs no build tag to stay out of the way.
 | Add or rename a reason code | `facilitator/exact/verify.go` · `TestReasonVocabulary` |
 | Change the payload | `facilitator/exact` (`transactionOf`, `VerifyStatic`) · the client's payload builder in `client/src/exact/client.ts` — both halves sign the same bytes · the weather page's `payWithAdena` in `examples/weather/paywall.js`, which builds the same envelope around what Adena signs |
 | Rename `.github/workflows/release.yml` | the npm **trusted publisher** on npmjs.com, which matches the filename exactly. Publishing breaks until it does |
+| Rename the client job's `npm` environment | the npm **trusted publisher** on npmjs.com, which matches the environment exactly · a GitHub environment of the new name with the `main` branch rule, as `docs/releasing.md` (Credentials) describes. Publishing breaks until both match |
 | Change the release flow or a tag scheme | `docs/releasing.md` |
 | Bump the Go toolchain | `go-version` in `.github/workflows/*.yml` · the `golang` image pin in `docker/weather.Dockerfile` |
 | Change a flag, default, timeout, limit or exit code in `cmd/gnofacilitator` | `docs/deploying.md` |

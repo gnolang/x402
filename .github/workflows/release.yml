@@ -35,8 +35,33 @@ concurrency:
   cancel-in-progress: false
 jobs:
   # ---- gnofacilitator: archives + GitHub release + image, all attested.
+  #
+  # The tests run in a job of their own, with a read-only token: they run code
+  # from every Go and npm dependency, install scripts included, and the release
+  # job can push to the repository and to ghcr.io and mint OIDC tokens.
+  facilitator-test:
+    if: ${{ inputs.component == 'facilitator' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # A release must not ship a facilitator that fails its own tests, and the
+      # e2e is the only thing that proves a payment settles.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with: { go-version: '1.26.5' }
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with: { node-version: '24' }
+      - run: go test ./...
+      # Before make, so make's own npm install never runs: npm ci installs the
+      # lockfile exactly and refuses one that disagrees with package.json.
+      - run: npm ci
+      - run: make test-e2e
+
   facilitator:
     if: ${{ inputs.component == 'facilitator' }}
+    needs: facilitator-test
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -80,14 +105,11 @@ jobs:
           echo "TAG=$tag" >> "$GITHUB_ENV"
           echo "IMAGE=ghcr.io/gnoverse/gnofacilitator" >> "$GITHUB_ENV"
 
-      # A release must not ship a facilitator that fails its own tests, and the
-      # e2e is the only thing that proves a payment settles.
+      # goreleaser builds with this Go. No cache: jobs that run dependency code
+      # write this repository's Actions cache, and goreleaser would link a
+      # restored build cache entry into the release binaries as it is.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with: { go-version: '1.26.5' }
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
-        with: { node-version: '24' }
-      - run: go test ./...
-      - run: make test-e2e
+        with: { go-version: '1.26.5', cache: false }
 
       # All fallible setup runs BEFORE the tag push: nothing that can fail may sit
       # between the tag push and goreleaser, so a setup failure cannot strand a tag.
@@ -100,7 +122,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # go test builds for the runner only. CI's release-config job builds this
+      # The tests build for the runner only. CI's release-config job builds this
       # snapshot too, but a dispatch does not wait for CI, so the whole matrix is
       # built here, where a failure strands nothing. It pushes nothing, and the
       # release's --clean discards its dist/.
@@ -115,8 +137,7 @@ jobs:
           # tag.
           GORELEASER_CURRENT_TAG: ${{ env.TAG }}
 
-      # goreleaser refuses a dirty tree, but only after the tag is pushed, and the
-      # steps above run npm install, which can rewrite package-lock.json.
+      # goreleaser refuses a dirty tree, but only after the tag is pushed.
       - name: Refuse a tree the steps above changed
         run: |
           set -euo pipefail
@@ -184,13 +205,17 @@ jobs:
   # ---- client: one npm publish. No goreleaser, no GitHub release, no image.
   #
   # No npm token anywhere. npmjs.com holds a trusted publisher naming this
-  # repository and this workflow's filename, and the id-token permission is what
-  # lets npm mint a short-lived credential in a token's place. Renaming this file
-  # breaks publishing until the trusted publisher is updated to match.
+  # repository, this workflow's filename and the npm environment, and the id-token
+  # permission is what lets npm mint a short-lived credential in a token's place.
+  # Renaming this file or the environment breaks publishing until the trusted
+  # publisher is updated to match.
   client:
     if: ${{ inputs.component == 'client' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # The environment admits main only, a rule kept in the repository settings
+    # where a copy of this file edited on another branch cannot change it.
+    environment: npm
     permissions:
       contents: write # push the client/v… tag
       id-token: write # the only publishing credential: npm's OIDC exchange
@@ -241,8 +266,10 @@ jobs:
 
       # The e2e is the only test that proves this client can actually pay a chain,
       # and it drives the built bundle through a real node. Its harness is Go.
+      # No cache: jobs that run dependency code write this repository's Actions
+      # cache, and a restored build cache entry would run here, beside id-token.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with: { go-version: '1.26.5' }
+        with: { go-version: '1.26.5', cache: false }
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
           node-version: '24'
@@ -268,7 +295,9 @@ jobs:
             exit 1
           fi
 
-      - run: npm ci
+      # This job holds id-token, and no dependency needs an install script to
+      # build or test.
+      - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm test
       - run: make test-e2e

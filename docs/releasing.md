@@ -17,6 +17,13 @@ All three run from the manual `release.yml` workflow, except the client while np
 gh workflow run release.yml --ref main -f component=facilitator -f version=0.2.0
 ```
 
+The run has two jobs. `facilitator-test` holds a read-only token and runs `go test ./...` and the
+e2e, after `npm ci` installs exactly the lockfile. Only when it passes does `facilitator` start:
+it validates the version, builds the release as a snapshot, pushes the tag, publishes and attests.
+The tests run code from every Go and npm dependency, install scripts included, so they never run
+in the job that can push to the repository and to ghcr.io and mint OIDC tokens. That job restores
+no Actions cache either, because the jobs that run dependency code write it.
+
 ## Release the client
 
 Until [npm/cli#9969](https://github.com/npm/cli/issues/9969) is fixed the dispatch fails at
@@ -55,8 +62,9 @@ locally.
   the next patch number instead. `client/vX.Y.Z` and `weather/vX.Y.Z` have no such constraint.
 - **Use `npm version`, not a hand edit.** It updates `package-lock.json` too, which `npm ci`
   does not check.
-- **Renaming `release.yml` breaks npm publishing** until npm's trusted publisher is updated
-  to the new filename.
+- **Renaming `release.yml` or the `npm` environment breaks npm publishing** until npm's
+  trusted publisher is updated to match. A renamed environment also needs its own `main`
+  branch rule on GitHub.
 
 ## If a release fails
 
@@ -66,10 +74,10 @@ locally.
   `git tag -a client/vX.Y.Z -m "Release client/vX.Y.Z" <sha> && git push origin client/vX.Y.Z`.
 - **facilitator** — the tag is pushed before goreleaser, so a failure can leave the tag, and
   possibly a release and image, in place. Delete the GitHub release if one exists and cut the
-  next patch number. The job builds the release as a snapshot before pushing the tag, so a
-  build that cannot succeed stops there. What can still fail after the tag is goreleaser's
-  changelog and publish (the GitHub release, the multi-arch image and its SBOM), then the
-  attestation steps.
+  next patch number. A failed `facilitator-test` stops the run before anything is pushed. The
+  `facilitator` job builds the release as a snapshot before pushing the tag, so a build that
+  cannot succeed stops there. What can still fail after the tag is goreleaser's changelog and
+  publish (the GitHub release, the multi-arch image and its SBOM), then the attestation steps.
 - **weather** — the image is pushed before the tag, so a failure before the tag leaves at most
   an image under that version, and under `latest` for a plain release, which a re-dispatch
   overwrites. An image with no tag is fixed by tagging the commit it was built from:
@@ -78,10 +86,33 @@ locally.
 ## Credentials
 
 npm publishing uses OIDC trusted publishing: no npm token exists in this repository. npmjs.com
-matches the request against the repository and the workflow filename.
+matches the request against the repository, the workflow filename and the GitHub environment,
+and it compares each field exactly and case-sensitively.
+
+The `client` job installs with `npm ci --ignore-scripts` and restores no Actions cache, so no
+dependency install script and no cache written by another job runs beside the credential.
+
+It runs in the `npm` environment, which admits `main` only. That rule lives in the repository
+settings, where a copy of `release.yml` edited on another branch cannot change it. Set the
+environment up on GitHub first: binding npm to it while `release.yml` on `main` does not name
+it refuses every publish.
+
+1. On github.com, as a repository admin, open **Settings → Environments**. A run that names a
+   missing environment creates it with no rules, so open `npm` if it is listed; otherwise
+   click **New environment**, name it `npm`, and click **Configure environment**.
+2. Under **Deployment branches and tags**, choose **Selected branches and tags**, add a
+   **Branch** rule for `main`, and save.
+3. Optionally, under **Required reviewers**, list who approves a client publish. Every client
+   run then waits for one of them; **Prevent self-review** makes that a second person.
+4. Once `release.yml` on `main` names the environment, on npmjs.com, as an owner of
+   `@gnoverse/x402-gno`, open the package's **Settings → Trusted publishing**, edit the GitHub
+   Actions publisher and set **Environment name** to `npm`. Where the page offers no edit,
+   delete the publisher and add it again with the same organization (`gnoverse`), repository
+   (`x402`), workflow filename (`release.yml`) and allowed actions, plus the environment.
 
 A mismatch surfaces as `E404 package not found` or `ENEEDAUTH`, neither of which reflects the
-real cause — check the workflow filename and the npm version in the job first.
+real cause: check the workflow filename, the environment name and the npm version in the job
+first.
 
 A matching trusted publisher can still fail the same way. GitHub repositories created after
 2026-07-15 send OIDC tokens with an immutable subject claim, and npm's token exchange rejects them
