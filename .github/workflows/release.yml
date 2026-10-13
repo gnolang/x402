@@ -205,13 +205,17 @@ jobs:
   # ---- client: one npm publish. No goreleaser, no GitHub release, no image.
   #
   # No npm token anywhere. npmjs.com holds a trusted publisher naming this
-  # repository and this workflow's filename, and the id-token permission is what
-  # lets npm mint a short-lived credential in a token's place. Renaming this file
-  # breaks publishing until the trusted publisher is updated to match.
+  # repository, this workflow's filename and the npm environment, and the id-token
+  # permission is what lets npm mint a short-lived credential in a token's place.
+  # Renaming this file or the environment breaks publishing until the trusted
+  # publisher is updated to match.
   client:
     if: ${{ inputs.component == 'client' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # The environment admits main only, a rule kept in the repository settings
+    # where a copy of this file edited on another branch cannot change it.
+    environment: npm
     permissions:
       contents: write # push the client/v… tag
       id-token: write # the only publishing credential: npm's OIDC exchange

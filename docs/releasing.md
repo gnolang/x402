@@ -62,8 +62,9 @@ locally.
   the next patch number instead. `client/vX.Y.Z` and `weather/vX.Y.Z` have no such constraint.
 - **Use `npm version`, not a hand edit.** It updates `package-lock.json` too, which `npm ci`
   does not check.
-- **Renaming `release.yml` breaks npm publishing** until npm's trusted publisher is updated
-  to the new filename.
+- **Renaming `release.yml` or the `npm` environment breaks npm publishing** until npm's
+  trusted publisher is updated to match. A renamed environment also needs its own `main`
+  branch rule on GitHub.
 
 ## If a release fails
 
@@ -85,13 +86,33 @@ locally.
 ## Credentials
 
 npm publishing uses OIDC trusted publishing: no npm token exists in this repository. npmjs.com
-matches the request against the repository and the workflow filename.
+matches the request against the repository, the workflow filename and the GitHub environment,
+and it compares each field exactly and case-sensitively.
 
 The `client` job installs with `npm ci --ignore-scripts` and restores no Actions cache, so no
 dependency install script and no cache written by another job runs beside the credential.
 
+It runs in the `npm` environment, which admits `main` only. That rule lives in the repository
+settings, where a copy of `release.yml` edited on another branch cannot change it. Set the
+environment up on GitHub first: binding npm to it while `release.yml` on `main` does not name
+it refuses every publish.
+
+1. On github.com, as a repository admin, open **Settings → Environments**. A run that names a
+   missing environment creates it with no rules, so open `npm` if it is listed; otherwise
+   click **New environment**, name it `npm`, and click **Configure environment**.
+2. Under **Deployment branches and tags**, choose **Selected branches and tags**, add a
+   **Branch** rule for `main`, and save.
+3. Optionally, under **Required reviewers**, list who approves a client publish. Every client
+   run then waits for one of them; **Prevent self-review** makes that a second person.
+4. Once `release.yml` on `main` names the environment, on npmjs.com, as an owner of
+   `@gnoverse/x402-gno`, open the package's **Settings → Trusted publishing**, edit the GitHub
+   Actions publisher and set **Environment name** to `npm`. Where the page offers no edit,
+   delete the publisher and add it again with the same organization (`gnoverse`), repository
+   (`x402`), workflow filename (`release.yml`) and allowed actions, plus the environment.
+
 A mismatch surfaces as `E404 package not found` or `ENEEDAUTH`, neither of which reflects the
-real cause — check the workflow filename and the npm version in the job first.
+real cause: check the workflow filename, the environment name and the npm version in the job
+first.
 
 A matching trusted publisher can still fail the same way. GitHub repositories created after
 2026-07-15 send OIDC tokens with an immutable subject claim, and npm's token exchange rejects them
