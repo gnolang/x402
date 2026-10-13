@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/url"
@@ -163,7 +164,8 @@ func newServer(addr string, h http.Handler) *http.Server {
 func newSeller(ctx context.Context, cfg sellerConfig) (http.Handler, error) {
 	route := "GET " + weatherPath
 	mux := http.NewServeMux()
-	mux.HandleFunc(route, rotatingWeather(sampleReadings()))
+	readings := sampleReadings()
+	mux.HandleFunc(route, rotatingWeather(readings, rand.IntN(len(readings))))
 
 	// Behind a TLS proxy the middleware would name an http:// URL on the
 	// seller's own address, so the 402 names the public one instead.
@@ -303,12 +305,13 @@ func sampleReadings() []reading {
 	}
 }
 
-// rotatingWeather serves readings in turn, one per request it is handed. Behind
-// the middleware that is one per paid request, a refused settlement included.
-func rotatingWeather(readings []reading) http.HandlerFunc {
+// rotatingWeather serves readings in turn from readings[start], one per request
+// it is handed. Behind the middleware that is one per paid request, a refused
+// settlement included.
+func rotatingWeather(readings []reading, start int) http.HandlerFunc {
 	var served atomic.Uint64
 	return func(w http.ResponseWriter, _ *http.Request) {
-		r := readings[(served.Add(1)-1)%uint64(len(readings))]
+		r := readings[(uint64(start)+served.Add(1)-1)%uint64(len(readings))]
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(r)
 	}

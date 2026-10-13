@@ -402,11 +402,14 @@ func forecastsThePageDraws(t *testing.T) []string {
 	return forecasts
 }
 
-func TestTheSellerServesItsSampleReadingsInTurn(t *testing.T) {
+// The seller starts its turn at a random reading, so the first visitors after a
+// restart do not all see the same one; the order after it is fixed.
+func TestTheSellerServesItsSampleReadingsInTurnFromItsStart(t *testing.T) {
 	serve := rotatingWeather([]reading{
 		{Celsius: 24, Forecast: "sunny", Location: "Paris"},
 		{Celsius: 14, Forecast: "rain", Location: "Paris"},
-	})
+		{Celsius: 1, Forecast: "snow", Location: "Paris"},
+	}, 1)
 
 	var served []string
 	for range 3 {
@@ -417,8 +420,8 @@ func TestTheSellerServesItsSampleReadingsInTurn(t *testing.T) {
 	}
 
 	assert.Equal(t, []string{
-		`{"celsius":24,"forecast":"sunny","location":"Paris"}`,
 		`{"celsius":14,"forecast":"rain","location":"Paris"}`,
+		`{"celsius":1,"forecast":"snow","location":"Paris"}`,
 		`{"celsius":24,"forecast":"sunny","location":"Paris"}`,
 	}, served)
 }

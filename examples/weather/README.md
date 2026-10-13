@@ -1,9 +1,10 @@
 # weather — an HTTP resource that takes gno
 
 The x402 seller example, with gno listed as a way to pay. The resource is weather data, made up:
-each paid request gets the next of three sample readings for Paris (sunny, rain, snow). It is not a
-realm, it makes no contract call, and it does not know a chain exists. Everything gno-specific is a
-network string, one registered scheme and the page a browser gets.
+each paid request gets the next of three sample readings for Paris (sunny, rain, snow), from one the
+seller picks at random when it starts. It is not a realm, it makes no contract call, and it does not
+know a chain exists. Everything gno-specific is a network string, one registered scheme and the page
+a browser gets.
 
 ```go
 routes := x402http.RoutesConfig{
