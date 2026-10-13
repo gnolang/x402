@@ -275,6 +275,62 @@ func TestThePageCarriesNoExplorerForALocalChain(t *testing.T) {
 	assert.Contains(t, page, `id="pay-status" role="status" data-tx=""`)
 }
 
+// The key step hands the buyer this page's URL, which the page's script fills
+// in, so the pay command it prints needs nothing more.
+func TestThePageMakesAKeyForPayingThisPage(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	assert.Contains(t, page, `--new-key <span data-url>`)
+}
+
+// The pay step shows the command the key step prints: the mnemonic, the
+// pinned buyer and this page's URL.
+func TestThePageShowsThePayCommandTheKeyStepPrints(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	assert.Regexp(t, `<code>X402_MNEMONIC='&lt;mnemonic&gt;' npx github:gnoverse/x402#client/v\d+\.\d+\.\d+ <span data-url>`, page)
+}
+
+// The commands run the buyer from a release tag, so the script a visitor read
+// is the one that runs; a branch can move between the two.
+func TestThePageRunsTheBuyerPinnedToARelease(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	runs := regexp.MustCompile(`npx github:gnoverse/x402(\S*)`).FindAllStringSubmatch(page, -1)
+	require.Len(t, runs, 2, "one command makes the key, one pays")
+	for _, run := range runs {
+		assert.Regexp(t, `^#client/v\d+\.\d+\.\d+$`, run[1])
+	}
+}
+
+// The buyer signs with whatever mnemonic it is given, so the page links its
+// source and warns against a key that holds anything before any command.
+func TestThePageSaysToReadTheBuyerBeforeRunningIt(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	firstRun := strings.Index(page, "npx github:")
+	require.NotEqual(t, -1, firstRun, "the page offers no command")
+	before := page[:firstRun]
+	assert.Contains(t, before, `href="https://github.com/gnoverse/x402/blob/main/examples/weather/buy.mjs"`)
+	assert.Contains(t, before, "never give it a mnemonic that holds anything")
+}
+
 // The page pays through the script the seller inlines, so it must arrive
 // intact: html/template escapes a string it does not know to be JavaScript.
 func TestTheBrowserPageCarriesItsPaymentScriptIntact(t *testing.T) {

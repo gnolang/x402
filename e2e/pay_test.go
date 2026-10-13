@@ -15,6 +15,7 @@ package e2e
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -143,9 +144,9 @@ func buyerScript(t *testing.T) string {
 }
 
 // exampleBuyerScript is the buyer shipped with the weather example. The happy-path,
-// session and pending-settlement scenarios drive it instead of the harness buyer,
-// so the file a reader lands on first is the one CI proves — the example depends on nothing,
-// and this test is what may depend on the example.
+// session, pending-settlement and refused-settlement scenarios drive it instead of
+// the harness buyer, so the file a reader lands on first is the one CI proves — the
+// example depends on nothing, and this test is what may depend on the example.
 func exampleBuyerScript(t *testing.T) string {
 	t.Helper()
 
@@ -220,6 +221,22 @@ type sellerOffer struct {
 	// payment, which is the guarantee a paid endpoint fronting something fallible
 	// depends on.
 	Status int `json:"status"`
+
+	// RefusedSettlement, when set, is the receipt a paid request is answered
+	// with in place of being verified and settled: a facilitator's refusal
+	// relayed with its transaction hash, as @x402/core's TypeScript server
+	// relays one. Upstream's Go middleware keeps the hash only for
+	// settlement_pending, so a scenario cannot get this from it.
+	RefusedSettlement *refusedSettlement `json:"refusedSettlement"`
+}
+
+// refusedSettlement is what a scenario decides of a failed settle receipt; the
+// seller marks it unsuccessful and names the harness's network.
+type refusedSettlement struct {
+	ErrorReason  string `json:"errorReason"`
+	ErrorMessage string `json:"errorMessage"`
+	Payer        string `json:"payer"`
+	Transaction  string `json:"transaction"`
 }
 
 // readSellerOffer decodes the offer file the script names. Unknown fields are
@@ -303,6 +320,18 @@ func sellerCmd(ts *testscript.TestScript, neg bool, args []string) {
 		},
 		SyncFacilitatorOnStart: true,
 	})(mux)
+	if refusal := offer.RefusedSettlement; refusal != nil {
+		receipt, err := json.Marshal(x402.SettleResponse{
+			Success:      false,
+			ErrorReason:  refusal.ErrorReason,
+			ErrorMessage: refusal.ErrorMessage,
+			Payer:        refusal.Payer,
+			Transaction:  refusal.Transaction,
+			Network:      network,
+		})
+		ts.Check(err)
+		handler = refusingSettlement(handler, base64.StdEncoding.EncodeToString(receipt))
+	}
 
 	server := httptest.NewServer(handler)
 	ts.Defer(server.Close)
@@ -313,6 +342,23 @@ func sellerCmd(ts *testscript.TestScript, neg bool, args []string) {
 	ts.Setenv("X402_SELLER_URL", server.URL+target)
 	ts.Setenv("X402_METHOD", method)
 	ts.Setenv("X402_GNO_RPC", ts.Getenv("RPC_ADDR"))
+}
+
+// refusingSettlement answers a paid request the way @x402/core's TypeScript
+// server answers one its facilitator refused to settle: 402 with an empty JSON
+// body, and receipt as its PAYMENT-RESPONSE. An unpaid request goes to next, so
+// the buyer signs against the middleware's own 402.
+func refusingSettlement(next http.Handler, receipt string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("PAYMENT-SIGNATURE") == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("PAYMENT-RESPONSE", receipt)
+		w.WriteHeader(http.StatusPaymentRequired)
+		_, _ = w.Write([]byte("{}"))
+	})
 }
 
 // The node reports its address in tm2's own form, which names the transport rather

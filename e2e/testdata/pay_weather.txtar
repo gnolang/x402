@@ -24,7 +24,7 @@ stdout '1000000000ugnot'
 x402facilitator
 x402seller seller.json $seller_user_addr
 
-# A stock @x402/fetch client, taught about gno by its register() call and a
+# @x402/core's stock client, taught about gno by its register() call and a
 # spend control that admits ugnot.
 exec node $X402_EXAMPLE_BUYER
 
