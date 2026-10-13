@@ -161,8 +161,8 @@ it without a clone.
 > spend limit and expiry. Testnet only.
 
 ```sh
-npx github:gnoverse/x402#client/v0.5.0 --new-key   # prints a new mnemonic and its address, saves neither
-# fund the address at https://faucet.gno.land, then:
+npx github:gnoverse/x402#client/v0.5.0 --new-key https://<seller>/weather
+# fund the address it printed at https://faucet.gno.land, then run the command it printed:
 X402_MNEMONIC='<mnemonic>' npx github:gnoverse/x402#client/v0.5.0 https://<seller>/weather
 ```
 
@@ -174,13 +174,14 @@ root:
 
 ```sh
 make js               # build the client mechanism buy.mjs imports
-node examples/weather/buy.mjs --new-key
+node examples/weather/buy.mjs --new-key http://localhost:8401/weather
 X402_MNEMONIC='<mnemonic>' node examples/weather/buy.mjs http://localhost:8401/weather
 ```
 
 `--new-key` prints a fresh 24-word mnemonic, the address it pays from and the command that pays
-with it, then exits: it sends no request and writes no file, so the printed mnemonic is the only
-copy.
+the seller URL given after it with that mnemonic, ready to paste, then exits: it sends no request
+and writes no file, so the printed mnemonic is the only copy. Without a URL the command ends in a
+`<seller URL>` to fill in.
 
 To pay, it registers `ExactGnoScheme` with `@x402/core`'s stock client, admits ugnot to the
 client's spend controls with a 1 GNOT cap per request, and signs with the mnemonic in

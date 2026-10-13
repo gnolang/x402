@@ -134,15 +134,20 @@ describe("buy.mjs --new-key", () => {
     rmSync(home, { recursive: true, force: true });
   });
 
-  // Runs buy.mjs --new-key in cwd, an empty directory that is also its HOME
-  // unless named, with env added to a clean environment, and returns what it
-  // printed.
-  async function newKey({ env = {}, cwd = home } = {}) {
+  // The seller URL a test hands --new-key: the node, so asking it counts.
+  function sellerURL() {
+    return `http://127.0.0.1:${node.address().port}/weather`;
+  }
+
+  // Runs buy.mjs --new-key with args after it, in cwd, an empty directory that
+  // is also its HOME unless named, with env added to a clean environment, and
+  // returns what it printed.
+  async function newKey({ args = [], env = {}, cwd = home } = {}) {
     const url = `http://127.0.0.1:${node.address().port}`;
     const { stdout } = await new Promise((resolve, reject) => {
       execFile(
         process.execPath,
-        [fileURLToPath(BUYER), "--new-key"],
+        [fileURLToPath(BUYER), "--new-key", ...args],
         {
           cwd,
           env: { PATH: process.env.PATH, HOME: home, X402_GNO_RPC: url, X402_SELLER_URL: `${url}/weather`, ...env },
@@ -180,24 +185,40 @@ describe("buy.mjs --new-key", () => {
     expect(stdout).toContain("https://faucet.gno.land");
   });
 
-  it("prints the command that pays with the key, run the way it was run", async () => {
-    const { mnemonic, pay } = await newKey({ cwd: REPOSITORY });
+  it("prints the command that pays the seller it was given with the key, run the way it was run", async () => {
+    const { mnemonic, pay } = await newKey({ args: ["https://weather.example/weather"], cwd: REPOSITORY });
 
-    expect(pay).toBe(
-      `X402_MNEMONIC='${mnemonic}' X402_GNO_RPC=<RPC of the seller's chain> node examples/weather/buy.mjs <seller URL>`,
-    );
+    expect(pay).toBe(`X402_MNEMONIC='${mnemonic}' node examples/weather/buy.mjs https://weather.example/weather`);
   });
 
   it("prints the pinned npx command when npx ran it", async () => {
-    const { mnemonic, pay } = await newKey({ env: { npm_lifecycle_event: "npx" } });
+    const { mnemonic, pay } = await newKey({
+      args: ["https://weather.example/weather"],
+      env: { npm_lifecycle_event: "npx" },
+    });
 
     expect(pay).toBe(
-      `X402_MNEMONIC='${mnemonic}' X402_GNO_RPC=<RPC of the seller's chain> npx github:gnoverse/x402#client/v${MANIFEST.version} <seller URL>`,
+      `X402_MNEMONIC='${mnemonic}' npx github:gnoverse/x402#client/v${MANIFEST.version} https://weather.example/weather`,
+    );
+  });
+
+  it("leaves the seller to fill in when it was given none", async () => {
+    const { mnemonic, pay } = await newKey({ cwd: REPOSITORY });
+
+    expect(pay).toBe(`X402_MNEMONIC='${mnemonic}' node examples/weather/buy.mjs <seller URL>`);
+  });
+
+  // An unquoted ? is a glob in zsh and & ends the command in every shell.
+  it("quotes a seller URL the shell would otherwise read", async () => {
+    const { mnemonic, pay } = await newKey({ args: ["https://weather.example/weather?city=paris&units=c"], cwd: REPOSITORY });
+
+    expect(pay).toBe(
+      `X402_MNEMONIC='${mnemonic}' node examples/weather/buy.mjs 'https://weather.example/weather?city=paris&units=c'`,
     );
   });
 
   it("touches neither the network nor the disk", async () => {
-    await newKey();
+    await newKey({ args: [sellerURL()] });
 
     expect(requests).toBe(0);
     expect(readdirSync(home)).toEqual([]);

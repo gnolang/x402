@@ -7,15 +7,15 @@
 // connects to.
 //
 //   node buy.mjs [seller URL]
-//   node buy.mjs --new-key
+//   node buy.mjs --new-key [seller URL]
 //
 // The buyer signs with the mnemonic in X402_MNEMONIC — a funded account on the
 // chain the seller's offer names — and reads its account sequence from a node on
 // that chain: X402_GNO_RPC when set, else the chain's public RPC listed below,
 // else a local node. With X402_SESSION_MASTER set to an account's address,
 // X402_MNEMONIC is instead a session key that account registered, and payments
-// move that account's coins. --new-key prints a fresh mnemonic to pay with, and
-// pays nothing.
+// move that account's coins. --new-key prints a fresh mnemonic and the command
+// that pays the seller with it, and pays nothing.
 import { readFileSync } from "node:fs";
 import { relative } from "node:path";
 
@@ -67,6 +67,15 @@ if (process.argv[2] === "--new-key") {
     process.env.npm_lifecycle_event === "npx"
       ? `npx github:gnoverse/x402#client/v${version}`
       : `node ${relative(process.cwd(), process.argv[1])}`;
+  // A URL with a character a shell reads, such as ? (a glob in zsh) or &, is
+  // single-quoted, so the printed line pastes as it is.
+  const seller = process.argv[3];
+  const target =
+    seller === undefined
+      ? "<seller URL>"
+      : /^[\w@%+=:,./-]+$/.test(seller)
+        ? seller
+        : `'${seller.replaceAll("'", `'\\''`)}'`;
   console.log(`a new key for the testnet, saved nowhere: this is the only copy of its mnemonic
 use it as a throwaway, and never send it anything you would mind losing
 
@@ -74,7 +83,7 @@ mnemonic: ${fresh}
 address:  ${freshAddress}
 
 fund the address at https://faucet.gno.land, then pay with it:
-  X402_MNEMONIC='${fresh}' X402_GNO_RPC=<RPC of the seller's chain> ${command} <seller URL>`);
+  X402_MNEMONIC='${fresh}' ${command} ${target}`);
   process.exit(0);
 }
 
