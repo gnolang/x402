@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // Buys the weather from the seller in this directory: one paid GET, printed for
 // a human. The x402 flow is the five numbered steps below: ask, read the terms
 // from the 402, sign, ask again with the payment, read the receipt. @x402/core's

@@ -17,8 +17,13 @@
     "tendermint2",
     "payments"
   ],
+  "//bin": "x402-gno is the weather buyer, so `npx github:gnoverse/x402#<ref> <seller URL>` pays a seller without a clone, and the published package carries the same command. npm installs only the package at a repository's root, which is why the command is declared here and its file is listed in `files`.",
+  "bin": {
+    "x402-gno": "examples/weather/buy.mjs"
+  },
   "files": [
-    "client/dist/"
+    "client/dist/",
+    "examples/weather/buy.mjs"
   ],
   "//exports": "The subpath is the ecosystem's own grid — @x402/evm publishes ./exact/client, ./exact/server and ./exact/facilitator, so a buyer that already imports one reaches for the same path here. gno's server half is Go, so ./exact/client is the only cell this package fills.",
   "exports": {
@@ -37,12 +42,13 @@
   "engines": {
     "node": ">=20"
   },
-  "//scripts": "prepublishOnly runs on every publish, from CI or a laptop. `files` ships only client/dist, so publishing an unbuilt tree would put a package on the registry whose single export path does not resolve — and a burned version number can never be reused.",
+  "//scripts": "prepublishOnly runs on every publish, from CI or a laptop. `files` ships client/dist, so publishing an unbuilt tree would put a package on the registry whose single export path does not resolve — and a burned version number can never be reused. prepare builds that tree when npm installs the package from git, as npx github:… does: client/dist is not committed, and the x402-gno command imports it. npm also runs prepare after npm install or npm ci in a clone, unless scripts are ignored.",
   "scripts": {
     "typecheck": "tsc",
     "test": "vitest run",
     "build": "tsc && tsdown",
     "check:package": "publint && attw --pack . --profile esm-only",
+    "prepare": "npm run build",
     "prepublishOnly": "npm run build"
   },
   "//dependencies": "Versions are exact so a signed payment changes only when a dependency is deliberately bumped. @x402/core is a peer: only its types are used, and a mechanism must not pull in a second copy of the client its consumer already has.",
