@@ -221,7 +221,7 @@ footer{margin-top:40px;padding-top:15px;border-top:1px solid var(--x-line);color
         <p class="eyebrow mono"><span class="badge"><span class="unpaid">402</span><span class="settled">200</span></span><span class="unpaid">PAYMENT REQUIRED</span><span class="settled">OK · PAYMENT SETTLED</span></p>
         <h1 class="headline">x402 on Gno:<br>pay per HTTP request.</h1>
         <p class="intro">Sign a payment for one weather request, then get the data once it settles. A script or an agent pays the same price over HTTP, with no account and no API key.</p>
-        <p class="coordinates mono">SAMPLE RESOURCE / GET /weather · PARIS</p>
+        <p class="coordinates mono">SAMPLE RESOURCE / GET /weather</p>
         <div class="instrument">
           <div class="gauge">
             <div class="dial">
@@ -240,14 +240,14 @@ footer{margin-top:40px;padding-top:15px;border-top:1px solid var(--x-line);color
           </div>
           <div class="reading-copy">
             <p class="reading-title"><span class="awaiting">The sample reading.</span><span class="reading">The reading you paid for.</span></p>
-            <p><span class="awaiting">Fictional weather for Paris, not a forecast. It appears once the payment settles.</span><span class="reading">Sample data, not a forecast: the seller takes turns among a few made-up readings.</span></p>
+            <p><span class="awaiting">Fictional weather, not a forecast. It appears once the payment settles.</span><span class="reading">Sample data, not a forecast: the seller takes turns among a few made-up readings.</span></p>
           </div>
         </div>
       </div>
 
       <section class="offer" aria-labelledby="offer-title">
         <p class="mono">THE TERMS / SCHEME EXACT</p>
-        <h2 id="offer-title">Weather for Paris.<br>One reading, one payment.</h2>
+        <h2 id="offer-title">Get the weather.<br>One reading, one payment.</h2>
         <p class="price"><strong>{{.Amount}}</strong><span>{{.Unit}} / request</span></p>
         <p class="fine mono">{{.Coin}}</p>
         <p class="net">Test GNOT on <code>{{.Network}}</code>, from <a href="https://faucet.gno.land">faucet.gno.land</a>. The network fee is on top.</p>
