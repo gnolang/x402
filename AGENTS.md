@@ -33,7 +33,7 @@ names a language.
 | `client/src/` | upstream's `SchemeNetworkClient`, TypeScript; emits to `client/dist/` |
 | `cmd/gnofacilitator/` | the binary |
 | `examples/weather/` | the demo: a priced endpoint (`main.go`), the page a browser gets and pays through with Adena (`paywall.html`, `paywall.js`, tested by `make js-test`), the buyer that pays it from a script (`buy.mjs`, also the root package's `x402-gno` command), and a Makefile that runs them and a facilitator |
-| `e2e/` | real payments through real nodes — its own Go module. `buyer.mjs` beside it is the buyer the contract scenarios drive; the happy path, the session payment, the pending settlement and the refused one drive `examples/weather/buy.mjs`. `settle_test.go` settles one payment twice at once through two facilitators on one node, two on two nodes and one over two nodes, and replays a settled one |
+| `e2e/` | real payments through real nodes — its own Go module. `buyer.mjs` beside it is the buyer the contract scenarios drive; the happy path, the session payment, the pending settlement, the refused one and the unfunded payer drive `examples/weather/buy.mjs`. `settle_test.go` settles one payment twice at once through two facilitators on one node, two on two nodes and one over two nodes, and replays a settled one |
 | `docs/releasing.md` | the two independent release lines |
 | `docs/deploying.md` | running the facilitator image: flags, endpoints, limits, failure modes |
 
@@ -94,7 +94,7 @@ accident and needs no build tag to stay out of the way.
 | Bump the Go toolchain | `go-version` in `.github/workflows/*.yml` · the `golang` image pin in `docker/weather.Dockerfile` |
 | Change a flag, default, timeout, limit or exit code in `cmd/gnofacilitator` | `docs/deploying.md` |
 | Follow the target testnet to a new `gnolang/gno` chain tag | `github.com/gnolang/gno` in `go.mod` and `e2e/go.mod` · re-record `facilitator/exact/testdata/onyx_simulate_send.json` |
-| Release the client | bump `package.json`'s version — the workflow refuses a dispatch that disagrees with it. The facilitator's version is its git tag alone, so it needs no bump. Bump the `client/vX.Y.Z` the `npx github:gnoverse/x402#…` commands pin in `examples/weather/paywall.html`, `examples/weather/README.md` and `client/README.md` in the same change; `buy.mjs --new-key` reads it from the version |
+| Release the client | bump `package.json`'s version — the workflow refuses a dispatch that disagrees with it. The facilitator's version is its git tag alone, so it needs no bump. Bump the `client/vX.Y.Z` the `npx github:gnoverse/x402#…` commands pin in `examples/weather/paywall.html`, `examples/weather/README.md` and `client/README.md`, and the tag the weather README's `buy.mjs` link names, in the same change; `buy.mjs --new-key` reads it from the version |
 | Add a make target | this file (Commands) |
 | Import a new package in `examples/weather/buy.mjs` | declare it in `dependencies` (exact version) or `peerDependencies`. The buyer runs as the package's `x402-gno` command, where devDependencies are not installed; `buy.test.js` fails otherwise |
 

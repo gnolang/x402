@@ -1,0 +1,30 @@
+# A buyer paying from an address the chain has never funded is told which
+# address to fund, rather than the node client's own error.
+#
+# The mnemonic is the public BIP39 test vector: 23 "abandon" words, then "art".
+# The harness funds test1 and the users a script adds with adduser, never this one.
+gnoland start
+
+x402facilitator
+x402seller seller.json $test1_user_addr
+
+env 'X402_MNEMONIC=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art'
+! exec node $X402_EXAMPLE_BUYER
+
+# It names the node it asked, the one X402_GNO_RPC names here.
+stdout 'not paid: g1r5v5srda7xfth3hn2s26txvrcrntldjughmckm has no account at http://127\.0\.0\.1:[0-9]+; fund it'
+stdout 'https://faucet.gno.land'
+! stdout 'sunny'
+
+-- seller.json --
+{
+  "route": "GET /weather",
+  "price": { "asset": "ugnot", "amount": "250000" },
+  "description": "Weather data",
+  "mimeType": "application/json",
+  "body": {
+    "location": "Paris",
+    "forecast": "sunny",
+    "celsius": 24
+  }
+}

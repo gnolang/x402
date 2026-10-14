@@ -36,8 +36,9 @@ gh workflow run release.yml --ref main -f component=client -f version=0.2.0
 
 The same PR moves the `client/vX.Y.Z` that the `npx github:gnoverse/x402#…` commands pin in
 `examples/weather/paywall.html`, `examples/weather/README.md` and `client/README.md` to the new
-version. The tag exists once the release runs, and from then on those commands run the buyer that
-release carries.
+version, and the tag in the weather README's link to `buy.mjs`, so the script a reader is told to
+read is the one the commands run. The tag exists once the release runs, and from then on those
+commands run the buyer that release carries.
 
 The workflow refuses the dispatch if `package.json` disagrees with `version`, or if that
 version is already on the registry. When the `npm` environment lists required reviewers, the

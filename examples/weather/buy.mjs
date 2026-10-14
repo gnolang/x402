@@ -101,13 +101,16 @@ const wallet = await GnoWallet.fromMnemonic(mnemonic);
 // A stock client only pays in USD-pegged assets until told otherwise, and ugnot
 // is not one. The wallet connects once the client has picked the offer it pays,
 // to a node on the chain that offer names.
+// The node the paying account is read from, once the client has picked an offer.
+let node;
 const client = new x402Client()
   .register("gno:*", new ExactGnoScheme(wallet, { master }))
   .setSpendControls({
     allowedAssets: [{ network: "gno:*", asset: "ugnot", maxAmountPerPayment: MAX_PRICE }],
   })
   .onBeforePaymentCreation(async ({ selectedRequirements }) => {
-    wallet.connect(await GnoJSONRPCProvider.create(rpcFor(selectedRequirements.network)));
+    node = rpcFor(selectedRequirements.network);
+    wallet.connect(await GnoJSONRPCProvider.create(node));
   });
 const http = new x402HTTPClient(client);
 
@@ -147,7 +150,12 @@ try {
 } catch (err) {
   // Thrown when the seller or the node cannot be reached, or no payment can be
   // signed, such as for an account the chain has never funded.
-  notPaid(err);
+  // tm2-js-client marks an address with no account only by this message.
+  notPaid(
+    err instanceof Error && err.message === "account is not initialized"
+      ? `${address} has no account at ${node}; fund it, then run this again (https://faucet.gno.land funds the public testnets)`
+      : err,
+  );
 }
 
 // 5. Read the answer: the weather once the payment settled, and the receipt in

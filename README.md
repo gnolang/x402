@@ -20,6 +20,11 @@ middleware. This supplies the chain-specific parts:
 - **`gnofacilitator`** — verifies payments and broadcasts them. It holds no keys.
 - **Client mechanism** — register it on a stock x402 client, list ugnot in the client's spend controls, and the client pays a gno chain.
 
+**Try it:** <https://x402-demo.onyx.testnets.gno.land/weather> sells sample weather for 0.25 GNOT
+on the onyx testnet (`gno:onyx-1`). A browser with the [Adena](https://adena.app) wallet pays from
+the page, and a terminal pays with the two commands in
+[examples/weather](examples/weather#paying-it).
+
 ## Sell something
 
 ```go
