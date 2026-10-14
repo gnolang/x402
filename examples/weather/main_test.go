@@ -477,6 +477,26 @@ func TestTheAmountIsShownInGNOT(t *testing.T) {
 	}
 }
 
+// A browser asks for /favicon.ico on its own, beside the page; the icon is not
+// what is sold, so it carries no terms.
+func TestTheSellerServesItsIconUnpriced(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	resp, err := http.Get(sellerURL + "/favicon.ico")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "image/x-icon", resp.Header.Get("Content-Type"))
+	assert.Equal(t, "public, max-age=86400", resp.Header.Get("Cache-Control"))
+	assert.Empty(t, resp.Header.Get("PAYMENT-REQUIRED"))
+	assert.Equal(t, []byte{0, 0, 1, 0}, body[:min(len(body), 4)], "an ICO file starts with this header")
+}
+
 // Someone who types the host alone lands on the demo. Without a public URL the
 // redirect is relative, so it holds behind a proxy that serves the seller under
 // a path ending in a slash.
