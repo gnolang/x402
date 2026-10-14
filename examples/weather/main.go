@@ -77,6 +77,12 @@ var paywall = template.Must(template.New("paywall").Parse(paywallPage))
 //go:embed paywall.js
 var paywallScript string
 
+// favicon is the page's icon, which a browser asks for at /favicon.ico on its
+// own.
+//
+//go:embed favicon.ico
+var favicon []byte
+
 func main() {
 	listen := flag.String("listen", ":8401", "HTTP listen address")
 	facilitator := flag.String("facilitator", "http://localhost:8402", "gno facilitator base URL")
@@ -267,6 +273,11 @@ func newSeller(ctx context.Context, cfg sellerConfig) (http.Handler, error) {
 	limited.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Location", location)
 		w.WriteHeader(http.StatusSeeOther)
+	})
+	limited.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/x-icon")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		_, _ = w.Write(favicon)
 	})
 	return limited, nil
 }

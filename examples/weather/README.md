@@ -154,7 +154,7 @@ Install Adena button that opens adena.app, and the page says to reload once it i
 without JavaScript, neither shows. Below them, an "Or pay it from code" link leads down to the
 steps for paying from code, behind a warning to read the buyer first: make a throwaway key with it
 for the page's URL, fund the key, then run the pay command the key step printed.
-`/` redirects to `/weather`.
+`/` redirects to `/weather`, and `/favicon.ico` serves the page's icon, unpriced.
 
 ## Paying it
 
