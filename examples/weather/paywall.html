@@ -7,7 +7,7 @@
 <style>
 :root{
   --x-paper:#eceee8;--x-ink:#183c34;--x-muted:#4a6057;--x-line:#aab9aa;--x-panel:#e2e6db;
-  --x-accent:#d9ed84;--x-on-face:#183c34;
+  --x-accent:#d9ed84;--x-due:#eebe3f;--x-on-face:#183c34;
   --x-sunny-face:#e9efaa;--x-sunny-ring:#8d872c;--x-sunny-glyph:#6b661e;--x-sunny-glow:rgba(238,190,63,.24);--x-sunny-halo:rgba(218,183,56,.22);
   --x-cloudy-face:#d7ddd6;--x-cloudy-ring:#6b7b74;--x-cloudy-glyph:#4a5a54;--x-cloudy-bank:rgba(108,126,118,.16);
   --x-rain-face:#c2dae0;--x-rain-ring:#5d8897;--x-rain-glyph:#365e70;--x-rain-tint:rgba(83,129,147,.17);--x-rain-line:rgba(84,123,138,.4);
@@ -15,7 +15,7 @@
   --x-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   --x-display:"Helvetica Neue",Arial,sans-serif;
   --x-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  --x-gutter:48px;--x-dial:270px;
+  --x-gutter:48px;--x-dial:270px;--x-masthead:73px;
 }
 @media (prefers-color-scheme:dark){:root{
   --x-paper:#132b26;--x-ink:#e4eddf;--x-muted:#b2c4b9;--x-line:#4c6c5e;--x-panel:#203c32;
@@ -54,7 +54,7 @@ pre code{font-size:inherit}
 .sky[data-forecast=snow]::after{opacity:.5;inset:-200px 0 0;background:radial-gradient(circle at 20px 25px,var(--x-snow-flake) 0 2px,transparent 3px),radial-gradient(circle at 75px 110px,var(--x-snow-flake) 0 3px,transparent 4px);background-size:160px 180px,230px 180px}
 
 /* ---- Masthead */
-.masthead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px 20px;padding:25px 0;border-bottom:1px solid var(--x-ink)}
+.masthead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px 20px;min-height:var(--x-masthead);padding:25px 0;border-bottom:1px solid var(--x-ink)}
 .masthead .mono{text-transform:uppercase}
 .brand{font-size:14px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
 .brand span{display:inline-block;width:13px;height:13px;margin-right:10px;border:1px solid currentColor;border-radius:50%;vertical-align:-1px}
@@ -63,8 +63,12 @@ pre code{font-size:inherit}
 
 /* ---- The 402 and the reading */
 .hero{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:60px;padding:42px 0 48px}
+/* Unpaid, the masthead and the hero fill the first screen, so no heading below is cut by its
+   edge; paid, the response follows the hero. */
+.hero{min-height:calc(100vh - var(--x-masthead));min-height:calc(100svh - var(--x-masthead))}
+.sky:has(#pay-result:not([hidden])) .hero{min-height:0}
 .eyebrow{display:flex;gap:12px;align-items:center}
-.badge{padding:5px 9px;background:var(--x-ink);color:var(--x-paper)}
+.badge{padding:5px 9px;background:var(--x-due);color:var(--x-on-face)}
 .settled{display:none}
 /* paywall.js reveals #pay-result only for a settled payment. */
 .sky:has(#pay-result:not([hidden])) .settled{display:inline}
@@ -96,43 +100,39 @@ pre code{font-size:inherit}
 .sky[data-forecast=rain] .dial::after{border-bottom-width:4px}
 .sky[data-forecast=snow] .dial::after{border-style:dashed}
 .reading-copy{max-width:240px}
-.reading-copy h2{margin-bottom:12px;font-size:24px;letter-spacing:-.03em;line-height:1.25}
 .reading-copy p{color:var(--x-muted);font-size:14px}
+.reading-copy .reading-title{margin-bottom:12px;color:var(--x-ink);font-size:24px;font-weight:500;letter-spacing:-.03em;line-height:1.25}
 
 /* ---- The offer */
 .offer{align-self:start;padding-top:18px;border-top:3px solid var(--x-ink)}
 .offer h2{margin:18px 0;font-size:26px;letter-spacing:-.04em;line-height:1.2}
-.lede{color:var(--x-muted);font-size:14px}
-.demo-note{margin:16px 0;padding-left:10px;border-left:2px solid var(--x-line);color:var(--x-muted);font-size:12px}
-.demo-note strong{color:var(--x-ink)}
 .price{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;margin-top:27px}
 .price strong{font-size:66px;font-weight:500;letter-spacing:-.06em;line-height:1}
 .price span{font-size:17px}
 .fine{margin-top:3px;color:var(--x-muted)}
-.net,.fee,#no-adena{margin-top:14px;color:var(--x-muted);font-size:13px}
+.net,#no-adena p{margin-top:14px;color:var(--x-muted);font-size:13px}
 .net code{color:var(--x-ink)}
-.pay-button{display:flex;justify-content:space-between;gap:12px;width:100%;margin-top:22px;padding:17px 20px;border:0;background:var(--x-ink);color:var(--x-paper);font-weight:600;text-align:left}
-.pay-button:hover{filter:brightness(1.2)}
+.pay-button{display:flex;justify-content:space-between;gap:12px;width:100%;margin-top:22px;padding:17px 20px;border:1px solid var(--x-on-face);background:var(--x-accent);color:var(--x-on-face);font-weight:600;text-align:left;text-decoration:none}
+.pay-button:hover{filter:brightness(1.08)}
+.alt-pay{display:flex;justify-content:space-between;gap:12px;margin-top:10px;padding:13px 20px;border:1px solid var(--x-muted);color:var(--x-ink);font-size:14px;text-decoration:none}
+.alt-pay:hover{border-color:var(--x-ink)}
+/* After a payment the page offers no second payment, so the link to pay from code goes too. */
+.sky:has(#pay-result:not([hidden])) .alt-pay{display:none}
+/* Adena pays through the script, so without it only paying from code remains. */
+@media (scripting:none){#no-adena{display:none}}
 .pay-button:disabled{cursor:wait;opacity:.75}
 #pay-status{margin-top:12px;font-size:13px;overflow-wrap:anywhere}
 #pay-status:empty{display:none}
-#no-adena{color:var(--x-ink)}
 .offer dl{margin:22px 0 0}
-.offer dl div{display:grid;grid-template-columns:80px minmax(0,1fr);gap:8px;padding:10px 0;border-top:1px solid var(--x-line);font-size:12px}
+.offer dl div{display:grid;grid-template-columns:80px minmax(0,1fr);gap:8px;padding:10px 0;border-top:1px solid var(--x-line);font-size:13px}
 .offer dt{color:var(--x-muted)}
 .offer dd{margin:0;overflow-wrap:anywhere}
 .offer dd .fine{display:block;margin:0}
 details{margin-top:20px}
 summary{width:fit-content;font-size:13px;cursor:pointer}
 
-/* ---- The response, the protocol and the documentation */
+/* ---- The response and the documentation */
 .response{padding:20px 0;border-top:1px solid var(--x-ink)}
-.protocol{display:grid;grid-template-columns:repeat(4,1fr);margin:0 0 60px;padding:0;border-top:1px solid var(--x-ink);border-bottom:1px solid var(--x-ink);list-style:none}
-.protocol li{padding:21px 18px;border-right:1px solid var(--x-line)}
-.protocol li:first-child{padding-left:0}
-.protocol li:last-child{border-right:0}
-.protocol .mono{display:block;color:var(--x-muted)}
-.protocol b{display:block;margin-top:8px;font-size:14px;font-weight:500}
 .documentation{max-width:760px;margin:0 auto 60px}
 .documentation h2{margin:44px 0 16px;font-size:28px;letter-spacing:-.04em;line-height:1.2}
 .documentation p{margin-top:16px;color:var(--x-muted)}
@@ -161,20 +161,18 @@ footer{margin-top:40px;padding-top:15px;border-top:1px solid var(--x-line);color
 }
 @media (max-width:800px){
   :root{--x-gutter:22px;--x-dial:150px}
-  .masthead{display:grid;grid-template-columns:minmax(0,1fr) auto;padding:20px 0}
+  .masthead{display:grid;grid-template-columns:minmax(0,1fr) auto;min-height:0;padding:20px 0}
   .edition{grid-row:2;grid-column:1/-1}
   .masthead .how{display:none}
-  .hero{grid-template-columns:minmax(0,1fr);padding-top:26px}
+  .hero{grid-template-columns:minmax(0,1fr);min-height:0;padding-top:26px}
   .headline{font-size:clamp(34px,8.6vw,56px)}
   .instrument{flex-direction:row;align-items:flex-start;gap:18px;margin-top:24px}
   .dial-caption{margin-top:10px;font-size:10px;letter-spacing:.1em}
-  .reading-copy h2{font-size:20px}
+  /* On a phone the empty dial stays hidden until a forecast is drawn, so the price comes first. */
+  .sky:not([data-forecast]) .instrument{display:none}
+  .reading-copy .reading-title{font-size:20px}
   .reading-copy p{font-size:13px}
   .price strong{font-size:60px}
-  .protocol{grid-template-columns:1fr 1fr;margin-bottom:40px}
-  .protocol li,.protocol li:first-child{padding:16px}
-  .protocol li:nth-child(2){border-right:0}
-  .protocol li:nth-child(-n+2){border-bottom:1px solid var(--x-line)}
   .documentation h2{font-size:25px}
   .flow li{grid-template-columns:45px minmax(0,1fr);font-size:14px}
   .steps>li{grid-template-columns:minmax(0,1fr);gap:2px;font-size:14px}
@@ -182,6 +180,10 @@ footer{margin-top:40px;padding-top:15px;border-top:1px solid var(--x-line);color
   pre[data-copy]{padding:44px 16px 16px}
 }
 @media (prefers-reduced-motion:no-preference){
+  html{scroll-behavior:smooth}
+  .eyebrow,.headline{animation:x-rise .5s ease backwards}
+  /* Not .instrument: Chrome holds it at the animation's first frame while reporting it finished. */
+  .intro,.coordinates,.offer{animation:x-rise .5s ease .15s backwards}
   .sky::before,.sky::after{transition:opacity 1.2s ease}
   .dial,.dial::before,.dial::after{transition:background-color 1.2s ease,border-color 1.2s ease,box-shadow 1.2s ease}
   .sky[data-forecast=sunny]::before{animation:x-sunlight 12s ease-in-out infinite alternate}
@@ -233,8 +235,8 @@ footer{margin-top:40px;padding-top:15px;border-top:1px solid var(--x-line);color
             <p class="dial-caption mono"><span class="awaiting">Awaiting payment</span><span class="reading"><span id="paid-forecast"></span> / Celsius</span></p>
           </div>
           <div class="reading-copy">
-            <h2><span class="awaiting">The sample reading.</span><span class="reading">The reading you paid for.</span></h2>
-            <p><span class="awaiting">This demo serves fictional weather for Paris, not live observations. The reading appears once the payment settles.</span><span class="reading">Sample data, not a forecast: the seller takes turns among a few made-up readings.</span></p>
+            <p class="reading-title"><span class="awaiting">The sample reading.</span><span class="reading">The reading you paid for.</span></p>
+            <p><span class="awaiting">Fictional weather for Paris, not a forecast. It appears once the payment settles.</span><span class="reading">Sample data, not a forecast: the seller takes turns among a few made-up readings.</span></p>
           </div>
         </div>
       </div>
@@ -242,21 +244,21 @@ footer{margin-top:40px;padding-top:15px;border-top:1px solid var(--x-line);color
       <section class="offer" aria-labelledby="offer-title">
         <p class="mono">THE TERMS / SCHEME EXACT</p>
         <h2 id="offer-title">Weather for Paris.<br>One reading, one payment.</h2>
-        <p class="lede">You asked without paying, so the terms came back instead of the weather.</p>
-        <p class="demo-note"><strong>Fictional weather data.</strong> This endpoint takes turns among a few made-up readings; none is a forecast. It demonstrates x402 payments on Gno.</p>
         <p class="price"><strong>{{.Amount}}</strong><span>{{.Unit}} / request</span></p>
         <p class="fine mono">{{.Coin}}</p>
-        <p class="net">Test GNOT on <code>{{.Network}}</code>; <a href="https://faucet.gno.land">faucet.gno.land</a> funds the public testnets.</p>
+        <p class="net">Test GNOT on <code>{{.Network}}</code>, from <a href="https://faucet.gno.land">faucet.gno.land</a>. The network fee is on top.</p>
         <div id="pay-adena" hidden>
-          <button class="pay-button" id="pay" type="button"><span>Pay {{.Amount}} {{.Unit}} with Adena</span><span aria-hidden="true">↗</span></button>
+          <button class="pay-button" id="pay" type="button"><span>Pay {{.Amount}} {{.Unit}} with Adena</span></button>
           <p id="pay-status" role="status" data-tx="{{.TxURL}}"></p>
         </div>
-        <p id="no-adena">No Adena wallet in this browser. Pay it from code below, or install <a href="https://adena.app">Adena</a> and reload.</p>
-        <p class="fee">Network fee paid by you, on top of the amount.</p>
+        <div id="no-adena">
+          <a class="pay-button" href="https://adena.app" target="_blank" rel="noopener"><span>Install Adena</span><span aria-hidden="true">↗</span></a>
+          <p>Then reload this page.</p>
+        </div>
+        <a class="alt-pay" href="#code"><span>Or pay it from code</span><span aria-hidden="true">↓</span></a>
         <dl>
           <div><dt>Network</dt><dd><code>{{.Network}}</code><span class="fine">chain id {{.ChainID}}</span></dd></div>
           <div><dt>Pay to</dt><dd><code>{{.PayTo}}</code></dd></div>
-          <div><dt>Scheme</dt><dd><code>exact</code> · flow <code>authorization</code></dd></div>
         </dl>
         <details id="terms">
           <summary>Inspect the decoded <code>PAYMENT-REQUIRED</code> header</summary>
@@ -271,29 +273,30 @@ curl -si <span data-url>&lt;this page's URL&gt;</span></code></pre>
       <pre><code></code></pre>
     </section>
 
-    <ol class="protocol" id="how">
-      <li><span class="mono">402 / REQUEST</span><b>The seller sends the terms.</b></li>
-      <li><span class="mono">SIGN / AUTHORIZE</span><b>You sign the transfer.</b></li>
-      <li><span class="mono">RETRY / VERIFY</span><b>The weather is produced.</b></li>
-      <li><span class="mono">200 / SETTLE + SERVE</span><b>Payment settles. Data arrives.</b></li>
-    </ol>
-
     <div class="documentation">
-      <h2>Pay it from code</h2>
-      <p>A script or an agent pays it the same way: an x402 client reads the terms, signs a transfer of the amount to the payee (a gno bank send), and repeats the request with the payment attached. <code>buy.mjs</code>, beside this seller in the repository, is one such client, and one command runs it without a clone.</p>
+      <h2 id="how">What happens when it pays</h2>
+      <ol class="flow">
+        <li><code>402</code><div><b>The unpaid request.</b> <code>GET /weather</code> answers 402 with the terms above in <code>PAYMENT-REQUIRED</code>.</div></li>
+        <li><code>sign</code><div><b>The buyer signs.</b> A bank send of {{.Coin}} to the payee, signed by the buyer's wallet or key and placed in <code>PAYMENT-SIGNATURE</code>. Nothing is broadcast yet.</div></li>
+        <li><code>retry</code><div><b>The same request, paid.</b> The seller hands the signed transaction to its facilitator, which checks it against the terms. Only then does the weather get produced.</div></li>
+        <li><code>200</code><div><b>Settled, then served.</b> The facilitator broadcasts the transaction, then the weather goes out and <code>PAYMENT-RESPONSE</code> carries the transaction hash. A resource that fails is never charged; a settlement that fails withholds the response.</div></li>
+      </ol>
+
+      <h2 id="code">Pay it from code</h2>
+      <p>A script or an agent pays the same way. <code>buy.mjs</code>, beside this seller in the repository, is one such client. One command runs it without a clone.</p>
       <div class="caution" role="note">
         <p class="mono">READ IT BEFORE YOU RUN IT</p>
-        <p><b>The script signs with the mnemonic you give it.</b> Read it first, and never give it a mnemonic that holds anything: make a throwaway key for it instead. A <a href="https://github.com/gnoverse/x402/blob/main/client/README.md#paying-with-a-session-key">session key</a> your account registered works too, with <code>X402_SESSION_MASTER</code> set to your address; the chain holds it to its spend limit and expiry.</p>
+        <p><b>The script signs with the mnemonic you give it.</b> Read it first, and never give it a mnemonic that holds anything: use a throwaway key. A <a href="https://github.com/gnoverse/x402/blob/main/client/README.md#paying-with-a-session-key">session key</a> works too, with <code>X402_SESSION_MASTER</code> set to your address; the chain holds it to its spend limit.</p>
       </div>
       <ol class="steps">
         <li><div><b>Read the script.</b> <a href="https://github.com/gnoverse/x402/blob/main/examples/weather/buy.mjs">examples/weather/buy.mjs</a> is the whole buyer the commands below run.</div></li>
         <li><div><b>Make a throwaway key.</b> This prints a new mnemonic, its address and the command that pays this page with it, and saves none of them.
-          <pre data-copy><code>npx github:gnoverse/x402#client/v0.5.0 --new-key <span data-url>&lt;this page's URL&gt;</span></code></pre></div></li>
+          <pre data-copy><code>npx github:gnoverse/x402#client/v0.5.0 <span class="nowrap">--new-key</span> <span data-url>&lt;this page's URL&gt;</span></code></pre></div></li>
         <li><div><b>Fund its address</b> at <a href="https://faucet.gno.land">faucet.gno.land</a> with test GNOT on <code class="nowrap">{{.Network}}</code>: {{.Amount}} {{.Unit}} for the weather, and the network fee on top.</div></li>
-        <li><div><b>Pay</b> by running the command step 2 printed, which looks like this. The buyer prints the transaction and the weather.
+        <li><div><b>Pay</b> with the command step 2 printed. It looks like this, and prints the transaction and the weather.
           <pre><code>X402_MNEMONIC='&lt;mnemonic&gt;' npx github:gnoverse/x402#client/v0.5.0 <span data-url>&lt;this page's URL&gt;</span></code></pre></div></li>
       </ol>
-      <p>Both commands need git and Node 22.18+ or 24.11+: npx fetches the repository at the tag and builds the buyer before running it. The buyer reads the paying account from a node on the offer's chain: the one <code>X402_GNO_RPC</code> names, else the chain's public RPC where the buyer knows it (<code class="nowrap">onyx-1</code>), else a local node. To run it from a clone instead, <code>git clone https://github.com/gnoverse/x402</code>, run <code>make js</code> at its root, then run <code>node examples/weather/buy.mjs</code> in place of the npx command, with the same arguments and variables.</p>
+      <p>Both commands need git and Node 22.18+ or 24.11+. Running the buyer from a clone, or against another node, is in the <a href="https://github.com/gnoverse/x402/tree/main/examples/weather#paying-it">weather example's README</a>.</p>
       <p>A stock x402 client pays in gno after two lines: register the scheme, and admit <code>ugnot</code> (a millionth of a GNOT) to its spend controls, capped per request.</p>
       <pre data-copy><code>import { ExactGnoScheme } from "@gnoverse/x402-gno/exact/client";
 
@@ -302,14 +305,6 @@ const client = new x402Client()
   .setSpendControls({
     allowedAssets: [{ network: "gno:*", asset: "ugnot", maxAmountPerPayment: "1000000" }],
   });</code></pre>
-
-      <h2>What happens when it pays</h2>
-      <ol class="flow">
-        <li><code>402</code><div><b>The unpaid request.</b> <code>GET /weather</code> answers 402 with the terms above in <code>PAYMENT-REQUIRED</code>.</div></li>
-        <li><code>sign</code><div><b>The buyer signs.</b> A bank send of {{.Coin}} to the payee, signed by the buyer's wallet or key and placed in <code>PAYMENT-SIGNATURE</code>. Nothing is broadcast yet.</div></li>
-        <li><code>retry</code><div><b>The same request, paid.</b> The seller hands the signed transaction to its facilitator, which checks it against the terms. Only then does the weather get produced.</div></li>
-        <li><code>200</code><div><b>Settled, then served.</b> The facilitator broadcasts the transaction, then the weather goes out and <code>PAYMENT-RESPONSE</code> carries the transaction hash. A resource that fails is never charged; a settlement that fails withholds the response.</div></li>
-      </ol>
 
       <h2>Read more</h2>
       <p>The seller, the buyer and a facilitator you can run yourself are in <a href="https://github.com/gnoverse/x402/tree/main/examples/weather">examples/weather</a>. The mechanism and its payment model are in the <a href="https://github.com/gnoverse/x402#readme">gnoverse/x402 README</a>.</p>

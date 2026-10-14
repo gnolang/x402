@@ -258,6 +258,30 @@ func TestThePageNamesTheNetworkAndTheFaucetWithOrWithoutAdena(t *testing.T) {
 	assert.Contains(t, offer, `href="https://faucet.gno.land"`)
 }
 
+// Paying from code needs no wallet, so the offer points to it whether Adena is
+// there or not, outside the blocks the script shows and hides.
+func TestTheOfferPointsToPayingFromCodeWithOrWithoutAdena(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	_, offer, found := strings.Cut(page, `<section class="offer"`)
+	require.True(t, found, "the offer panel is gone")
+	offer, _, found = strings.Cut(offer, "</section>")
+	require.True(t, found, "the offer panel never closes")
+	for _, block := range []string{`<div id="pay-adena"`, `<div id="no-adena"`} {
+		before, rest, found := strings.Cut(offer, block)
+		require.True(t, found, "%s is gone", block)
+		_, after, found := strings.Cut(rest, "</div>")
+		require.True(t, found, "%s never closes", block)
+		offer = before + after
+	}
+	assert.Contains(t, offer, `href="#code"`)
+	assert.Contains(t, page, `id="code"`)
+}
+
 func TestATransactionLinksToTheExplorerOfTheChainsItKnows(t *testing.T) {
 	assert.Equal(t, "https://gnoscan.io/transactions/details?chainId=onyx-1&txhash=", explorerTxURL("onyx-1"))
 	assert.Empty(t, explorerTxURL("dev"), "a local chain has no explorer")
@@ -284,7 +308,7 @@ func TestThePageMakesAKeyForPayingThisPage(t *testing.T) {
 
 	_, page := browserPage(t, sellerURL)
 
-	assert.Contains(t, page, `--new-key <span data-url>`)
+	assert.Contains(t, page, `--new-key</span> <span data-url>`)
 }
 
 // The pay step shows the command the key step prints: the mnemonic, the
