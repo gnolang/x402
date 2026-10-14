@@ -15,7 +15,7 @@
   --x-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   --x-display:"Helvetica Neue",Arial,sans-serif;
   --x-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  --x-gutter:48px;--x-dial:270px;--x-masthead:73px;
+  --x-gutter:48px;--x-dial:270px;--x-masthead:73px;--x-hero-content:670px;
 }
 @media (prefers-color-scheme:dark){:root{
   --x-paper:#132b26;--x-ink:#e4eddf;--x-muted:#b2c4b9;--x-line:#4c6c5e;--x-panel:#203c32;
@@ -65,7 +65,11 @@ pre code{font-size:inherit}
 .hero{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:60px;padding:42px 0 48px}
 /* Unpaid, the masthead and the hero fill the first screen, so no heading below is cut by its
    edge; paid, the response follows the hero. */
-.hero{min-height:calc(100vh - var(--x-masthead));min-height:calc(100svh - var(--x-masthead))}
+@supports (height:100svh){:root{--x-screen:100svh}}
+.hero{min-height:calc(var(--x-screen,100vh) - var(--x-masthead))}
+/* Half the spare space goes above the content, so opening the terms moves nothing above them.
+   --x-hero-content is the closed hero's height from 1382px wide; re-measure it if the hero changes. */
+.hero{padding-top:max(42px,calc((var(--x-screen,100vh) - var(--x-masthead) - var(--x-hero-content))/2))}
 .sky:has(#pay-result:not([hidden])) .hero{min-height:0}
 .eyebrow{display:flex;gap:12px;align-items:center}
 .badge{padding:5px 9px;background:var(--x-due);color:var(--x-on-face)}
@@ -217,7 +221,7 @@ footer{margin-top:40px;padding-top:15px;border-top:1px solid var(--x-line);color
         <p class="eyebrow mono"><span class="badge"><span class="unpaid">402</span><span class="settled">200</span></span><span class="unpaid">PAYMENT REQUIRED</span><span class="settled">OK · PAYMENT SETTLED</span></p>
         <h1 class="headline">x402 on Gno:<br>pay per HTTP request.</h1>
         <p class="intro">Sign a payment for one weather request, then get the data once it settles. A script or an agent pays the same price over HTTP, with no account and no API key.</p>
-        <p class="coordinates mono">SAMPLE RESOURCE / GET /weather · PARIS</p>
+        <p class="coordinates mono">SAMPLE RESOURCE / GET /weather</p>
         <div class="instrument">
           <div class="gauge">
             <div class="dial">
@@ -236,14 +240,14 @@ footer{margin-top:40px;padding-top:15px;border-top:1px solid var(--x-line);color
           </div>
           <div class="reading-copy">
             <p class="reading-title"><span class="awaiting">The sample reading.</span><span class="reading">The reading you paid for.</span></p>
-            <p><span class="awaiting">Fictional weather for Paris, not a forecast. It appears once the payment settles.</span><span class="reading">Sample data, not a forecast: the seller takes turns among a few made-up readings.</span></p>
+            <p><span class="awaiting">Fictional weather, not a forecast. It appears once the payment settles.</span><span class="reading">Sample data, not a forecast: the seller takes turns among a few made-up readings.</span></p>
           </div>
         </div>
       </div>
 
       <section class="offer" aria-labelledby="offer-title">
         <p class="mono">THE TERMS / SCHEME EXACT</p>
-        <h2 id="offer-title">Weather for Paris.<br>One reading, one payment.</h2>
+        <h2 id="offer-title">Get the weather.<br>One reading, one payment.</h2>
         <p class="price"><strong>{{.Amount}}</strong><span>{{.Unit}} / request</span></p>
         <p class="fine mono">{{.Coin}}</p>
         <p class="net">Test GNOT on <code>{{.Network}}</code>, from <a href="https://faucet.gno.land">faucet.gno.land</a>. The network fee is on top.</p>
