@@ -214,8 +214,11 @@ const ADENA_POLL_MS = 250;
 
 /** Wires the page: this page's URL, copy buttons, the live terms, and Adena. */
 export function start(document, window) {
+  // A fragment comes from a link inside this page, not from the seller.
+  const { origin, pathname, search } = window.location;
+  const here = origin + pathname + search;
   for (const e of document.querySelectorAll("[data-url]")) {
-    e.textContent = window.location.href;
+    e.textContent = here;
   }
 
   if (window.navigator.clipboard !== undefined) {
@@ -238,18 +241,23 @@ export function start(document, window) {
   }
 
   const terms = document.getElementById("terms");
-  terms.addEventListener(
-    "toggle",
-    async () => {
-      const out = document.getElementById("terms-json");
-      try {
-        out.textContent = JSON.stringify(await readTerms(window.fetch.bind(window), window.location.href), null, 2);
-      } catch (err) {
-        out.textContent = String(err);
-      }
-    },
-    { once: true },
-  );
+  let termsRead = false;
+  let termsReading = false;
+  terms.addEventListener("toggle", async () => {
+    if (termsRead || termsReading || !terms.open) {
+      return;
+    }
+    const out = document.getElementById("terms-json");
+    termsReading = true;
+    try {
+      out.textContent = JSON.stringify(await readTerms(window.fetch.bind(window), here), null, 2);
+      termsRead = true;
+    } catch (err) {
+      out.textContent = String(err);
+    } finally {
+      termsReading = false;
+    }
+  });
 
   // Presence alone is not the wallet: an element whose id is "adena" would be
   // window.adena too.
@@ -281,7 +289,7 @@ export function start(document, window) {
       const paid = await payWithAdena({
         adena: window.adena,
         fetch: window.fetch.bind(window),
-        url: window.location.href,
+        url: here,
         report: (step) => (status.textContent = step),
       });
       status.textContent = statusLine(paid);
