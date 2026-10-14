@@ -6,6 +6,9 @@ seller picks at random when it starts. It is not a realm, it makes no contract c
 know a chain exists. Everything gno-specific is a network string, one registered scheme and the page
 a browser gets.
 
+A hosted copy runs on the onyx testnet at <https://x402-demo.onyx.testnets.gno.land/weather>, at
+0.25 GNOT a reading. A terminal [pays it](#paying-it) with two commands.
+
 ```go
 routes := x402http.RoutesConfig{
     "GET /weather": {
@@ -156,15 +159,18 @@ with it for the page's URL, fund the key, then run the pay command the key step 
 There is no Go client mechanism, so a Go buyer cannot pay this. `buy.mjs` can, and one command runs
 it without a clone.
 
-> **Read [`buy.mjs`](buy.mjs) before you run it.** It signs with the mnemonic you give it, so never
+> **Read [`buy.mjs`](https://github.com/gnoverse/x402/blob/client/v0.5.0/examples/weather/buy.mjs)
+> before you run it.** It signs with the mnemonic you give it, so never
 > give it one that holds anything. Make a throwaway key with it, or use a
 > [session key](../../client/README.md#paying-with-a-session-key), which the chain holds to its
 > spend limit and expiry. Testnet only.
 
+These commands pay the hosted seller on onyx. Any other seller's URL works in its place.
+
 ```sh
-npx github:gnoverse/x402#client/v0.5.0 --new-key https://<seller>/weather
+npx github:gnoverse/x402#client/v0.5.0 --new-key https://x402-demo.onyx.testnets.gno.land/weather
 # fund the address it printed at https://faucet.gno.land, then run the command it printed:
-X402_MNEMONIC='<mnemonic>' npx github:gnoverse/x402#client/v0.5.0 https://<seller>/weather
+X402_MNEMONIC='<mnemonic>' npx github:gnoverse/x402#client/v0.5.0 https://x402-demo.onyx.testnets.gno.land/weather
 ```
 
 npx resolves the tag with git, fetches the repository at it, builds the client mechanism and runs
@@ -175,8 +181,8 @@ root:
 
 ```sh
 make js               # build the client mechanism buy.mjs imports
-node examples/weather/buy.mjs --new-key http://localhost:8401/weather
-X402_MNEMONIC='<mnemonic>' node examples/weather/buy.mjs http://localhost:8401/weather
+node examples/weather/buy.mjs --new-key https://x402-demo.onyx.testnets.gno.land/weather
+X402_MNEMONIC='<mnemonic>' node examples/weather/buy.mjs https://x402-demo.onyx.testnets.gno.land/weather
 ```
 
 `--new-key` prints a fresh 24-word mnemonic, the address it pays from and the command that pays
