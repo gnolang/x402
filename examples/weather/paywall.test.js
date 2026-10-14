@@ -382,8 +382,13 @@ function fakePage() {
       dataset: {},
       listeners,
       attributes,
-      addEventListener(type, fn) {
-        listeners[type] = fn;
+      addEventListener(type, fn, options) {
+        listeners[type] = options?.once
+          ? (...args) => {
+              delete listeners[type];
+              return fn(...args);
+            }
+          : fn;
       },
       setAttribute(name, value) {
         attributes[name] = value;
@@ -409,10 +414,11 @@ function fakePage() {
     "paid-icon": element(),
   };
   const copyable = element();
+  const urls = [element(), element()];
   const made = [];
   const document = {
     getElementById: (id) => elements[id],
-    querySelectorAll: (selector) => (selector === "pre[data-copy]" ? [copyable] : []),
+    querySelectorAll: (selector) => ({ "pre[data-copy]": [copyable], "[data-url]": urls })[selector] ?? [],
     createElement: () => {
       const e = element();
       made.push(e);
@@ -420,7 +426,7 @@ function fakePage() {
     },
   };
   const window = {
-    location: { href: URL },
+    location: new globalThis.URL(URL),
     navigator: {},
     fetch: vi.fn(),
     setTimeout,
@@ -428,7 +434,7 @@ function fakePage() {
     clearInterval,
     addEventListener() {},
   };
-  return { document, window, elements, made };
+  return { document, window, elements, urls, made };
 }
 
 describe("start", () => {
@@ -568,6 +574,89 @@ describe("start, without Adena", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("start, this page's URL", () => {
+  // A fragment such as #how comes from a link inside the page and is no part of
+  // the seller's URL, so a command carrying it is not the one to paste.
+  it("fills the commands with the page's URL less its fragment", () => {
+    const { document, window, urls } = fakePage();
+    window.location = new globalThis.URL(`${URL}?city=paris#how`);
+
+    start(document, window);
+
+    expect(urls.map((e) => e.textContent)).toEqual([`${URL}?city=paris`, `${URL}?city=paris`]);
+  });
+});
+
+describe("start, the decoded terms", () => {
+  // A read can fail for a moment, rate limited or offline; the panel would
+  // otherwise show that error for as long as the page stays open.
+  it("reads the terms again on the next opening after a read failed", async () => {
+    const { document, window, elements } = fakePage();
+    const seller = fakeSeller(terms(), settled);
+    window.fetch = vi.fn(seller).mockRejectedValueOnce(new Error("offline"));
+    start(document, window);
+    elements.terms.open = true;
+
+    await elements.terms.listeners.toggle();
+    expect(elements["terms-json"].textContent).toContain("offline");
+
+    await elements.terms.listeners.toggle();
+    expect(JSON.parse(elements["terms-json"].textContent)).toEqual(terms());
+  });
+
+  it("does not read the terms again once a read succeeded", async () => {
+    const { document, window, elements } = fakePage();
+    window.fetch = fakeSeller(terms(), settled);
+    start(document, window);
+    elements.terms.open = true;
+
+    await elements.terms.listeners.toggle();
+    elements.terms.open = false;
+    await elements.terms.listeners.toggle?.();
+    elements.terms.open = true;
+    await elements.terms.listeners.toggle?.();
+
+    expect(window.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not read the terms when the panel closes", async () => {
+    const { document, window, elements } = fakePage();
+    window.fetch = vi.fn(fakeSeller(terms(), settled)).mockRejectedValueOnce(new Error("offline"));
+    start(document, window);
+    elements.terms.open = true;
+    await elements.terms.listeners.toggle();
+
+    elements.terms.open = false;
+    await elements.terms.listeners.toggle();
+
+    expect(window.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  // Two reads in flight could each land last, and a failure landing after a
+  // success would replace the terms with an error no opening reads again.
+  it("sends one read when the panel reopens while a read is in flight", async () => {
+    const { document, window, elements } = fakePage();
+    const answers = [];
+    window.fetch = vi.fn(() => new Promise((resolve) => answers.push(resolve)));
+    start(document, window);
+    elements.terms.open = true;
+    const reads = [elements.terms.listeners.toggle()];
+
+    elements.terms.open = false;
+    reads.push(elements.terms.listeners.toggle());
+    elements.terms.open = true;
+    reads.push(elements.terms.listeners.toggle());
+    await Promise.resolve();
+
+    expect(window.fetch).toHaveBeenCalledTimes(1);
+    for (const answer of answers) {
+      answer(new Response("{}", { status: 402, headers: { "PAYMENT-REQUIRED": encodeHeader(terms()) } }));
+    }
+    await Promise.all(reads);
+    expect(JSON.parse(elements["terms-json"].textContent)).toEqual(terms());
   });
 });
 

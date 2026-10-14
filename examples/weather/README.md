@@ -140,8 +140,8 @@ the facilitator holds no key. The mechanism sets it, so no seller writes it. The
 omitted.
 
 A browser gets a page instead (`paywall.html`): a masthead naming it a testnet demo with sample
-weather data and linking this repository, then the 402, a dial waiting for the reading, and the
-terms beside it: the price in GNOT, the network and the faucet, the payee, and how to pay. The
+weather data and linking this repository, then the 402, a dial waiting for the reading (on a
+phone, only once paid), and the terms beside it: the price in GNOT, the network and the faucet, the payee, and how to pay. The
 middleware's own paywall supports EVM and Solana chains only. In a browser with the
 [Adena](https://adena.app) wallet, a visitor pays from the page. `paywall.js` works as a stock x402
 client does: it reads the terms, has Adena sign the bank send without broadcasting it, and repeats
@@ -149,9 +149,11 @@ the request with the payment. Once the payment settles, the badge reads 200, the
 temperature and the forecast, marked as sample data, and the page takes on the forecast's weather;
 the response body and the transaction show below, the transaction linked to gnoscan.io on `onyx-1`,
 and the page offers no second payment. A body that is not one of the four forecasts the page draws
-(sunny, cloudy, rain, snow) shows only as served. Without Adena, or without JavaScript, the page
-still shows how to pay from code, under a warning to read the buyer first: make a throwaway key
-with it for the page's URL, fund the key, then run the pay command the key step printed.
+(sunny, cloudy, rain, snow) shows only as served. Without Adena, the pay button gives way to an
+Install Adena button that opens adena.app, and the page says to reload once it is installed;
+without JavaScript, neither shows. Below them, an "Or pay it from code" link leads down to the
+steps for paying from code, behind a warning to read the buyer first: make a throwaway key with it
+for the page's URL, fund the key, then run the pay command the key step printed.
 `/` redirects to `/weather`.
 
 ## Paying it
