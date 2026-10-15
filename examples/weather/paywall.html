@@ -15,7 +15,12 @@
   --x-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   --x-display:"Helvetica Neue",Arial,sans-serif;
   --x-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  --x-gutter:48px;--x-dial:270px;--x-masthead:73px;--x-hero-content:670px;
+  --x-gutter:48px;--x-masthead:73px;
+  /* --x-grow scales the hero on a window taller than 900px, by no more than the width past 1382px lets
+     the headline's 5.5vw ceiling grow (.07/.055 per px). --x-hero-content is the closed hero's height
+     from 1382px wide; re-measure its 670px and .574 if the hero changes. */
+  --x-grow:clamp(0px,min(var(--x-screen,100vh) - 900px,(100vw - 1382px)/1.273),540px);
+  --x-dial:calc(270px + var(--x-grow)*.4);--x-hero-content:calc(670px + var(--x-grow)*.574);
 }
 @media (prefers-color-scheme:dark){:root{
   --x-paper:#132b26;--x-ink:#e4eddf;--x-muted:#b2c4b9;--x-line:#4c6c5e;--x-panel:#203c32;
@@ -40,7 +45,7 @@ pre code{font-size:inherit}
 
 /* ---- Frame and weather backdrop */
 /* paywall.js sets data-forecast on #sky from a paid body it can draw. */
-.sky{position:relative;isolation:isolate;max-width:1360px;margin:0 auto;padding:0 var(--x-gutter)}
+.sky{position:relative;isolation:isolate;max-width:calc(1360px + var(--x-grow)*.8);margin:0 auto;padding:0 var(--x-gutter)}
 .sky::before,.sky::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:0}
 .sky[data-forecast=sunny]{--x-face:var(--x-sunny-face);--x-ring:var(--x-sunny-ring);--x-glyph:var(--x-sunny-glyph)}
 .sky[data-forecast=cloudy]{--x-face:var(--x-cloudy-face);--x-ring:var(--x-cloudy-ring);--x-glyph:var(--x-cloudy-glyph)}
@@ -62,13 +67,12 @@ pre code{font-size:inherit}
 .masthead nav{display:flex;flex-wrap:wrap;gap:8px 24px}
 
 /* ---- The 402 and the reading */
-.hero{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:60px;padding:42px 0 48px}
+.hero{display:grid;grid-template-columns:minmax(0,1fr) calc(340px + var(--x-grow)*.2);gap:calc(60px + var(--x-grow)*.08);padding:42px 0 48px}
 /* Unpaid, the masthead and the hero fill the first screen, so no heading below is cut by its
    edge; paid, the response follows the hero. */
 @supports (height:100svh){:root{--x-screen:100svh}}
 .hero{min-height:calc(var(--x-screen,100vh) - var(--x-masthead))}
-/* Half the spare space goes above the content, so opening the terms moves nothing above them.
-   --x-hero-content is the closed hero's height from 1382px wide; re-measure it if the hero changes. */
+/* Half the spare space goes above the content, so opening the terms moves nothing above them. */
 .hero{padding-top:max(42px,calc((var(--x-screen,100vh) - var(--x-masthead) - var(--x-hero-content))/2))}
 .sky:has(#pay-result:not([hidden])) .hero{min-height:0}
 .eyebrow{display:flex;gap:12px;align-items:center}
@@ -78,12 +82,17 @@ pre code{font-size:inherit}
 .sky:has(#pay-result:not([hidden])) .settled{display:inline}
 .sky:has(#pay-result:not([hidden])) .unpaid{display:none}
 .sky:has(#pay-result:not([hidden])) .badge{background:var(--x-accent);color:var(--x-on-face)}
-.headline{margin-top:26px;font-family:var(--x-display);font-size:clamp(44px,5.5vw,76px);letter-spacing:-.055em;line-height:1.04}
-.intro{max-width:480px;margin-top:22px;color:var(--x-muted)}
+.headline{margin-top:26px;font-family:var(--x-display);font-size:clamp(44px,5.5vw,calc(76px + var(--x-grow)*.07));letter-spacing:-.055em;line-height:1.04}
+.intro{max-width:calc(480px + var(--x-grow)*.25);margin-top:22px;color:var(--x-muted);font-size:calc(16px + var(--x-grow)*.007)}
 .coordinates{margin-top:18px;color:var(--x-muted)}
 .sky:not([data-forecast]) .reading,.sky[data-forecast] .awaiting{display:none}
 .instrument{display:flex;align-items:center;gap:30px;margin-top:28px}
-.gauge{flex-shrink:0;width:var(--x-dial)}
+.gauge{position:relative;flex-shrink:0;width:var(--x-dial)}
+/* Faint rings spread from the empty dial across the hero. */
+.gauge::before{content:"";position:absolute;z-index:-1;top:calc(var(--x-dial)/2);left:50%;width:calc(var(--x-dial)*4);height:calc(var(--x-dial)*4);translate:-50% -50%;pointer-events:none;opacity:.7;
+  background:repeating-radial-gradient(circle,transparent 0 calc(var(--x-dial)*.34 - 1px),var(--x-line) calc(var(--x-dial)*.34 - 1px) calc(var(--x-dial)*.34),transparent calc(var(--x-dial)*.34));
+  mask-image:radial-gradient(circle,transparent calc(var(--x-dial)*.5 + 4px),#000 calc(var(--x-dial)*.55),transparent calc(var(--x-dial)*2))}
+.sky[data-forecast] .gauge::before{opacity:0}
 .dial{position:relative;display:grid;place-items:center;width:var(--x-dial);height:var(--x-dial);border:1px solid var(--x-line);border-radius:50%;background:repeating-conic-gradient(var(--x-line) 0deg 1deg,transparent 1deg 10deg)}
 .dial::before{content:"";position:absolute;inset:calc(var(--x-dial)*.045);border:1px solid var(--x-line);border-radius:50%;background:var(--x-paper)}
 .dial::after{content:"";position:absolute;inset:calc(var(--x-dial)*.165);border:1px solid var(--x-line);border-radius:50%}
@@ -103,22 +112,22 @@ pre code{font-size:inherit}
 .sky[data-forecast=cloudy] .dial::after{border:3px double var(--x-ring)}
 .sky[data-forecast=rain] .dial::after{border-bottom-width:4px}
 .sky[data-forecast=snow] .dial::after{border-style:dashed}
-.reading-copy{max-width:240px}
-.reading-copy p{color:var(--x-muted);font-size:14px}
-.reading-copy .reading-title{margin-bottom:12px;color:var(--x-ink);font-size:24px;font-weight:500;letter-spacing:-.03em;line-height:1.25}
+.reading-copy{max-width:calc(240px + var(--x-grow)*.25)}
+.reading-copy p{color:var(--x-muted);font-size:calc(14px + var(--x-grow)*.006)}
+.reading-copy .reading-title{margin-bottom:12px;color:var(--x-ink);font-size:calc(24px + var(--x-grow)*.02);font-weight:500;letter-spacing:-.03em;line-height:1.25}
 
 /* ---- The offer */
 .offer{align-self:start;padding-top:18px;border-top:3px solid var(--x-ink)}
-.offer h2{margin:18px 0;font-size:26px;letter-spacing:-.04em;line-height:1.2}
+.offer h2{margin:18px 0;font-size:calc(26px + var(--x-grow)*.016);letter-spacing:-.04em;line-height:1.2}
 .price{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;margin-top:27px}
-.price strong{font-size:66px;font-weight:500;letter-spacing:-.06em;line-height:1}
-.price span{font-size:17px}
+.price strong{font-size:calc(66px + var(--x-grow)*.04);font-weight:500;letter-spacing:-.06em;line-height:1}
+.price span{font-size:calc(17px + var(--x-grow)*.007)}
 .fine{margin-top:3px;color:var(--x-muted)}
-.net,#no-adena p{margin-top:14px;color:var(--x-muted);font-size:13px}
+.net,#no-adena p{margin-top:14px;color:var(--x-muted);font-size:calc(13px + var(--x-grow)*.005)}
 .net code{color:var(--x-ink)}
-.pay-button{display:flex;justify-content:space-between;gap:12px;width:100%;margin-top:22px;padding:17px 20px;border:1px solid var(--x-on-face);background:var(--x-accent);color:var(--x-on-face);font-weight:600;text-align:left;text-decoration:none}
+.pay-button{display:flex;justify-content:space-between;gap:12px;width:100%;margin-top:22px;padding:calc(17px + var(--x-grow)*.012) 20px;border:1px solid var(--x-on-face);background:var(--x-accent);color:var(--x-on-face);font-size:calc(16px + var(--x-grow)*.006);font-weight:600;text-align:left;text-decoration:none}
 .pay-button:hover{filter:brightness(1.08)}
-.alt-pay{display:flex;justify-content:space-between;gap:12px;margin-top:10px;padding:13px 20px;border:1px solid var(--x-muted);color:var(--x-ink);font-size:14px;text-decoration:none}
+.alt-pay{display:flex;justify-content:space-between;gap:12px;margin-top:10px;padding:13px 20px;border:1px solid var(--x-muted);color:var(--x-ink);font-size:calc(14px + var(--x-grow)*.005);text-decoration:none}
 .alt-pay:hover{border-color:var(--x-ink)}
 /* After a payment the page offers no second payment, so the link to pay from code goes too. */
 .sky:has(#pay-result:not([hidden])) .alt-pay{display:none}
@@ -128,12 +137,12 @@ pre code{font-size:inherit}
 #pay-status{margin-top:12px;font-size:13px;overflow-wrap:anywhere}
 #pay-status:empty{display:none}
 .offer dl{margin:22px 0 0}
-.offer dl div{display:grid;grid-template-columns:80px minmax(0,1fr);gap:8px;padding:10px 0;border-top:1px solid var(--x-line);font-size:13px}
+.offer dl div{display:grid;grid-template-columns:calc(80px + var(--x-grow)*.04) minmax(0,1fr);gap:8px;padding:10px 0;border-top:1px solid var(--x-line);font-size:calc(13px + var(--x-grow)*.005)}
 .offer dt{color:var(--x-muted)}
 .offer dd{margin:0;overflow-wrap:anywhere}
 .offer dd .fine{display:block;margin:0}
 details{margin-top:20px}
-summary{width:fit-content;font-size:13px;cursor:pointer}
+summary{width:fit-content;font-size:calc(13px + var(--x-grow)*.005);cursor:pointer}
 
 /* ---- The response and the documentation */
 .response{padding:20px 0;border-top:1px solid var(--x-ink)}
@@ -158,7 +167,7 @@ footer{margin-top:40px;padding-top:15px;border-top:1px solid var(--x-line);color
 .documentation footer p{margin:0;color:inherit}
 
 @media (max-width:1000px){
-  :root{--x-gutter:28px;--x-dial:240px}
+  :root{--x-gutter:28px;--x-grow:0px;--x-dial:240px}
   .hero{grid-template-columns:minmax(0,1fr) 300px;gap:32px}
   .instrument{flex-direction:column;align-items:flex-start;gap:20px}
   .reading-copy{max-width:320px}
@@ -174,6 +183,8 @@ footer{margin-top:40px;padding-top:15px;border-top:1px solid var(--x-line);color
   .dial-caption{margin-top:10px;font-size:10px;letter-spacing:.1em}
   /* On a phone the empty dial stays hidden until a forecast is drawn, so the price comes first. */
   .sky:not([data-forecast]) .instrument{display:none}
+  /* The faded rings' box would still pan the page sideways. */
+  .gauge::before{display:none}
   .reading-copy .reading-title{font-size:20px}
   .reading-copy p{font-size:13px}
   .price strong{font-size:60px}
@@ -188,7 +199,7 @@ footer{margin-top:40px;padding-top:15px;border-top:1px solid var(--x-line);color
   .eyebrow,.headline{animation:x-rise .5s ease backwards}
   /* Not .instrument: Chrome holds it at the animation's first frame while reporting it finished. */
   .intro,.coordinates,.offer{animation:x-rise .5s ease .15s backwards}
-  .sky::before,.sky::after{transition:opacity 1.2s ease}
+  .sky::before,.sky::after,.gauge::before{transition:opacity 1.2s ease}
   .dial,.dial::before,.dial::after{transition:background-color 1.2s ease,border-color 1.2s ease,box-shadow 1.2s ease}
   .sky[data-forecast=sunny]::before{animation:x-sunlight 12s ease-in-out infinite alternate}
   .sky[data-forecast=cloudy]::before{animation:x-drift 40s ease-in-out infinite alternate}
