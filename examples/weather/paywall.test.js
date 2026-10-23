@@ -131,6 +131,7 @@ describe("payWithAdena", () => {
 
     expect(result).toEqual({
       paid: true,
+      settlementFailed: false,
       status: 200,
       body: WEATHER,
       transaction: TX_HASH,
@@ -232,6 +233,7 @@ describe("payWithAdena", () => {
 
     expect(result).toMatchObject({
       paid: false,
+      settlementFailed: false,
       status: 402,
       transaction: "",
       reason: "invalid_exact_gno_transaction_simulation_failed",
@@ -345,7 +347,11 @@ describe("payWithAdena, again", () => {
 
     const result = await payWithAdena({ adena: fakeAdena(), fetch: fakeSeller(terms(), failed), url: URL });
 
-    expect(result).toMatchObject({ paid: false, reason: "invalid_exact_gno_transaction_failed" });
+    expect(result).toMatchObject({
+      paid: false,
+      settlementFailed: true,
+      reason: "invalid_exact_gno_transaction_failed",
+    });
   });
 
   // The seller withholds the weather and passes on the hash, the only way to
@@ -432,10 +438,17 @@ describe("statusLine", () => {
     }
   });
 
-  // A refusal without a hash never reached a block, so nothing left the account.
+  // A refusal in a fresh challenge came before anything was broadcast, so
+  // nothing left the account.
   it("says a refused payment spent nothing before the code that names the refusal", () => {
     expect(
-      statusLine({ paid: false, status: 402, transaction: "", reason: "invalid_exact_gno_payload_amount_mismatch" }),
+      statusLine({
+        paid: false,
+        settlementFailed: false,
+        status: 402,
+        transaction: "",
+        reason: "invalid_exact_gno_payload_amount_mismatch",
+      }),
     ).toBe(
       "Not paid, and nothing was spent: the seller refused this payment (invalid_exact_gno_payload_amount_mismatch).",
     );
@@ -841,6 +854,21 @@ function refusedWith(reason) {
     new Response("{}", { status: 402, headers: { "PAYMENT-REQUIRED": encodeHeader({ ...terms(), error: reason }) } });
 }
 
+// failedSettling is the weather seller's answer to a payment whose settlement
+// failed for reason. Its middleware drops the hash of every failed settlement
+// but a pending one.
+function failedSettling(reason) {
+  return () =>
+    new Response("", {
+      status: 402,
+      headers: { "PAYMENT-RESPONSE": encodeHeader({ success: false, errorReason: reason, transaction: "" }) },
+    });
+}
+
+// The weather seller's reason when its facilitator answered 503: the chain did
+// not answer, perhaps after the payment was broadcast.
+const NO_VERDICT = "facilitator settle failed (503): the payment could not be checked against the chain\n";
+
 // A second click would sign a second payment while the first may still go
 // through.
 describe("start, a payment that may still settle", () => {
@@ -875,6 +903,35 @@ describe("start, a payment that may still settle", () => {
     expect(elements.pay.hidden).toBe(true);
   });
 
+  it("offers no second payment when its settlement got no verdict", async () => {
+    const { document, window, elements } = fakePage();
+    window.adena = fakeAdena();
+    window.fetch = fakeSeller(terms(), failedSettling(NO_VERDICT));
+    start(document, window);
+
+    await elements.pay.listeners.click();
+
+    expect(elements["pay-status"].textContent).toMatch(/^Sent, not confirmed: /);
+    expect(elements["pay-status"].textContent).not.toMatch(/nothing was spent/);
+    expect(elements.pay.hidden).toBe(true);
+  });
+
+  // Without the hash, a refusal from a block, which charged the fee, reads the
+  // same as one from the mempool, which did not.
+  it("says a payment the chain refused may have cost its fee, and frees the button", async () => {
+    const { document, window, elements } = fakePage();
+    window.adena = fakeAdena();
+    window.fetch = fakeSeller(terms(), failedSettling("invalid_exact_gno_transaction_failed"));
+    start(document, window);
+
+    await elements.pay.listeners.click();
+
+    expect(elements["pay-status"].textContent).toBe(
+      "Not paid: the chain refused this payment, and may have charged its network fee (invalid_exact_gno_transaction_failed).",
+    );
+    expect(elements.pay.hidden).toBe(false);
+  });
+
   // The tab would otherwise still say payment is required for a payment that
   // may have gone through.
   it("names a payment that may still settle as sent in the tab", async () => {
@@ -886,7 +943,7 @@ describe("start, a payment that may still settle", () => {
     const lost = () => {
       throw new TypeError("Failed to fetch");
     };
-    for (const answer of [pending, duplicate, lost]) {
+    for (const answer of [pending, duplicate, lost, failedSettling(NO_VERDICT)]) {
       const { document, window, elements } = fakePage();
       window.adena = fakeAdena();
       window.fetch = fakeSeller(terms(), answer);

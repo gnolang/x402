@@ -189,8 +189,10 @@ export async function payWithAdena({ adena, fetch: fetchFn, url, report = () => 
   const challengeHeader = response.headers.get("PAYMENT-REQUIRED");
   const receipt = receiptHeader === null ? {} : decodeHeader(receiptHeader);
   const challenge = challengeHeader === null ? {} : decodeHeader(challengeHeader);
+  const paid = response.ok && receipt.success === true;
   return {
-    paid: response.ok && receipt.success === true,
+    paid,
+    settlementFailed: receiptHeader !== null && !paid,
     status: response.status,
     body,
     transaction: receipt.transaction ?? "",
@@ -213,9 +215,30 @@ const REMEDIES = new Map([
   ["invalid_exact_gno_payload_sequence_mismatch", "this payment was already spent. Pay again to sign a fresh one"],
 ]);
 
-// The reasons after which a payment may still settle, or already has, so the
-// page offers no second payment.
+// The reasons after which a payment may still settle, or already has.
 const UNSETTLED = ["settlement_pending", "duplicate_settlement"];
+
+// The chain refused the payment: in the mempool, which charges nothing, or in a
+// block, which charges the fee. Only the hash would tell which, and the weather
+// seller drops it from a failed settlement.
+const CHAIN_REFUSED = "invalid_exact_gno_transaction_failed";
+
+// mayStillSettle says whether a payment that came back unpaid may still settle,
+// or already has, so the page offers no second payment. Besides a pending or
+// duplicate settlement, that is a settlement that failed with neither a hash
+// nor a refusal's reason: its facilitator could not tell whether the chain took
+// the payment.
+function mayStillSettle(result) {
+  if (UNSETTLED.includes(result.reason)) {
+    return true;
+  }
+  return (
+    result.settlementFailed === true &&
+    result.transaction === "" &&
+    !REMEDIES.has(result.reason) &&
+    result.reason !== CHAIN_REFUSED
+  );
+}
 
 /**
  * Says what a payment came to, what the payer can do first and the reason's
@@ -242,7 +265,14 @@ export function statusLine(result) {
   if (result.transaction !== "") {
     return `Not paid: the chain refused transaction ${result.transaction} (${result.reason}).`;
   }
-  // Without a hash the payment never reached a block, so nothing left the account.
+  if (result.reason === CHAIN_REFUSED) {
+    return `Not paid: the chain refused this payment, and may have charged its network fee (${result.reason}).`;
+  }
+  if (mayStillSettle(result)) {
+    return `Sent, not confirmed: the seller could not tell whether this payment went through, so the weather was held back. Check the account, and if the payment never left it, reload this page to pay again (${result.reason}).`;
+  }
+  // A refusal in a fresh challenge came before anything was broadcast, so
+  // nothing left the account.
   if (result.reason !== "") {
     return `Not paid, and nothing was spent: the seller refused this payment (${result.reason}).`;
   }
@@ -548,7 +578,7 @@ export function start(document, window) {
       if (paid.paid) {
         serve(paid.body);
         withdraw("paid");
-      } else if (UNSETTLED.includes(paid.reason)) {
+      } else if (mayStillSettle(paid)) {
         withdraw("pending");
       } else {
         refuse();
