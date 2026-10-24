@@ -11,6 +11,11 @@ gnoland start
 x402facilitator
 x402seller unaffordable.json $seller_user_addr
 
+# test1 pays. An unfunded payer is refused with the same reason as an unaffordable
+# price, so test1's balance is asserted first.
+gnokey query bank/balances/$test1_user_addr
+stdout 'ugnot'
+
 ! x402gobuyer
 stdout '"status":402'
 ! stdout 'sunny'
