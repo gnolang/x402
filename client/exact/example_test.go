@@ -86,5 +86,11 @@ func ExampleWithMaster() {
 
 	scheme := exact.NewExactGnoScheme(signer,
 		exact.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc}), exact.WithMaster(owner))
-	_ = x402.Newx402Client().Register("gno:onyx-1", scheme)
+	_ = x402.Newx402Client().
+		Register("gno:onyx-1", scheme).
+		SetSpendControls(x402.SpendControls{
+			AllowedAssets: []x402.SpendControlAsset{
+				{Network: "gno:onyx-1", Asset: "ugnot", MaxAmountPerPayment: "1000000"},
+			},
+		})
 }

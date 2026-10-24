@@ -46,6 +46,9 @@ repository's Go module:
 
 ```go
 import (
+	"net/http"
+	"time"
+
 	"github.com/gnolang/gno/gno.land/pkg/gnoclient"
 	rpcclient "github.com/gnolang/gno/tm2/pkg/bft/rpc/client"
 	"github.com/gnolang/gno/tm2/pkg/crypto/keys"
@@ -223,7 +226,8 @@ The Go mechanism refuses the same, wrapping `ErrInvalidRequirements`, and more:
 - a price above the spend cap, as `ErrExceedsSpendCap`, and a fee above 1 GNOT, as
   `ErrExcessiveFee`;
 - a multisig key, and an offline one in `KeybaseSigner`, since neither can make a payment that
-  settles.
+  settles. These two refuse the buyer's own key rather than the offer, so they do not wrap
+  `ErrInvalidRequirements`.
 
 ## Development
 
