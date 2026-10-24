@@ -274,7 +274,7 @@ func TestTheHeroExplainsItsTermsBeforeTheIntro(t *testing.T) {
 	require.True(t, found, "the headline is gone")
 	gloss, intro, found := strings.Cut(hero, `<p class="intro">`)
 	require.True(t, found, "the intro is gone")
-	assert.Contains(t, gloss, "x402 lets a server charge for each HTTP request")
+	assert.Contains(t, gloss, "lets a server charge for each HTTP request")
 	assert.Contains(t, gloss, "the Gno blockchain")
 	assert.Contains(t, gloss, "settles once the chain makes the transfer")
 	assert.Contains(t, intro, "once it settles")
@@ -310,6 +310,21 @@ func TestThePageLinksGnoLand(t *testing.T) {
 	require.True(t, found, "the gloss is gone")
 	gloss, _, _ = strings.Cut(gloss, "</p>")
 	assert.Contains(t, gloss, `<a href="https://gno.land">the Gno blockchain</a>`)
+}
+
+// The sentence that says what x402 is opens on the word, which leads to the
+// protocol's own site, the one the repository's README links.
+func TestThePageLinksX402ToItsSite(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	_, gloss, found := strings.Cut(page, `<p class="intro gloss">`)
+	require.True(t, found, "the gloss is gone")
+	gloss, _, _ = strings.Cut(gloss, "</p>")
+	assert.True(t, strings.HasPrefix(gloss, `<a href="https://x402.org">x402</a> lets a server charge`), "gloss: %s", gloss)
 }
 
 // The masthead carries gno.land's own mark, drawn inline so the page still
