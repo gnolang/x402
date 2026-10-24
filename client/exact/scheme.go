@@ -451,7 +451,8 @@ func Prepare(ctx context.Context, node Node, pub crypto.PubKey, master crypto.Ad
 	}
 	// The facilitator takes one signature from one signer and refuses a
 	// threshold key outright, so a payment signed with one never settles.
-	if _, ok := pub.(multisig.PubKeyMultisigThreshold); ok {
+	switch pub.(type) {
+	case multisig.PubKeyMultisigThreshold, *multisig.PubKeyMultisigThreshold:
 		return nil, errors.New("x402-gno: a multisig key cannot pay: the facilitator takes one signature from one signer")
 	}
 	// The address of the signing key: the payer itself, or the session that

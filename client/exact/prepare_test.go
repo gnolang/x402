@@ -202,14 +202,23 @@ func TestAFeeOverTheCeilingIsNamed(t *testing.T) {
 
 // TestAMultisigKeyCannotPay: the facilitator takes one signature from one
 // signer, so a payment a threshold key signs could never settle; it is not
-// built.
+// built, and the chain is not read for it, whether the key is held by value or
+// by pointer.
 func TestAMultisigKeyCannotPay(t *testing.T) {
 	pub := signerFrom(t, test1Mnemonic).PubKey()
-	shared := multisig.NewPubKeyMultisigThreshold(1, []crypto.PubKey{pub})
+	shared, ok := multisig.NewPubKeyMultisigThreshold(1, []crypto.PubKey{pub}).(multisig.PubKeyMultisigThreshold)
+	require.True(t, ok)
 
-	_, err := exact.Prepare(context.Background(), newFakeNode(), shared, crypto.Address{}, offer(), "")
+	for name, key := range map[string]crypto.PubKey{"by value": shared, "by pointer": &shared} {
+		t.Run(name, func(t *testing.T) {
+			node := newFakeNode()
 
-	require.ErrorContains(t, err, "a multisig key cannot pay")
+			_, err := exact.Prepare(context.Background(), node, key, crypto.Address{}, offer(), "")
+
+			require.ErrorContains(t, err, "a multisig key cannot pay")
+			assert.Zero(t, node.reads)
+		})
+	}
 }
 
 // TestPayloadRefusesAKeyThatIsNotThePayers: a payment whose PubKey was changed
