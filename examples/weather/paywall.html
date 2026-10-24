@@ -66,7 +66,8 @@ pre code{font-size:inherit}
 .masthead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px 20px;min-height:var(--x-masthead);padding:25px 0;border-bottom:1px solid var(--x-ink)}
 .masthead .mono{text-transform:uppercase}
 .brand{font-size:14px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
-.brand span{display:inline-block;width:13px;height:13px;margin-right:10px;border:1px solid currentColor;border-radius:50%;vertical-align:-1px}
+.brand svg{height:18px;margin-right:10px;fill:currentColor;vertical-align:-4px}
+.brand .beard{fill:var(--x-muted)}
 /* The edition takes the room between the brand and the nav, wrapping there rather than
    pushing the nav onto a line of its own. */
 .edition{flex:1 1 0;color:var(--x-muted);text-align:center}
@@ -230,6 +231,10 @@ summary{width:fit-content;font-size:calc(13px + var(--x-grow)*.005);cursor:point
 footer{margin-top:40px;padding-top:15px;border-top:1px solid var(--x-line);color:var(--x-muted);font-size:12px}
 .documentation footer p{margin:0;color:inherit}
 
+@media (max-width:1140px){
+  /* A third link here wraps the edition and pushes the hero down; the gloss links gno.land. */
+  .masthead .gnoland{display:none}
+}
 @media (max-width:1000px){
   :root{--x-gutter:28px;--x-grow:0px;--x-dial:240px}
   .hero{grid-template-columns:minmax(0,1fr) 300px;gap:32px}
@@ -302,10 +307,11 @@ footer{margin-top:40px;padding-top:15px;border-top:1px solid var(--x-line);color
 <body>
 <div class="sky" id="sky">
   <header class="masthead">
-    <p class="brand"><span aria-hidden="true"></span>x402 / Gno</p>
+    <p class="brand"><svg viewBox="9 4 16 26" aria-hidden="true" focusable="false"><path class="beard" d="M24.3981 21.4357C24.3981 21.4353 24.3981 21.435 24.398 21.4346C24.2011 20.7261 23.7808 20.1025 23.2105 19.6262C22.9904 19.4419 22.7502 19.2674 22.4878 19.1049C22.2654 18.9665 21.9852 19.1704 22.0497 19.4212L22.2076 20.034C22.4077 20.8125 21.556 21.4439 20.8465 21.0437L18.9395 19.9685C17.6864 19.262 16.1452 19.262 14.892 19.9685L12.985 21.0437C12.2756 21.4439 11.4239 20.8114 11.624 20.034L11.7864 19.4037C11.8509 19.154 11.5718 18.9501 11.3494 19.0875C11.058 19.2663 10.7934 19.4604 10.5532 19.6643C9.99168 20.1419 9.60138 20.7831 9.41902 21.4897L9.41235 21.5158C8.94867 23.3216 9.66921 25.22 11.2237 26.2897L16.0385 29.6013C16.5655 29.9633 17.2672 29.9633 17.7942 29.6013L22.609 26.2897C24.1867 25.2048 24.905 23.2652 24.3982 21.4368C24.3982 21.4364 24.3981 21.4361 24.3981 21.4357V21.4357Z"/><path d="M24.1944 17.4535C23.9204 15.2083 23.0928 12.9603 22.0882 10.935C21.1893 9.12255 21.4167 6.906 22.8612 5.48951V5.48951C23.4216 4.93994 23.0246 4 22.2318 4H16.9011C16.4897 4 16.0772 4.17774 15.7992 4.53212C13.9222 6.92776 10.2472 12.1988 9.60562 17.4535C9.5478 17.9322 10.1205 18.2255 10.4874 17.905C11.7684 16.7862 13.7665 15.9858 16.9 15.9858C20.0335 15.9858 22.0306 16.7873 23.3126 17.905C23.6796 18.2255 24.2522 17.9311 24.1944 17.4535Z"/></svg>x402 / Gno</p>
     <p class="edition mono"><span class="nowrap">{{.Demo}} ·</span> <span class="nowrap">unaudited ·</span> <span class="nowrap">pre-release ·</span> <span class="nowrap">sample weather data</span></p>
     <nav aria-label="Page">
       <a class="mono how" href="#how">How it works ↓</a>
+      <a class="mono gnoland" href="https://gno.land">gno.land ↗</a>
       <a class="mono" href="https://github.com/gnoverse/x402">Source on GitHub ↗</a>
     </nav>
   </header>
@@ -315,7 +321,7 @@ footer{margin-top:40px;padding-top:15px;border-top:1px solid var(--x-line);color
       <div>
         <p class="eyebrow mono"><span class="badge"><span class="unpaid">402</span><span class="settled">200</span></span><span class="unpaid unsent">PAYMENT REQUIRED</span><span class="sent">PAYMENT SENT · NOT CONFIRMED</span><span class="settled">OK · PAYMENT SETTLED</span></p>
         <h1 class="headline">x402 on Gno:<br>pay per HTTP request.</h1>
-        <p class="intro gloss">x402 lets a server charge for each HTTP request, here on the Gno blockchain. A payment settles once the chain makes the transfer.</p>
+        <p class="intro gloss">x402 lets a server charge for each HTTP request, here on <a href="https://gno.land">the Gno blockchain</a>. A payment settles once the chain makes the transfer.</p>
         <p class="intro"><span class="unpaid">Sign a payment for one weather request, then get the data once it settles.</span><span class="settled">You signed one payment, the seller's facilitator settled it, and the weather came back.</span> A script or an agent pays the same price over HTTP, with no account and no API key.</p>
         <ol class="track" aria-label="The payment, step by step">
           <li data-step="402"><code>402</code><br>GET /weather names its price</li>

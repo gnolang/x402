@@ -294,6 +294,44 @@ func TestTheMastheadSaysTheMechanismIsUnaudited(t *testing.T) {
 	assert.Contains(t, masthead, "pre-release")
 }
 
+// Gno is the page's subject from its first line, so a visitor who has never
+// heard of it reaches gno.land from the sentence that names the chain, and on
+// a wide window from the masthead too.
+func TestThePageLinksGnoLand(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	_, masthead := headAndMasthead(t, page)
+	assert.Contains(t, masthead, `href="https://gno.land"`)
+	_, gloss, found := strings.Cut(page, `<p class="intro gloss">`)
+	require.True(t, found, "the gloss is gone")
+	gloss, _, _ = strings.Cut(gloss, "</p>")
+	assert.Contains(t, gloss, `<a href="https://gno.land">the Gno blockchain</a>`)
+}
+
+// The masthead carries gno.land's own mark, drawn inline so the page still
+// fetches nothing beyond the seller. It decorates the brand's name beside it,
+// so screen readers skip the drawing.
+func TestTheMastheadShowsTheGnoLandMark(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	_, masthead := headAndMasthead(t, page)
+	_, brand, found := strings.Cut(masthead, `<p class="brand">`)
+	require.True(t, found, "the brand is gone")
+	brand, _, _ = strings.Cut(brand, "</p>")
+	assert.Contains(t, brand, `<svg`)
+	assert.Contains(t, brand, `aria-hidden="true"`)
+	// The hat in gnoweb's gnoland.svg, the mark gno.land itself serves.
+	assert.Contains(t, brand, `d="M24.1944 17.4535C23.9204 15.2083`)
+}
+
 // The seller answers every request with the same reading, which a visitor
 // would otherwise take for the forecast they paid for.
 func TestThePageSaysTheWeatherIsSampleData(t *testing.T) {
