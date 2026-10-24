@@ -3,6 +3,7 @@ package exact_test
 import (
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gnolang/gno/tm2/pkg/crypto"
 	"github.com/gnolang/gno/tm2/pkg/crypto/keys"
@@ -99,5 +100,64 @@ func TestKeybaseSignerSignsConcurrentlyFromAKeybaseOnDisk(t *testing.T) {
 
 	for _, err := range errs {
 		require.NoError(t, err)
+	}
+}
+
+// TestAKeybaseSignerMadeDuringASignatureWaitsForIt: finding a key opens
+// gnokey's keybase on disk too, so a signer made while another key of the same
+// home signs waits its turn rather than fail with the database locked.
+func TestAKeybaseSignerMadeDuringASignatureWaitsForIt(t *testing.T) {
+	disk, err := keys.NewKeyBaseFromDir(t.TempDir())
+	require.NoError(t, err)
+	_, err = disk.CreateAccount("buyer", test1Mnemonic, "", "pw", 0, 0)
+	require.NoError(t, err)
+	_, err = disk.CreateAccount("session", sessionMnemonic, "", "pw", 0, 0)
+	require.NoError(t, err)
+	kb := &pausedKeybase{Keybase: disk, signing: make(chan struct{}), resume: make(chan struct{})}
+	buyer, err := exact.KeybaseSigner(kb, "buyer", "pw")
+	require.NoError(t, err)
+
+	signed, made := make(chan struct{}), make(chan struct{})
+	var signErr, makeErr error
+	go func() {
+		defer close(signed)
+		_, signErr = buyer.Sign([]byte("sign bytes"))
+	}()
+	<-kb.signing
+	go func() {
+		defer close(made)
+		_, makeErr = exact.KeybaseSigner(kb, "session", "pw")
+	}()
+
+	assert.Never(t, closed(made), 200*time.Millisecond, 10*time.Millisecond)
+	close(kb.resume)
+	require.Eventually(t, closed(signed), 5*time.Second, 10*time.Millisecond)
+	require.Eventually(t, closed(made), 5*time.Second, 10*time.Millisecond)
+	require.NoError(t, signErr)
+	require.NoError(t, makeErr)
+}
+
+// pausedKeybase holds a signature in progress until resume closes, and closes
+// signing once it has begun.
+type pausedKeybase struct {
+	keys.Keybase
+	signing, resume chan struct{}
+}
+
+func (kb *pausedKeybase) Sign(name, passphrase string, msg []byte) ([]byte, crypto.PubKey, error) {
+	close(kb.signing)
+	<-kb.resume
+	return kb.Keybase.Sign(name, passphrase, msg)
+}
+
+// closed reports whether ch has been closed, without waiting.
+func closed(ch <-chan struct{}) func() bool {
+	return func() bool {
+		select {
+		case <-ch:
+			return true
+		default:
+			return false
+		}
 	}
 }

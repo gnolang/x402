@@ -20,7 +20,9 @@ import (
 // an offline or a multisig key, is refused here: it can never sign, and a
 // payment would otherwise read the chain first and fail after.
 func KeybaseSigner(kb keys.Keybase, nameOrBech32, password string) (Signer, error) {
+	keybaseSigning.Lock()
 	info, err := kb.GetByNameOrAddress(nameOrBech32)
+	keybaseSigning.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -35,13 +37,13 @@ func KeybaseSigner(kb keys.Keybase, nameOrBech32, password string) (Signer, erro
 	}, nil
 }
 
-// keybaseSigning makes the signatures this process takes from keybases one at a
-// time. gnokey's keybase on disk (keys.NewKeyBaseFromDir) opens its database
-// for each operation and holds an exclusive lock on it through the key's
-// decryption, so two payments signing at once, or two session keys kept in one
-// home, would fail all but one. Another process using the same home at that
-// moment, such as gnokey itself, can still fail a signature; nothing is paid
-// then, and the payment can be made again.
+// keybaseSigning makes this process's uses of keybases, finding a key or
+// signing with it, one at a time. gnokey's keybase on disk
+// (keys.NewKeyBaseFromDir) opens its database for each operation and holds an
+// exclusive lock on it through the key's decryption, so two payments signing at
+// once, or two session keys kept in one home, would fail all but one. Another
+// process using the same home at that moment, such as gnokey itself, can still
+// fail a signature; nothing is paid then, and the payment can be made again.
 var keybaseSigning sync.Mutex
 
 // keybaseSigner signs with a key a keys.Keybase holds.
