@@ -200,6 +200,18 @@ func TestAFeeOverTheCeilingIsNamed(t *testing.T) {
 	require.ErrorContains(t, err, "999700000ugnot per 20000000 gas")
 }
 
+// TestAFeeInAnotherCoinIsNamed: a node quoting its gas price in a coin other
+// than ugnot is refused as ErrExcessiveFee for the coin, however small the fee.
+func TestAFeeInAnotherCoinIsNamed(t *testing.T) {
+	node := newFakeNode()
+	node.gasPrice = &std.GasPrice{Gas: 1000, Price: std.Coin{Denom: "ufee", Amount: 5}}
+
+	_, err := exact.Prepare(context.Background(), node, signerFrom(t, test1Mnemonic).PubKey(), crypto.Address{}, offer(), "")
+
+	require.ErrorIs(t, err, exact.ErrExcessiveFee)
+	require.ErrorContains(t, err, "5ufee per 1000 gas, is not in ugnot")
+}
+
 // TestAMultisigKeyCannotPay: the facilitator takes one signature from one
 // signer, so a payment a threshold key signs could never settle; it is not
 // built, and the chain is not read for it, whether the key is held by value or

@@ -480,7 +480,10 @@ func Prepare(ctx context.Context, node Node, pub crypto.PubKey, master crypto.Ad
 	if err != nil {
 		return nil, err
 	}
-	if fee.Denom != maxGasFee.Denom || fee.Amount > maxGasFee.Amount {
+	if fee.Denom != maxGasFee.Denom {
+		return nil, fmt.Errorf("%w: the gas price the node reports, %s per %d gas, is not in %s, the coin a payment pays its fee in", ErrExcessiveFee, price.Price, price.Gas, maxGasFee.Denom)
+	}
+	if fee.Amount > maxGasFee.Amount {
 		return nil, fmt.Errorf("%w: the gas price the node reports, %s per %d gas, makes the fee %s, more than the %s a payment offers", ErrExcessiveFee, price.Price, price.Gas, fee, maxGasFee)
 	}
 
