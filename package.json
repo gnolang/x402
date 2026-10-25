@@ -1,6 +1,6 @@
 {
   "name": "@gnoverse/x402-gno",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "type": "module",
   "description": "The gno payment mechanism for the x402 'exact' scheme. Register it on a stock x402 client and it signs payments for the gno chain an offer names.",
   "license": "Apache-2.0",
