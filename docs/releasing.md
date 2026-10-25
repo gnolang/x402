@@ -116,6 +116,6 @@ it refuses every publish.
    (`x402`), workflow filename (`release.yml`) and allowed actions, plus the environment.
 
 A mismatch surfaces as `E404 package not found` or `ENEEDAUTH`, neither of which reflects the
-real cause: check the workflow filename, the environment name and the npm version in the job
-first. When the publish fails, the `Show npm's OIDC exchange` step prints npm's `oidc` log lines,
-which npm otherwise hides.
+real cause: check the organization and repository, the workflow filename, the environment name
+and the npm version in the job first. When the publish fails, the `Show npm's OIDC exchange`
+step prints npm's `oidc` log lines, which npm otherwise hides.

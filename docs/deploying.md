@@ -37,7 +37,7 @@ Pin by digest, not by tag: `latest` moves, and only a digest is what provenance 
 digest.
 
 Verify before deploying. The release workflow of `gnoverse/x402` signed each image's provenance,
-and the `gnoverse` organization keeps it:
+and the `gnoverse` organization keeps it, so the command names both:
 
 ```sh
 gh attestation verify oci://ghcr.io/gnoverse/gnofacilitator:<version> --owner gnoverse --signer-repo gnoverse/x402
