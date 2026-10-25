@@ -37,7 +37,7 @@ import (
 	x402http "github.com/x402-foundation/x402/go/v2/http"
 	nethttpmw "github.com/x402-foundation/x402/go/v2/http/nethttp"
 
-	gnoexact "github.com/gnoverse/x402/server/exact"
+	gnoexact "github.com/gnolang/x402/server/exact"
 )
 
 // paymentTimeout bounds a paid request as a whole: verify, the resource, and a

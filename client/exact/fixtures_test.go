@@ -13,7 +13,7 @@ import (
 	x402 "github.com/x402-foundation/x402/go/v2"
 	"github.com/x402-foundation/x402/go/v2/types"
 
-	"github.com/gnoverse/x402/client/exact"
+	"github.com/gnolang/x402/client/exact"
 )
 
 const (

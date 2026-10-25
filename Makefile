@@ -1,4 +1,4 @@
-# gnoverse/x402 — the gno payment mechanism for x402, its facilitator, and the
+# gnolang/x402 — the gno payment mechanism for x402, its facilitator, and the
 # harnesses that prove a payment happens.
 #
 # Sources are laid out by mechanism role — server/, facilitator/, client/ — and

@@ -13,7 +13,7 @@ import (
 	x402 "github.com/x402-foundation/x402/go/v2"
 	x402http "github.com/x402-foundation/x402/go/v2/http"
 
-	"github.com/gnoverse/x402/client/exact"
+	"github.com/gnolang/x402/client/exact"
 )
 
 // A buyer pays the onyx testnet's demo seller from a key gnokey keeps. The

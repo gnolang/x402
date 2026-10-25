@@ -54,7 +54,7 @@ dockers_v2:
     ids: [gnofacilitator]
     dockerfile: docker/gnofacilitator.Dockerfile
     images:
-      - ghcr.io/gnoverse/gnofacilitator
+      - ghcr.io/gnolang/gnofacilitator
     tags:
       - "{{ .Version }}"
       - latest
@@ -62,7 +62,7 @@ dockers_v2:
     labels:
       org.opencontainers.image.title: gnofacilitator
       org.opencontainers.image.description: Keyless x402 facilitator for a gno.land chain
-      org.opencontainers.image.source: https://github.com/gnoverse/x402
+      org.opencontainers.image.source: https://github.com/gnolang/x402
       org.opencontainers.image.version: "{{ .Version }}"
       org.opencontainers.image.revision: "{{ .FullCommit }}"
       org.opencontainers.image.licenses: Apache-2.0

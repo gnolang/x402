@@ -89,7 +89,7 @@ jobs:
       # rather than a release. Snapshot tags are arch-suffixed, so match by repo
       # prefix instead of the exact versioned name.
       - name: Assert the image digest is extractable
-        env: { REPO: ghcr.io/gnoverse/gnofacilitator }
+        env: { REPO: ghcr.io/gnolang/gnofacilitator }
         run: |
           set -euo pipefail
           digest="$(jq -r --arg repo "$REPO" '

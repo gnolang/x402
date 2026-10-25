@@ -8,7 +8,7 @@
   "//repository": "npm resolves the package page's relative links against this, and the published page is the repository root README rather than client/README.md.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gnoverse/x402.git"
+    "url": "git+https://github.com/gnolang/x402.git"
   },
   "keywords": [
     "x402",
@@ -17,7 +17,7 @@
     "tendermint2",
     "payments"
   ],
-  "//bin": "x402-gno is the weather buyer, so `npx github:gnoverse/x402#<ref> <seller URL>` pays a seller without a clone, and the published package carries the same command. npm installs only the package at a repository's root, which is why the command is declared here and its file is listed in `files`.",
+  "//bin": "x402-gno is the weather buyer, so `npx github:gnolang/x402#<ref> <seller URL>` pays a seller without a clone, and the published package carries the same command. npm installs only the package at a repository's root, which is why the command is declared here and its file is listed in `files`.",
   "bin": {
     "x402-gno": "examples/weather/buy.mjs"
   },

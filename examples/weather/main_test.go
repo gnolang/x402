@@ -23,9 +23,9 @@ import (
 	x402 "github.com/x402-foundation/x402/go/v2"
 	"github.com/x402-foundation/x402/go/v2/types"
 
-	"github.com/gnoverse/x402/facilitator"
-	"github.com/gnoverse/x402/facilitator/exact"
-	"github.com/gnoverse/x402/facilitator/exact/exacttest"
+	"github.com/gnolang/x402/facilitator"
+	"github.com/gnolang/x402/facilitator/exact"
+	"github.com/gnolang/x402/facilitator/exact/exacttest"
 )
 
 // unreachableChain stands in for the node. A 402 is decided from the seller's
@@ -229,7 +229,7 @@ func TestThePageOpensOnADemoMastheadLinkingTheSource(t *testing.T) {
 	assert.Contains(t, head, "<title>Payment required · x402 on Gno local demo</title>")
 	assert.Contains(t, masthead, "local demo", "on the page, not only in the tab")
 	assert.NotContains(t, head+masthead, "testnet", "a dev chain is no public testnet")
-	assert.Contains(t, masthead, `href="https://github.com/gnoverse/x402"`)
+	assert.Contains(t, masthead, `href="https://github.com/gnolang/x402"`)
 	assert.NotContains(t, head+masthead, "live", "live next to weather reads as real data")
 }
 
@@ -511,7 +511,7 @@ func TestThePageShowsThePayCommandTheKeyStepPrints(t *testing.T) {
 
 	_, page := browserPage(t, sellerURL)
 
-	assert.Regexp(t, `<code>X402_MNEMONIC='&lt;mnemonic&gt;' npx github:gnoverse/x402#client/v\d+\.\d+\.\d+ <span data-pay-url>`, page)
+	assert.Regexp(t, `<code>X402_MNEMONIC='&lt;mnemonic&gt;' npx github:gnolang/x402#client/v\d+\.\d+\.\d+ <span data-pay-url>`, page)
 }
 
 // A payment made from code shows on the page with or without Adena, so the
@@ -543,7 +543,7 @@ func TestThePageRunsTheBuyerPinnedToARelease(t *testing.T) {
 
 	_, page := browserPage(t, sellerURL)
 
-	runs := regexp.MustCompile(`npx github:gnoverse/x402(\S*)`).FindAllStringSubmatch(page, -1)
+	runs := regexp.MustCompile(`npx github:gnolang/x402(\S*)`).FindAllStringSubmatch(page, -1)
 	require.Len(t, runs, 2, "one command makes the key, one pays")
 	for _, run := range runs {
 		assert.Regexp(t, `^#client/v\d+\.\d+\.\d+$`, run[1])
@@ -562,7 +562,7 @@ func TestThePageSaysToReadTheBuyerBeforeRunningIt(t *testing.T) {
 	firstRun := strings.Index(page, "npx github:")
 	require.NotEqual(t, -1, firstRun, "the page offers no command")
 	before := page[:firstRun]
-	assert.Contains(t, before, `href="https://github.com/gnoverse/x402/blob/main/examples/weather/buy.mjs"`)
+	assert.Contains(t, before, `href="https://github.com/gnolang/x402/blob/main/examples/weather/buy.mjs"`)
 	assert.Contains(t, before, "never give it a mnemonic that holds anything")
 }
 

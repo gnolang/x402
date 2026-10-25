@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/gnoverse/x402/facilitator/exact"
+	"github.com/gnolang/x402/facilitator/exact"
 )
 
 // TestGnoclientNode_NodeChainIDWithoutAClient pins the guard on the chain-id

@@ -18,7 +18,7 @@ import (
 	x402 "github.com/x402-foundation/x402/go/v2"
 	x402http "github.com/x402-foundation/x402/go/v2/http"
 
-	clientexact "github.com/gnoverse/x402/client/exact"
+	clientexact "github.com/gnolang/x402/client/exact"
 )
 
 // TestAGoClientPaysAGnoSeller is the Go buyer's half of the claim: upstream's

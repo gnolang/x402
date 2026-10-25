@@ -16,7 +16,7 @@ import (
 	nethttpmw "github.com/x402-foundation/x402/go/v2/http/nethttp"
 	"github.com/x402-foundation/x402/go/v2/types"
 
-	gnoexact "github.com/gnoverse/x402/server/exact"
+	gnoexact "github.com/gnolang/x402/server/exact"
 )
 
 const (

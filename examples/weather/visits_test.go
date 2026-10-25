@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/gnoverse/x402/facilitator"
-	"github.com/gnoverse/x402/facilitator/exact/exacttest"
+	"github.com/gnolang/x402/facilitator"
+	"github.com/gnolang/x402/facilitator/exact/exacttest"
 )
 
 // aVisit is a token as the page makes one: 128 random bits in hex.

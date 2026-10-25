@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/gnoverse/x402/facilitator/exact/exacttest"
+	"github.com/gnolang/x402/facilitator/exact/exacttest"
 )
 
 // handClock is a clock the test advances itself, so a throttle decision is a
