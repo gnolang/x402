@@ -7,7 +7,7 @@
 # touches the chain and holds no key: it needs a facilitator and an address to
 # be paid at.
 #
-#   docker run --rm -p 8401:8401 ghcr.io/gnoverse/x402-weather:latest \
+#   docker run --rm -p 8401:8401 ghcr.io/gnolang/x402-weather:latest \
 #     -network gno:onyx-1 -facilitator https://facilitator.onyx.testnets.gno.land \
 #     -pay-to g1... -public-url https://<host>
 #

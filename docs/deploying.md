@@ -16,8 +16,10 @@ while the payee is paid once. One process deduplicates even through a load-balan
 ## Artifact
 
 ```
-ghcr.io/gnoverse/gnofacilitator:<version>
+ghcr.io/gnolang/gnofacilitator:<version>
 ```
+
+Releases up to 0.3.0 are published as `ghcr.io/gnoverse/gnofacilitator`.
 
 **0.1.0 cannot serve onyx-1.** It links a gno older than the one onyx-1 runs and cannot decode
 the node's simulation reply. Payments that reach simulation answer `503`, valid ones included.
@@ -33,15 +35,21 @@ version's rules, so it serves the chains running that version.
 | Registry auth | none — the package is public |
 
 Pin by digest, not by tag: `latest` moves, and only a digest is what provenance attests.
-`docker buildx imagetools inspect ghcr.io/gnoverse/gnofacilitator:<version>` prints the image's
+`docker buildx imagetools inspect ghcr.io/gnolang/gnofacilitator:<version>` prints the image's
 digest.
 
-Verify before deploying. The release workflow of `gnoverse/x402` signed each image's provenance,
-and the `gnoverse` organization keeps it, so the command names both:
+Verify before deploying:
+
+```sh
+gh attestation verify oci://ghcr.io/gnolang/gnofacilitator:<version> --repo gnolang/x402
+docker run --rm ghcr.io/gnolang/gnofacilitator:<version> --version    # -> <version>
+```
+
+The release workflow of `gnoverse/x402` signed each gnoverse image's provenance, which the
+`gnoverse` organization keeps, so verifying one names both:
 
 ```sh
 gh attestation verify oci://ghcr.io/gnoverse/gnofacilitator:<version> --owner gnoverse --signer-repo gnoverse/x402
-docker run --rm ghcr.io/gnoverse/gnofacilitator:<version> --version    # -> <version>
 ```
 
 ## Configuration
@@ -65,7 +73,7 @@ and is refused as invalid, blaming payers for an operator error.
 docker run -d --name gnofacilitator \
   --read-only --cap-drop ALL --security-opt no-new-privileges \
   -p 8402:8402 \
-  ghcr.io/gnoverse/gnofacilitator@sha256:<digest> \
+  ghcr.io/gnolang/gnofacilitator@sha256:<digest> \
   -rpc https://rpc.onyx.testnets.gno.land:443 \
   -chain-id onyx-1
 ```

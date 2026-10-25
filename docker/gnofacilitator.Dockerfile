@@ -6,7 +6,7 @@
 # client-signed transactions, so a compromised one cannot move funds anywhere the
 # payer did not already sign for. It does need a reachable node:
 #
-#   docker run --rm -p 8402:8402 ghcr.io/gnoverse/gnofacilitator:latest \
+#   docker run --rm -p 8402:8402 ghcr.io/gnolang/gnofacilitator:latest \
 #     -rpc https://rpc.onyx.testnets.gno.land:443 -chain-id onyx-1
 #
 # -listen already defaults to all interfaces on :8402, so publishing the port is
