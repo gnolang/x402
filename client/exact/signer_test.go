@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/gnoverse/x402/client/exact"
+	"github.com/gnolang/x402/client/exact"
 )
 
 // TestKeybaseSignerSignsWithTheKeyItNames: the signer's public key is the

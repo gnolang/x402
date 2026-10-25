@@ -4,9 +4,9 @@ Three components, three independent version lines. Releasing one does not touch 
 
 | Component | Tag | Produces |
 |---|---|---|
-| `facilitator` | `vX.Y.Z` | archives + GitHub release + `ghcr.io/gnoverse/gnofacilitator`, attested. Also the Go module version. |
+| `facilitator` | `vX.Y.Z` | archives + GitHub release + `ghcr.io/gnolang/gnofacilitator`, attested. Also the Go module version. |
 | `client` | `client/vX.Y.Z` | `@gnoverse/x402-gno` on npm, with provenance |
-| `weather` | `weather/vX.Y.Z` | `ghcr.io/gnoverse/x402-weather`, the demo seller's image for amd64 and arm64, attested; `latest` follows plain releases only |
+| `weather` | `weather/vX.Y.Z` | `ghcr.io/gnolang/x402-weather`, the demo seller's image for amd64 and arm64, attested; `latest` follows plain releases only |
 
 The Go mechanisms, `server/exact` and `client/exact`, are packages of the Go module, so they
 release with the facilitator's `vX.Y.Z`. `client/vX.Y.Z` releases the npm package alone.
@@ -37,7 +37,7 @@ git commit -am "chore(release): bump the client to 0.2.0"
 gh workflow run release.yml --ref main -f component=client -f version=0.2.0
 ```
 
-The same PR moves the `client/vX.Y.Z` that the `npx github:gnoverse/x402#…` commands pin in
+The same PR moves the `client/vX.Y.Z` that the `npx github:gnolang/x402#…` commands pin in
 `examples/weather/paywall.html`, `examples/weather/README.md` and `client/README.md` to the new
 version, and the tag in the weather README's link to `buy.mjs`, so the script a reader is told to
 read is the one the commands run. The tag exists once the release runs, and from then on those
@@ -112,10 +112,10 @@ it refuses every publish.
 4. Once `release.yml` on `main` names the environment, on npmjs.com, as an owner of
    `@gnoverse/x402-gno`, open the package's **Settings → Trusted publishing**, edit the GitHub
    Actions publisher and set **Environment name** to `npm`. Where the page offers no edit,
-   delete the publisher and add it again with the same organization (`gnoverse`), repository
+   delete the publisher and add it again with the same organization (`gnolang`), repository
    (`x402`), workflow filename (`release.yml`) and allowed actions, plus the environment.
 
 A mismatch surfaces as `E404 package not found` or `ENEEDAUTH`, neither of which reflects the
-real cause: check the workflow filename, the environment name and the npm version in the job
-first. When the publish fails, the `Show npm's OIDC exchange` step prints npm's `oidc` log lines,
-which npm otherwise hides.
+real cause: check the organization and repository, the workflow filename, the environment name
+and the npm version in the job first. When the publish fails, the `Show npm's OIDC exchange`
+step prints npm's `oidc` log lines, which npm otherwise hides.

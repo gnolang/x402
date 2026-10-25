@@ -10,7 +10,7 @@ import (
 	x402 "github.com/x402-foundation/x402/go/v2"
 	"github.com/x402-foundation/x402/go/v2/types"
 
-	facilitatorexact "github.com/gnoverse/x402/facilitator/exact"
+	facilitatorexact "github.com/gnolang/x402/facilitator/exact"
 )
 
 // The seller registers this with the canonical middleware, which accepts nothing

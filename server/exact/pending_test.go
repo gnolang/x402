@@ -17,9 +17,9 @@ import (
 	nethttpmw "github.com/x402-foundation/x402/go/v2/http/nethttp"
 	"github.com/x402-foundation/x402/go/v2/types"
 
-	"github.com/gnoverse/x402/facilitator"
-	"github.com/gnoverse/x402/facilitator/exact/exacttest"
-	gnoexact "github.com/gnoverse/x402/server/exact"
+	"github.com/gnolang/x402/facilitator"
+	"github.com/gnolang/x402/facilitator/exact/exacttest"
+	gnoexact "github.com/gnolang/x402/server/exact"
 )
 
 // pendingAnswerWithin is the binary's answer deadline, scaled down so a settle

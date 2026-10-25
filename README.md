@@ -5,7 +5,7 @@
 > reason vocabulary and the payload shape are still moving, and releases may break each other.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
-[![Container](https://img.shields.io/badge/ghcr.io-gnoverse%2Fgnofacilitator-2496ED?logo=docker&logoColor=white)](https://github.com/gnoverse/x402/pkgs/container/gnofacilitator)
+[![Container](https://img.shields.io/badge/ghcr.io-gnoverse%2Fgnofacilitator-2496ED?logo=docker&logoColor=white)](https://github.com/orgs/gnoverse/packages/container/package/gnofacilitator)
 
 > Charge for an HTTP endpoint in ugnot, and let any x402 client pay it.
 
@@ -90,7 +90,7 @@ const res = await paid("https://api.example.com/weather");
 From Go, register [`client/exact`](client/exact) on upstream's Go client:
 
 ```go
-import clientexact "github.com/gnoverse/x402/client/exact"
+import clientexact "github.com/gnolang/x402/client/exact"
 
 signer, _ := clientexact.KeybaseSigner(kb, "buyer", password)           // a key gnokey keeps
 node := clientexact.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc}) // a node on onyx-1

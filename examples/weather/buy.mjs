@@ -65,7 +65,7 @@ if (process.argv[2] === "--new-key") {
   const { version } = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
   const command =
     process.env.npm_lifecycle_event === "npx"
-      ? `npx github:gnoverse/x402#client/v${version}`
+      ? `npx github:gnolang/x402#client/v${version}`
       : `node ${relative(process.cwd(), process.argv[1])}`;
   // A URL with a character a shell reads, such as ? (a glob in zsh) or &, is
   // single-quoted, so the printed line pastes as it is.

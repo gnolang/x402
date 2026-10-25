@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/x402-foundation/x402/go/v2/types"
 
-	"github.com/gnoverse/x402/facilitator/exact"
-	"github.com/gnoverse/x402/facilitator/exact/exacttest"
+	"github.com/gnolang/x402/facilitator/exact"
+	"github.com/gnolang/x402/facilitator/exact/exacttest"
 )
 
 // The interop fixture is a payment signed by @gnolang/gno-js-client, the

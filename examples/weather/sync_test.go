@@ -13,8 +13,8 @@ import (
 	"github.com/gnolang/gno/tm2/pkg/std"
 	"github.com/stretchr/testify/require"
 
-	"github.com/gnoverse/x402/facilitator"
-	"github.com/gnoverse/x402/facilitator/exact/exacttest"
+	"github.com/gnolang/x402/facilitator"
+	"github.com/gnolang/x402/facilitator/exact/exacttest"
 )
 
 const (

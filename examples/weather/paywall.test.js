@@ -1182,7 +1182,7 @@ function watchingPage(...answers) {
   });
   start(page.document, page.window);
   page.copyable.querySelector("code").innerText =
-    `npx github:gnoverse/x402#client/v0.5.0 --new-key ${page.payUrls[0].textContent}`;
+    `npx github:gnolang/x402#client/v0.5.0 --new-key ${page.payUrls[0].textContent}`;
   return {
     ...page,
     lookups,
@@ -1252,7 +1252,7 @@ describe("start, a payment made from code", () => {
     await Promise.resolve();
     expect(lookups).toEqual([]);
 
-    window.getSelection = () => `npx github:gnoverse/x402#client/v0.5.0 ${payUrls[1].textContent}`;
+    window.getSelection = () => `npx github:gnolang/x402#client/v0.5.0 ${payUrls[1].textContent}`;
     document.listeners.copy();
     await vi.waitFor(() => expect(lookups).toHaveLength(1));
   });

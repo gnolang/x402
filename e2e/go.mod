@@ -7,18 +7,18 @@
 //
 // A nested module is excluded from the parent's ./... , so `go test ./...` at the
 // root never starts a chain. `make e2e` runs this.
-module github.com/gnoverse/x402/e2e
+module github.com/gnolang/x402/e2e
 
 go 1.26.5
 
 // Never published, and nothing ever `go get`s it — so a relative replace is the
 // honest way to reach the library under test rather than a version that does not
 // exist yet.
-replace github.com/gnoverse/x402 => ..
+replace github.com/gnolang/x402 => ..
 
 require (
 	github.com/gnolang/gno v1.5.1-0.20260928125126-5cdbc25fcde0
-	github.com/gnoverse/x402 v0.0.0
+	github.com/gnolang/x402 v0.0.0
 	github.com/rogpeppe/go-internal v1.15.0
 	github.com/stretchr/testify v1.11.1
 	github.com/x402-foundation/x402/go/v2 v2.28.0

@@ -200,7 +200,7 @@ describe("buy.mjs --new-key", () => {
     });
 
     expect(pay).toBe(
-      `X402_MNEMONIC='${mnemonic}' npx github:gnoverse/x402#client/v${MANIFEST.version} https://weather.example/weather`,
+      `X402_MNEMONIC='${mnemonic}' npx github:gnolang/x402#client/v${MANIFEST.version} https://weather.example/weather`,
     );
   });
 

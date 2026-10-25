@@ -36,10 +36,11 @@ Pin by digest, not by tag: `latest` moves, and only a digest is what provenance 
 `docker buildx imagetools inspect ghcr.io/gnoverse/gnofacilitator:<version>` prints the image's
 digest.
 
-Verify before deploying:
+Verify before deploying. The release workflow of `gnoverse/x402` signed each image's provenance,
+and the `gnoverse` organization keeps it, so the command names both:
 
 ```sh
-gh attestation verify oci://ghcr.io/gnoverse/gnofacilitator:<version> --repo gnoverse/x402
+gh attestation verify oci://ghcr.io/gnoverse/gnofacilitator:<version> --owner gnoverse --signer-repo gnoverse/x402
 docker run --rm ghcr.io/gnoverse/gnofacilitator:<version> --version    # -> <version>
 ```
 

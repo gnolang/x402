@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/x402-foundation/x402/go/v2/types"
 
-	"github.com/gnoverse/x402/client/exact"
+	"github.com/gnolang/x402/client/exact"
 )
 
 // The TypeScript fixtures are payments the TypeScript mechanism in client/src

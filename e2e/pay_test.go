@@ -37,9 +37,9 @@ import (
 	x402http "github.com/x402-foundation/x402/go/v2/http"
 	nethttpmw "github.com/x402-foundation/x402/go/v2/http/nethttp"
 
-	"github.com/gnoverse/x402/facilitator"
-	"github.com/gnoverse/x402/facilitator/exact"
-	gnoexact "github.com/gnoverse/x402/server/exact"
+	"github.com/gnolang/x402/facilitator"
+	"github.com/gnolang/x402/facilitator/exact"
+	gnoexact "github.com/gnolang/x402/server/exact"
 )
 
 // The harness's in-memory node serves this chain, so it is the CAIP-2 reference

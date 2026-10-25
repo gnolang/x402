@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/gnoverse/x402/facilitator/exact"
+	"github.com/gnolang/x402/facilitator/exact"
 )
 
 // The reason codes §9 of the specification enumerates, transcribed verbatim from

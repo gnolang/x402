@@ -4,7 +4,7 @@ Pay a gno.land chain with x402, from a stock client — no fork, no patch, no up
 
 Install it with `npm i @gnoverse/x402-gno`, or build it from the repository root with `make js`.
 [`examples/weather/buy.mjs`](../examples/weather/buy.mjs) is a working buyer, and the package
-installs it as the `x402-gno` command: `npx github:gnoverse/x402#client/v0.5.0 <seller URL>` runs it
+installs it as the `x402-gno` command: `npx github:gnolang/x402#client/v0.5.0 <seller URL>` runs it
 without a clone. Read it first, since it signs with the mnemonic it is given;
 [Paying it](../examples/weather/README.md#paying-it) shows how to make a throwaway key with it.
 
@@ -55,7 +55,7 @@ import (
 	x402 "github.com/x402-foundation/x402/go/v2"
 	x402http "github.com/x402-foundation/x402/go/v2/http"
 
-	clientexact "github.com/gnoverse/x402/client/exact"
+	clientexact "github.com/gnolang/x402/client/exact"
 )
 
 kb, _ := keys.NewKeyBaseFromDir(gnokeyHome) // the keys gnokey keeps

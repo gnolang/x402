@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	x402 "github.com/x402-foundation/x402/go/v2"
 
-	"github.com/gnoverse/x402/client/exact"
+	"github.com/gnolang/x402/client/exact"
 )
 
 // The chain's answers, as gno.land writes them: amino JSON, indented. The gas

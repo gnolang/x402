@@ -4,7 +4,7 @@ name: Release
 # lines — releasing one never rebuilds or re-tags another. See docs/releasing.md.
 #
 # gnofacilitator takes the plain semver tag (v<version>), which is also what
-# `go get github.com/gnoverse/x402@vX.Y.Z` resolves, so that tag versions the Go
+# `go get github.com/gnolang/x402@vX.Y.Z` resolves, so that tag versions the Go
 # library too. The client is an npm package whose version lives in package.json, so
 # its git tag is prefixed (client/v<version>) to keep an independent line: a bare
 # v<version> tag would publish a Go module version for a release containing no Go
@@ -94,7 +94,7 @@ jobs:
           tag="v$version"
           if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
             # Deliberately NOT "delete the tag and retry". This tag is the Go module
-            # version: once anything has resolved github.com/gnoverse/x402@vX.Y.Z,
+            # version: once anything has resolved github.com/gnolang/x402@vX.Y.Z,
             # sum.golang.org has bound that version to that commit forever, and
             # re-cutting it elsewhere gives every downstream build a permanent
             # checksum mismatch. The remedy is the next number.
@@ -103,7 +103,7 @@ jobs:
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
           echo "TAG=$tag" >> "$GITHUB_ENV"
-          echo "IMAGE=ghcr.io/gnoverse/gnofacilitator" >> "$GITHUB_ENV"
+          echo "IMAGE=ghcr.io/gnolang/gnofacilitator" >> "$GITHUB_ENV"
 
       # goreleaser builds with this Go. No cache: jobs that run dependency code
       # write this repository's Actions cache, and goreleaser would link a
@@ -410,7 +410,7 @@ jobs:
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
           echo "TAG=$tag" >> "$GITHUB_ENV"
-          image=ghcr.io/gnoverse/x402-weather
+          image=ghcr.io/gnolang/x402-weather
           echo "IMAGE=$image" >> "$GITHUB_ENV"
           # latest names the newest plain release, never a pre-release.
           {
@@ -451,7 +451,7 @@ jobs:
           labels: |
             org.opencontainers.image.title=x402-weather
             org.opencontainers.image.description=The x402 weather demo seller, paid in gno
-            org.opencontainers.image.source=https://github.com/gnoverse/x402
+            org.opencontainers.image.source=https://github.com/gnolang/x402
             org.opencontainers.image.version=${{ env.VERSION }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=Apache-2.0
