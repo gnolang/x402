@@ -371,6 +371,59 @@ function store(window, key, value) {
   }
 }
 
+// The tab of the way to run the buyer picked last, kept for a reload.
+const RUNTIME_KEY = "x402-weather-runtime";
+
+// showRuntimes turns the ways to run the buyer into tabs, opening on the one
+// picked last. Without the script both ways show, each under its own heading.
+function showRuntimes(document, window) {
+  const tabs = [...document.querySelectorAll("#runtimes [role=tab]")];
+  const panelOf = (tab) => document.getElementById(tab.getAttribute("aria-controls"));
+  const select = (chosen) => {
+    for (const tab of tabs) {
+      tab.setAttribute("aria-selected", String(tab === chosen));
+      tab.tabIndex = tab === chosen ? 0 : -1;
+      panelOf(tab).hidden = tab !== chosen;
+    }
+  };
+  const pick = (tab) => {
+    select(tab);
+    store(window, RUNTIME_KEY, tab.id);
+  };
+  for (const [i, tab] of tabs.entries()) {
+    const panel = panelOf(tab);
+    panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", tab.id);
+    panel.tabIndex = 0;
+    tab.addEventListener("click", () => pick(tab));
+    tab.addEventListener("keydown", (event) => {
+      let to;
+      switch (event.key) {
+        case "ArrowRight":
+          to = tabs[(i + 1) % tabs.length];
+          break;
+        case "ArrowLeft":
+          to = tabs[(i - 1 + tabs.length) % tabs.length];
+          break;
+        case "Home":
+          to = tabs[0];
+          break;
+        case "End":
+          to = tabs[tabs.length - 1];
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+      pick(to);
+      to.focus();
+    });
+  }
+  const kept = stored(window, RUNTIME_KEY);
+  select(tabs.find((tab) => tab.id === kept) ?? tabs[0]);
+  document.getElementById("runtimes").hidden = false;
+}
+
 // visitToken returns this tab's visit, made from 128 random bits the first
 // time.
 function visitToken(window) {
@@ -452,6 +505,7 @@ export function start(document, window) {
       watch();
     }
   });
+  showRuntimes(document, window);
 
   // A phone pays on neither path, Adena being a desktop extension and the buyer
   // a terminal command, so the page hands its own link to the share sheet, or to
