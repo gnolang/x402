@@ -193,7 +193,7 @@ second, bursts of 100, for all pages together, whatever `-rate-per-second` and `
 arguments, environment and output. One command runs either without a clone. To pay from your own
 Go code, register the [Go mechanism](../../client/README.md#from-go) on upstream's Go client.
 
-> **Read [`buy.mjs`](https://github.com/gnolang/x402/blob/client/v0.5.1/examples/weather/buy.mjs)
+> **Read [`buy.mjs`](https://github.com/gnolang/x402/blob/client/v0.5.2/examples/weather/buy.mjs)
 > or [`x402-gno`](https://github.com/gnolang/x402/blob/v0.5.0/examples/weather/x402-gno/main.go)
 > before you run it.** Each signs with the mnemonic you give it, so never
 > give it one that holds anything. Make a throwaway key with it, or use a
@@ -203,9 +203,9 @@ Go code, register the [Go mechanism](../../client/README.md#from-go) on upstream
 These commands pay the hosted seller on onyx. Any other seller's URL works in its place.
 
 ```sh
-npx github:gnolang/x402#client/v0.5.1 --new-key https://x402-demo.onyx.testnets.gno.land/weather
+npx github:gnolang/x402#client/v0.5.2 --new-key https://x402-demo.onyx.testnets.gno.land/weather
 # fund the address it printed at https://faucet.gno.land, then run the command it printed:
-X402_MNEMONIC='<mnemonic>' npx github:gnolang/x402#client/v0.5.1 https://x402-demo.onyx.testnets.gno.land/weather
+X402_MNEMONIC='<mnemonic>' npx github:gnolang/x402#client/v0.5.2 https://x402-demo.onyx.testnets.gno.land/weather
 ```
 
 npx resolves the tag with git, fetches the repository at it, builds the client mechanism and runs
