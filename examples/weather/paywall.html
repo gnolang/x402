@@ -429,12 +429,12 @@ curl -si <span data-url>&lt;this page's URL&gt;</span></code></pre>
       <div class="runtime" id="code-node">
         <h3>With Node</h3>
         <ol class="steps">
-          <li><div><p><b>Read the script.</b> <a href="https://github.com/gnolang/x402/blob/client/v0.5.1/examples/weather/buy.mjs">examples/weather/buy.mjs</a> is the whole buyer the commands below run.</p></div></li>
+          <li><div><p><b>Read the script.</b> <a href="https://github.com/gnolang/x402/blob/client/v0.5.2/examples/weather/buy.mjs">examples/weather/buy.mjs</a> is the whole buyer the commands below run.</p></div></li>
           <li><div><p><b>Make a throwaway key.</b> This prints a new mnemonic, its address and the command that pays this page with it, and saves none of them.</p>
-            <pre data-copy><code>npx github:gnolang/x402#client/v0.5.1 <span class="nowrap">--new-key</span> <span data-pay-url>&lt;this page's URL&gt;</span></code></pre></div></li>
+            <pre data-copy><code>npx github:gnolang/x402#client/v0.5.2 <span class="nowrap">--new-key</span> <span data-pay-url>&lt;this page's URL&gt;</span></code></pre></div></li>
           {{template "fund" .}}
           <li><div><p><b>Pay</b> with the command step 2 printed. It looks like this, and prints the transaction and the weather.</p>
-            <pre><code>X402_MNEMONIC='&lt;mnemonic&gt;' npx github:gnolang/x402#client/v0.5.1 <span data-pay-url>&lt;this page's URL&gt;</span></code></pre></div></li>
+            <pre><code>X402_MNEMONIC='&lt;mnemonic&gt;' npx github:gnolang/x402#client/v0.5.2 <span data-pay-url>&lt;this page's URL&gt;</span></code></pre></div></li>
         </ol>
         <p>Both commands need git and Node 22.18+ or 24.11+. Running the buyer from a clone, or against another node, is in the <a href="https://github.com/gnolang/x402/tree/main/examples/weather#paying-it">weather example's README</a>.</p>
         <p class="warn">Testnet only. The mechanism is unaudited and pre-release; do not point it at real funds.</p>
