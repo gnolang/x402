@@ -6,8 +6,9 @@
 // This drives gno.land's txtar harness, which starts a real in-memory node, and
 // adds two commands to it: one that stands up the facilitator against that node,
 // one that guards an HTTP resource with the canonical middleware. The buyer here is
-// the JS one, run by `exec node`, so the assertion crosses both languages;
-// goclient_test.go drives the same commands with the Go one.
+// the JS one, so the assertion crosses both languages; weatherbuyer_test.go runs
+// the scenarios that drive the weather example's buyer with its Go twin, and
+// goclient_test.go drives the same commands with upstream's Go client.
 //
 // settle_test.go starts in-process nodes itself instead, to settle one signed
 // payment twice at once and to replay a settled one, which a scripted buyer
@@ -25,6 +26,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gnolang/gno/gno.land/pkg/gnoclient"
@@ -230,6 +232,12 @@ type sellerOffer struct {
 	// relays one. Upstream's Go middleware keeps the hash only for
 	// settlement_pending, so a scenario cannot get this from it.
 	RefusedSettlement *refusedSettlement `json:"refusedSettlement"`
+
+	// DropPaidAnswer, when set, has the seller settle the first paid request
+	// and then close the connection without answering it, so the buyer never
+	// gets the answer to a payment that went through. A later paid request is
+	// answered, so a buyer that sends the payment again prints that answer.
+	DropPaidAnswer bool `json:"dropPaidAnswer"`
 }
 
 // refusedSettlement is what a scenario decides of a failed settle receipt; the
@@ -334,6 +342,9 @@ func sellerCmd(ts *testscript.TestScript, neg bool, args []string) {
 		ts.Check(err)
 		handler = refusingSettlement(handler, base64.StdEncoding.EncodeToString(receipt))
 	}
+	if offer.DropPaidAnswer {
+		handler = droppingPaidAnswers(handler)
+	}
 
 	server := httptest.NewServer(handler)
 	ts.Defer(server.Close)
@@ -360,6 +371,21 @@ func refusingSettlement(next http.Handler, receipt string) http.Handler {
 		w.Header().Set("PAYMENT-RESPONSE", receipt)
 		w.WriteHeader(http.StatusPaymentRequired)
 		_, _ = w.Write([]byte("{}"))
+	})
+}
+
+// droppingPaidAnswers hands the first paid request to next, which settles it,
+// then aborts the request, which closes the connection with nothing written.
+// Every other request goes to next unchanged.
+func droppingPaidAnswers(next http.Handler) http.Handler {
+	var dropped atomic.Bool
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("PAYMENT-SIGNATURE") == "" || dropped.Swap(true) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(httptest.NewRecorder(), r)
+		panic(http.ErrAbortHandler)
 	})
 }
 

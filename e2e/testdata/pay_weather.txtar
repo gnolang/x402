@@ -1,9 +1,10 @@
 # A stock x402 client pays a gno seller for an ordinary HTTP resource, and the
 # chain agrees that it happened.
 #
-# The buyer is the weather example's own buy.mjs, so the file a reader meets
-# first is the one this scenario proves. The other scenarios drive the harness
-# buyer, whose JSON report their assertions grep; this one asserts on the chain.
+# The buyer is the weather example's own, buy.mjs or its Go twin x402-gno, so
+# the file a reader meets first is the one this scenario proves. Scenarios that
+# grep a JSON report drive the harness buyer instead; this one asserts on the
+# chain.
 #
 # Everything the scenario decides is in this file: what is sold, what it costs,
 # and what the buyer gets back. x402seller reads seller.json and stands that up
@@ -24,9 +25,9 @@ stdout '1000000000ugnot'
 x402facilitator
 x402seller seller.json $seller_user_addr
 
-# @x402/core's stock client, taught about gno by its register() call and a
-# spend control that admits ugnot.
-exec node $X402_EXAMPLE_BUYER
+# A stock x402 client, @x402/core's or upstream's Go one, taught about gno by
+# registering the scheme and by a spend control that admits ugnot.
+exec $X402_EXAMPLE_BUYER
 
 # The resource was served: the body seller.json names, verbatim.
 stdout 'sunny'

@@ -1,0 +1,8 @@
+[
+  { "url": "https://weather.example/weather", "word": "https://weather.example/weather" },
+  {
+    "url": "https://weather.example/weather?city=paris&units=c",
+    "word": "'https://weather.example/weather?city=paris&units=c'"
+  },
+  { "url": "https://weather.example/o'clock/weather", "word": "'https://weather.example/o'\\''clock/weather'" }
+]

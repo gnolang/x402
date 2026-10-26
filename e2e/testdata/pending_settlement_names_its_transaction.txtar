@@ -12,7 +12,7 @@ gnoland start
 x402facilitator pending
 x402seller seller.json $seller_user_addr
 
-! exec node $X402_EXAMPLE_BUYER
+! exec $X402_EXAMPLE_BUYER
 
 # Withheld, and named by its hash and the reason.
 ! stdout 'sunny'

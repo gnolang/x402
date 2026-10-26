@@ -38,7 +38,7 @@ const master = process.env.X402_SESSION_MASTER || undefined;
 // top of it.
 const MAX_PRICE = "1000000";
 
-const sellerURL = process.argv[2] ?? process.env.X402_SELLER_URL ?? "http://localhost:8401/weather";
+const sellerURL = process.argv[2] || process.env.X402_SELLER_URL || "http://localhost:8401/weather";
 
 // The public RPC of each chain a buyer reads its account from when X402_GNO_RPC
 // is unset. Any other chain, such as a local dev chain, falls back to LOCAL_RPC.
@@ -87,13 +87,54 @@ fund the address at https://faucet.gno.land, then pay with it:
   process.exit(0);
 }
 
-// Prints why nothing was paid, then exits. fetch reports every network failure
-// as "fetch failed" and keeps the reason in err.cause.
-function notPaid(err) {
+// Says what went wrong. fetch reports every network failure as "fetch failed"
+// and keeps the reason in err.cause.
+function reasonOf(err) {
   const message = err instanceof Error ? err.message : String(err);
   const cause = err instanceof Error && err.cause instanceof Error ? ` (${err.cause.message})` : "";
-  console.log(`not paid: ${message}${cause}`);
+  return `${message}${cause}`;
+}
+
+// Prints why nothing was paid, then exits.
+function notPaid(err) {
+  console.log(`not paid: ${reasonOf(err)}`);
   process.exit(1);
+}
+
+// The most of a seller's body this buyer reads, in bytes: it does not trust the
+// seller.
+const MAX_ANSWER = 10 * 1024 * 1024;
+
+// Reads response's body, up to MAX_ANSWER bytes. cut says why the body ends
+// early, and is undefined when it was read whole.
+async function readAnswer(response) {
+  const chunks = [];
+  let size = 0;
+  try {
+    for await (const chunk of response.body ?? []) {
+      chunks.push(chunk);
+      size += chunk.length;
+      if (size > MAX_ANSWER) {
+        return { body: Buffer.concat(chunks).subarray(0, MAX_ANSWER).toString(), cut: `it runs past ${MAX_ANSWER} bytes` };
+      }
+    }
+  } catch (err) {
+    return { body: Buffer.concat(chunks).toString(), cut: reasonOf(err) };
+  }
+  return { body: Buffer.concat(chunks).toString(), cut: undefined };
+}
+
+// Decodes header with decode: undefined when there is no header, or it does
+// not decode.
+function decoded(decode, header) {
+  if (header === null || header === "") {
+    return undefined;
+  }
+  try {
+    return decode(header);
+  } catch {
+    return undefined;
+  }
 }
 
 const wallet = await GnoWallet.fromMnemonic(mnemonic);
@@ -124,6 +165,8 @@ if (master !== undefined) {
 }
 
 let paid;
+// Set once the signed payment has gone out.
+let sent = false;
 try {
   // 1. Ask without paying. A priced resource answers 402; any other answer is
   // the final one.
@@ -140,6 +183,7 @@ try {
     // its facilitator check it and settle it on chain before answering. The
     // second header is one @x402/fetch adds to every payment, so a seller gets
     // the same request from this buyer as from that client.
+    sent = true;
     paid = await fetch(sellerURL, {
       headers: {
         ...http.encodePaymentSignatureHeader(payment),
@@ -148,6 +192,14 @@ try {
     });
   }
 } catch (err) {
+  if (sent) {
+    // The seller may have had the payment settled before its answer was lost,
+    // so paying again could pay twice.
+    console.log(
+      `not confirmed: the answer to the payment was lost (${reasonOf(err)}); it may have gone through, so check ${master ?? address} before paying again`,
+    );
+    process.exit(1);
+  }
   // Thrown when the seller or the node cannot be reached, or no payment can be
   // signed, such as for an account the chain has never funded.
   // tm2-js-client marks an address with no account only by this message.
@@ -160,15 +212,14 @@ try {
 
 // 5. Read the answer: the weather once the payment settled, and the receipt in
 // PAYMENT-RESPONSE.
-const body = await paid.text();
+const { body, cut } = await readAnswer(paid);
 
 if (!paid.ok) {
   // A verify refusal carries its reason in the challenge, a settle failure in the
   // receipt.
-  const receiptHeader = paid.headers.get("PAYMENT-RESPONSE");
-  const challenge = paid.headers.get("PAYMENT-REQUIRED");
-  const receipt = receiptHeader ? decodePaymentResponseHeader(receiptHeader) : {};
-  const reason = (receipt.errorReason || (challenge && decodePaymentRequiredHeader(challenge).error) || "").trim();
+  const receipt = decoded(decodePaymentResponseHeader, paid.headers.get("PAYMENT-RESPONSE")) ?? {};
+  const challenge = decoded(decodePaymentRequiredHeader, paid.headers.get("PAYMENT-REQUIRED"));
+  const reason = (receipt.errorReason || challenge?.error || "").trim();
   if (receipt.errorReason === "settlement_pending") {
     // The chain admitted the payment and has not executed it yet: the weather is
     // withheld, but the payment may still go through, and the hash is how to
@@ -193,10 +244,18 @@ if (!paid.ok) {
 }
 
 const settlement = paid.headers.get("PAYMENT-RESPONSE");
+const receipt = decoded(decodePaymentResponseHeader, settlement);
 if (settlement === null || settlement === "") {
   console.log("served without payment");
+} else if (receipt === undefined) {
+  console.log("served, with a receipt this buyer cannot read");
 } else {
-  const receipt = decodePaymentResponseHeader(settlement);
   console.log(`paid: tx ${receipt.transaction} by ${receipt.payer}`);
 }
 console.log(body.trim());
+if (cut !== undefined) {
+  console.log(`the answer was cut short: ${cut}`);
+  // Not process.exit: on a pipe, stdout is written asynchronously, and exiting
+  // now would cut off the body printed above.
+  process.exitCode = 1;
+}
