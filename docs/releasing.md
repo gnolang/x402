@@ -16,16 +16,22 @@ All three run from the manual `release.yml` workflow. Nothing releases on push o
 
 ## Release the facilitator
 
-```sh
-gh workflow run release.yml --ref main -f component=facilitator -f version=0.2.0
-```
+The facilitator's version is its git tag alone, so the release starts with a PR that moves the
+pins to the new version.
 
-Before the dispatch, a PR moves the `vX.Y.Z` that the
-`go run github.com/gnolang/x402/examples/weather/x402-gno@…` commands pin in
-`examples/weather/paywall.html`, `examples/weather/README.md` and `client/README.md` to the new
-version, with the `go install` line beside them and the tag in the weather page's and the weather
-README's links to `x402-gno`, so the buyer a reader is told to read is the one the commands run. The tag exists once
-the release runs.
+1. In a PR merged before the release, move the `vX.Y.Z` that the
+   `go run github.com/gnolang/x402/examples/weather/x402-gno@…` commands pin in
+   `examples/weather/paywall.html`, `examples/weather/README.md` and `client/README.md` to the new
+   version. Move the `go install` line beside them and the tag in the weather page's and the
+   weather README's links to `x402-gno` too, so the buyer a reader is told to read is the one the
+   commands run.
+2. Dispatch the release, with `<version>` as `X.Y.Z`:
+
+   ```sh
+   gh workflow run release.yml --ref main -f component=facilitator -f version=<version>
+   ```
+
+The tag does not exist until the run pushes it.
 
 The run has two jobs. `facilitator-test` holds a read-only token and runs `go test ./...` and the
 e2e, after `npm ci` installs exactly the lockfile. Only when it passes does `facilitator` start:
@@ -36,20 +42,33 @@ no Actions cache either, because the jobs that run dependency code write it.
 
 ## Release the client
 
-The published version comes from `package.json`. Bump it first, in its own PR:
+The published version comes from `package.json`, so the release starts with a PR that bumps it.
 
-```sh
-npm version --no-git-tag-version 0.2.0
-git commit -am "chore(release): bump the client to 0.2.0"
-# merge to main, then:
-gh workflow run release.yml --ref main -f component=client -f version=0.2.0
-```
+1. On a new branch, bump the version, with `<version>` as `X.Y.Z`:
 
-The same PR moves the `client/vX.Y.Z` that the `npx github:gnolang/x402#…` commands pin in
-`examples/weather/paywall.html`, `examples/weather/README.md` and `client/README.md` to the new
-version, and the tag in the weather page's and the weather README's links to `buy.mjs`, so the
-script a reader is told to read is the one the commands run. The tag exists once the release runs, and from then on those
-commands run the buyer that release carries.
+   ```sh
+   npm version --no-git-tag-version <version>
+   ```
+
+2. In the same change, move the `client/vX.Y.Z` that the `npx github:gnolang/x402#…` commands pin
+   to the new version in `examples/weather/paywall.html`, `examples/weather/README.md` and
+   `client/README.md`. Move the tag in the weather page's and the weather README's links to
+   `buy.mjs` too, so the script a reader is told to read is the one the commands run.
+3. Commit the change:
+
+   ```sh
+   git commit -am "chore(release): bump the client to <version>"
+   ```
+
+4. Push the branch, open a PR and merge it to `main`.
+5. Dispatch the release:
+
+   ```sh
+   gh workflow run release.yml --ref main -f component=client -f version=<version>
+   ```
+
+The tag does not exist until the run pushes it, and from then on the pinned commands run the buyer
+that release carries.
 
 The workflow refuses the dispatch if `package.json` disagrees with `version`, or if that
 version is already on the registry. When the `npm` environment lists required reviewers, the
@@ -57,10 +76,11 @@ publish waits until one of them approves it under **Review deployments** on the 
 
 ## Release the weather image
 
-The version lives in the tag alone, so nothing needs a bump:
+The version lives in the tag alone, so nothing needs a bump. Dispatch the release, with
+`<version>` as `X.Y.Z`:
 
 ```sh
-gh workflow run release.yml --ref main -f component=weather -f version=0.1.0
+gh workflow run release.yml --ref main -f component=weather -f version=<version>
 ```
 
 The run's summary names the image by digest, which is what a deployment pins. The image is built
@@ -69,6 +89,8 @@ from `docker/weather.Dockerfile`, which compiles the seller itself, so
 locally.
 
 ## Rules
+
+These hold for every release:
 
 - **Release from `main` only.** The workflow refuses any other ref.
 - **Never delete a `vX.Y.Z` tag.** It is a Go module version; once fetched, `sum.golang.org`
@@ -82,19 +104,22 @@ locally.
 
 ## If a release fails
 
-- **client** — publish runs before the tag, so a failed publish leaves nothing; re-dispatch. A
+What a failure leaves behind depends on the component:
+
+- **client**: publish runs before the tag, so a failed publish leaves nothing; re-dispatch. A
   published version with no tag is fixed by tagging the commit it was published from:
-  `git tag -a client/vX.Y.Z -m "Release client/vX.Y.Z" <sha> && git push origin client/vX.Y.Z`.
-- **facilitator** — the tag is pushed before goreleaser, so a failure can leave the tag, and
-  possibly a release and image, in place. Delete the GitHub release if one exists and cut the
-  next patch number. A failed `facilitator-test` stops the run before anything is pushed. The
-  `facilitator` job builds the release as a snapshot before pushing the tag, so a build that
-  cannot succeed stops there. What can still fail after the tag is goreleaser's changelog and
-  publish (the GitHub release, the multi-arch image and its SBOM), then the attestation steps.
-- **weather** — the image is pushed before the tag, so a failure before the tag leaves at most
+  `git tag -a client/v<version> -m "Release client/v<version>" <sha> && git push origin client/v<version>`.
+- **facilitator**: the tag is pushed before goreleaser, so a failure can leave the tag, and
+  possibly a release and image, in place. Delete the GitHub release if one exists, merge a PR
+  that moves the pins to the next patch number, and cut that release. A failed
+  `facilitator-test` stops the run before anything is pushed, and the snapshot build stops a
+  build that cannot succeed before the tag. What can still fail after the tag is goreleaser's
+  changelog and publish (the GitHub release, the multi-arch image and its SBOM), then the
+  attestation steps.
+- **weather**: the image is pushed before the tag, so a failure before the tag leaves at most
   an image under that version, and under `latest` for a plain release, which a re-dispatch
   overwrites. An image with no tag is fixed by tagging the commit it was built from:
-  `git tag -a weather/vX.Y.Z -m "Release weather/vX.Y.Z" <sha> && git push origin weather/vX.Y.Z`.
+  `git tag -a weather/v<version> -m "Release weather/v<version>" <sha> && git push origin weather/v<version>`.
 
 ## Credentials
 
@@ -115,7 +140,7 @@ it refuses every publish.
    click **New environment**, name it `npm`, and click **Configure environment**.
 2. Under **Deployment branches and tags**, choose **Selected branches and tags**, add a
    **Branch** rule for `main`, and save.
-3. Optionally, under **Required reviewers**, list who approves a client publish. Every client
+3. Optional: under **Required reviewers**, list who approves a client publish. Every client
    run then waits for one of them; **Prevent self-review** makes that a second person.
 4. Once `release.yml` on `main` names the environment, on npmjs.com, as an owner of
    `@gnoverse/x402-gno`, open the package's **Settings → Trusted publishing**, edit the GitHub

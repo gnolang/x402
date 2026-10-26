@@ -35,7 +35,7 @@ names a language.
 | `cmd/gnofacilitator/` | the binary |
 | `examples/weather/` | the demo: a priced endpoint (`main.go`), the page a browser gets and pays through with Adena (`paywall.html`, `paywall.js`, tested by `make js-test`), the buyer that pays it from a script (`buy.mjs`, also the root package's `x402-gno` command) and its Go twin (`x402-gno/`, the same arguments, environment and output), and a Makefile that runs the seller, `buy.mjs` and a facilitator |
 | `e2e/` | real payments through real nodes — its own Go module. `buyer.mjs` beside it is the buyer the contract scenarios drive; the happy path, the session payment, the pending settlement, the refused one, the duplicate one and the unfunded payer drive `examples/weather/buy.mjs`, and `weatherbuyer_test.go` runs them again with `examples/weather/x402-gno`, which needs no npm. `goclient_test.go` drives upstream's Go client with `client/exact` registered through the scenarios in `testdata/goclient/`, which need no npm. `settle_test.go` settles one payment twice at once through two facilitators on one node, two on two nodes and one over two nodes, and replays a settled one |
-| `docs/releasing.md` | the two independent release lines |
+| `docs/releasing.md` | the three independent release lines: facilitator, client, weather image |
 | `docs/deploying.md` | running the facilitator image: flags, endpoints, limits, failure modes |
 
 `e2e` is a separate Go module on purpose, so `go test ./...` cannot start a chain by
@@ -56,6 +56,9 @@ accident and needs no build tag to stay out of the way.
   whose purpose isn't obvious.
 - `gofmt` runs over `.`, not a named tree, so a new Go directory is covered without
   editing anything.
+- `e2e/buyer.mjs` imports the client as `@gnoverse/x402-gno/exact/client`, through the
+  manifest's `exports` map, so the payment test exercises the map. Keep that import; never
+  point it at a built path.
 
 ## Security invariants — never break
 
@@ -94,11 +97,12 @@ accident and needs no build tag to stay out of the way.
 | Change the release flow or a tag scheme | `docs/releasing.md` |
 | Bump the Go toolchain | `go-version` in `.github/workflows/*.yml` · the `golang` image pin in `docker/weather.Dockerfile` · the Go version the `x402-gno` commands need, in `examples/weather/paywall.html` and `examples/weather/README.md` |
 | Change a flag, default, timeout, limit or exit code in `cmd/gnofacilitator` | `docs/deploying.md` |
+| Change a flag, default or limit of the weather seller (`examples/weather/*.go`) | `examples/weather/README.md` (Seller flags, and the visit lookup limits in What you get) |
 | Follow the target testnet to a new `gnolang/gno` chain tag | `github.com/gnolang/gno` in `go.mod` and `e2e/go.mod` · re-record `facilitator/exact/testdata/onyx_simulate_send.json` |
 | Bump `@gnolang/gno-js-client` or `@gnolang/tm2-js-client` | regenerate the Go client's fixtures with `go generate ./client/exact` and run its tests: nothing in CI does, so the two clients could drift with `npm test` still green |
 | Release the client | bump `package.json`'s version — the workflow refuses a dispatch that disagrees with it. The facilitator's version is its git tag alone, so it needs no bump. Bump the `client/vX.Y.Z` the `npx github:gnolang/x402#…` commands pin in `examples/weather/paywall.html`, `examples/weather/README.md` and `client/README.md`, and the tag the `buy.mjs` links on the weather page and in its README name, in the same change; `buy.mjs --new-key` reads it from the version |
 | Release the facilitator | bump the `vX.Y.Z` the `go run`/`go install github.com/gnolang/x402/examples/weather/x402-gno@…` commands pin in `examples/weather/paywall.html`, `examples/weather/README.md` and `client/README.md`, and the tag the `x402-gno` links on the weather page and in its README name, in a change merged before the release; `x402-gno --new-key` reads it from the module version it was built from |
-| Change what `buy.mjs` or `examples/weather/x402-gno` prints, or the arguments and environment it reads | the other one, in the same change: the weather page offers either, and the e2e scenarios hold both to the same output |
+| Change what `buy.mjs` or `examples/weather/x402-gno` prints, or the arguments and environment it reads | the other one, in the same change: the weather page offers either, and the e2e scenarios hold both to the same output · the environment table in `examples/weather/README.md` (Paying it) and the sample output in its Local demo |
 | Add a make target | this file (Commands) |
 | Import a new package in `examples/weather/buy.mjs` | declare it in `dependencies` (exact version) or `peerDependencies`. The buyer runs as the package's `x402-gno` command, where devDependencies are not installed; `buy.test.js` fails otherwise |
 
