@@ -1,31 +1,38 @@
 # x402 on gno.land
 
-> [!WARNING]
-> **Unaudited work in progress: point it at testnets only, never at real funds.** Interfaces, the
-> reason vocabulary and the payload shape are still moving, and releases may break each other.
-
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Container](https://img.shields.io/badge/ghcr.io-gnolang%2Fgnofacilitator-2496ED?logo=docker&logoColor=white)](https://github.com/gnolang/x402/pkgs/container/gnofacilitator)
 
-> Charge for an HTTP endpoint in ugnot, and let any x402 client pay it.
-
+Charge for an HTTP endpoint in ugnot (a millionth of a GNOT), and let any x402 client pay it.
 [x402](https://x402.org) is the payment protocol behind HTTP 402: a server answers `402` with the
-terms it accepts, a client pays, and the request succeeds. This adds gno.land as one of those terms.
-The resource is any endpoint — no realm and no contract call are involved.
+terms it accepts, a client pays, and the request succeeds. This repository adds gno.land as one of
+those terms. The resource is any endpoint: no realm and no contract call are involved.
 
-The protocol, route matching, header encoding and the retry come from the ecosystem's own
-middleware. This supplies the chain-specific parts:
+> [!WARNING]
+> Nothing here is audited, and releases may break each other while the interfaces, the reason
+> codes and the payload shape settle. Point it at testnets only, never at real funds.
 
-- **Seller mechanism** — list gno in a route's `accepts[]` and the middleware prices it, offers it and reads the payment.
-- **`gnofacilitator`** — verifies payments and broadcasts them. It holds no keys.
-- **Client mechanism** — register it on a stock x402 client, list ugnot in the client's spend controls, and the client pays a gno chain.
+The ecosystem's own middleware handles the protocol, route matching, header encoding and the
+retry. This repository supplies the parts that know about gno:
 
-**Try it:** <https://x402-demo.onyx.testnets.gno.land/weather> sells sample weather for 0.25 GNOT
+| Part | Path | What it does |
+|---|---|---|
+| Seller mechanism | `server/exact/` | Lets a route list gno in `accepts[]`, so the middleware prices it, offers it and reads the payment |
+| Facilitator | `cmd/gnofacilitator/`, `facilitator/` | Verifies payments and broadcasts them. It holds no keys |
+| Client mechanism | `client/` (TypeScript), `client/exact/` (Go) | Teaches a stock x402 client to pay a gno chain |
+
+[`examples/weather/`](examples/weather) is a seller and a buyer that make one payment end to end.
+
+## Try it
+
+<https://x402-demo.onyx.testnets.gno.land/weather> sells sample weather for 0.25 GNOT (250000ugnot)
 on the onyx testnet (`gno:onyx-1`). A browser with the [Adena](https://adena.app) wallet pays from
 the page, and a terminal pays with the two commands in
 [examples/weather](examples/weather#paying-it).
 
 ## Sell something
+
+A seller lists gno in a route's `accepts[]` and registers the gno scheme on the stock middleware:
 
 ```go
 routes := x402http.RoutesConfig{
@@ -47,8 +54,8 @@ handler := nethttpmw.X402Payment(nethttpmw.Config{
 })(mux)
 ```
 
-An unpaid request gets `402`, with the terms in the `PAYMENT-REQUIRED` header as base64 JSON — v2
-carries them there, not in the body:
+An unpaid request gets `402`. v2 carries the terms in the `PAYMENT-REQUIRED` header as base64
+JSON, not in the body:
 
 ```json
 { "x402Version": 2,
@@ -63,7 +70,7 @@ carries them there, not in the body:
   }] }
 ```
 
-Runnable, against a facilitator and a real chain → **[examples/weather](examples/weather)**.
+[examples/weather](examples/weather) runs this seller against a facilitator and a real chain.
 
 A public facilitator serves gno.land's testnet at `https://facilitator.onyx.testnets.gno.land`.
 Its network is `gno:onyx-1`, so a seller using it sets `Network` to that. You can also
@@ -71,9 +78,13 @@ Its network is `gno:onyx-1`, so a seller using it sets `Network` to that. You ca
 
 ## Pay for it
 
+Install the [client mechanism](client/README.md) from npm:
+
 ```sh
 npm i @gnoverse/x402-gno
 ```
+
+Register it on a stock x402 client and admit ugnot to the client's spend controls:
 
 ```js
 import { ExactGnoScheme } from "@gnoverse/x402-gno/exact/client";
@@ -104,66 +115,53 @@ paid := x402http.WrapHTTPClientWithPayment(&http.Client{Timeout: time.Minute}, x
 res, err := paid.Get("https://api.example.com/weather")
 ```
 
-A stock client — `@x402/core` from 2.23, and upstream's Go client — pays only in USD-pegged assets
-unless an asset is listed in its spend controls, so the buyer lists ugnot. `maxAmountPerPayment` is
-the most one request may cost, in ugnot; the network fee is paid on top.
-
-Recognising the 402, selecting an entry, encoding `PAYMENT-SIGNATURE` and retrying are the stock
-client's own code, unmodified: `@x402/fetch`, or upstream's `x402http`. The payment is signed against
-the chain id the **offer** names rather than the one the wallet's node reports — see
-[client/README.md](client/README.md) for what that does and does not buy you.
+`@x402/core` from 2.23 and upstream's Go client pay only in USD-pegged assets unless their spend
+controls list the asset, so the buyer lists ugnot. `maxAmountPerPayment` is the most one request
+may cost, in ugnot; the network fee is paid on top. The stock client's own code, unmodified, does
+the rest, from reading the 402 to the retry.
 
 An agent can pay with a [session key](client/README.md#paying-with-a-session-key) instead of its
-owner's key: `new ExactGnoScheme(wallet, { master })` in JavaScript, `clientexact.WithMaster(owner)`
-in Go, where the owner's address names the account that pays and the signer holds a key the owner
-registered on chain with a spend limit and an expiry. The chain enforces both.
+owner's key, and the chain holds it to the spend limit and expiry the owner registered.
 
-## What's in here
+## How a payment works
 
-An x402 mechanism has three roles — **server** (the seller), **facilitator**, **client** (the buyer)
-— and the ecosystem names them the same way in every language: `@x402/evm` publishes
-`./exact/server`, `./exact/facilitator` and `./exact/client`, and its Go module has the matching
-directories. The top level here is that grid. Which language a role is written in is an
-implementation detail of the role, so no directory names one.
+The flow is x402's `authorization`: the facilitator verifies the payment, the seller's handler
+runs, the facilitator settles the payment, and only then does the buyer get the response.
 
-| Role | Path | What |
-|------|------|------|
-| server | `server/exact/` | upstream's `SchemeNetworkServer`, implemented for gno |
-| facilitator | `facilitator/exact/`, `facilitator/` | upstream's `SchemeNetworkFacilitator` for gno, and the `/verify` `/settle` `/supported` service built on upstream's engine |
-| client | `client/src/exact/client.ts`, `client/exact/` | upstream's `SchemeNetworkClient`, in TypeScript and in Go |
-
-Plus `cmd/gnofacilitator/` (the binary), `examples/weather/` (a seller and a buyer that make one
-payment end to end, with a Makefile to run them) and `e2e/` (real payments through real nodes —
-its own Go module).
-
-Both manifests — `go.mod` and `package.json` — live at the root, so `go test ./...`, `npm test` and
-the root Makefile's targets run from here. The demo's Makefile runs from `examples/weather`.
-
-## Payment model
-
-- **The payer pays the network fee.** `std.Fee` names no payer and the chain charges the first signer, so the payer of the resource is also the payer of the gas. Offers state this as `extra.areFeesSponsored: false`.
-- **The facilitator holds no key.** It verifies offline and broadcasts a transaction the payer already signed, so it cannot move funds anywhere the payer did not sign for.
-- **A failed resource is not charged for.** The flow is `authorization`: verify, serve, then settle. The middleware buffers the response and skips settlement on any status ≥400. Skipping it does not void the payment, which stays signed and valid (see below).
+- **The payer pays the network fee.** `std.Fee` names no payer and the chain charges the first
+  signer, so the payer of the resource also pays the gas. Offers state this as
+  `extra.areFeesSponsored: false`.
+- **The facilitator holds no key.** It verifies offline and broadcasts a transaction the payer
+  already signed, so it cannot move funds anywhere the payer did not sign for.
+- **A failed resource is not charged for.** The middleware buffers the response and skips
+  settlement on any status ≥400. Skipping it does not void the payment, which stays signed and
+  valid.
 - **A failed settlement withholds the response.** The buffered body is discarded.
 - **A payment no block executed in time is pending, not failed.** The facilitator answers
   `settlement_pending` with the transaction hash. The seller's SDK settles once more, which asks
   the chain about that hash rather than broadcasting again, and a buyer still not served gets the
   hash to look up.
 - **A payment settles once per facilitator.** A copy presented while it settles, or within five
-  minutes after, is refused as `duplicate_settlement`. The record is in memory, so run one
-  facilitator process per chain.
-- **Prices name their denomination.** gno has no default asset, so `"$0.001"` errors rather than resolving to a token.
+  minutes after, is refused as `duplicate_settlement`. The record is in memory and per process,
+  so a facilitator runs as one process per chain, never as replicas behind a balancer.
+- **Prices name their denomination.** gno has no default asset, so `"$0.001"` errors rather than
+  resolving to a token.
 
-**Accepted risk:** between `/verify` and `/settle` a payer can consume the signed-over account
-sequence with another transaction. gno has no pull-settlement primitive, so this is cooperative — the
-same exposure XRPL documents for its own `exact` mechanism.
+Two exposures stay open:
 
-**A signed payment does not expire.** A gno transaction carries no expiry, and `maxTimeoutSeconds`
-binds nothing in it. Until the payer spends its sequence on another transaction, whoever holds the
-`PAYMENT-SIGNATURE` header, the seller included, can still broadcast it. A buyer refused service
-voids an unused payment by sending any other transaction from the paying account.
+- **A signed payment does not expire.** A gno transaction carries no expiry, and
+  `maxTimeoutSeconds` binds nothing in it. Until the payer spends its sequence on another
+  transaction, whoever holds the `PAYMENT-SIGNATURE` header, the seller included, can broadcast
+  it. A buyer refused service voids an unused payment by sending any other transaction from the
+  paying account.
+- **A payer can consume the signed-over sequence between `/verify` and `/settle`.** gno has no
+  pull-settlement primitive, so settlement is cooperative, the same exposure XRPL documents for
+  its own `exact` mechanism.
 
 ## Development
+
+The main Go module and `package.json` both live at the repository root (`e2e/` is a second Go
+module), so these run from here:
 
 ```bash
 make test                # Library tests (no chain, no npm)
@@ -174,22 +172,21 @@ make build               # bin/gnofacilitator
 make help                # Every target
 ```
 
-`make test-e2e` starts a node via gno.land's txtar harness, stands up the facilitator and a priced
-endpoint, pays with the JS client and with the Go client, and asserts the balances changed. It also settles one
-payment twice at once in three arrangements: two facilitators sharing a node, two facilitators on
-two peered nodes, and one facilitator balancing over both. It asserts how many report the payment
-settled, and replays a settled payment to assert it is refused.
+`make test-e2e` pays a priced endpoint through gno.land's txtar harness with the JS client and the
+Go client, and asserts the balances changed. It also settles one payment twice at once in three
+arrangements of facilitators and nodes, and replays a settled payment to assert it is refused.
 
 Built against [`github.com/x402-foundation/x402/go/v2`](https://github.com/x402-foundation/x402) for
 the protocol and [`gnolang/gno`](https://github.com/gnolang/gno) for the chain.
 
 ## Conformance
 
-Implemented: the `exact` scheme, the `authorization` flow, v2 headers, `gno:<chain-id>` as a CAIP-2
-network, prices in native units.
+Implemented: the `exact` scheme, the `authorization` flow, v2 headers, `gno:<chain-id>` as a
+CAIP-2 network, and prices in native units.
 
-Not implemented: dollar-string pricing, a browser paywall, payload `extensions`, and a CAIP-2
-namespace registration — the last is not required by the schema (`near:testnet` ships without one).
+Not implemented: dollar-string pricing, gno in the middleware's browser paywall (the weather
+example serves its own page), payload `extensions`, and a CAIP-2 namespace registration. The
+schema does not require a registration: `near:testnet` ships without one.
 
 ## License
 
