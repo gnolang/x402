@@ -1,0 +1,106 @@
+[
+  {
+    "name": "settled",
+    "status": 200,
+    "receipt": {
+      "success": true,
+      "transaction": "fa01716b171e58dfdc84b5075017a9d1ac20b0d745ed75627f3f80effa14317e",
+      "payer": "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5",
+      "network": "gno:dev"
+    },
+    "body": "{\"forecast\":\"sunny\"}\n",
+    "stdout": "paid: tx fa01716b171e58dfdc84b5075017a9d1ac20b0d745ed75627f3f80effa14317e by g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5\n{\"forecast\":\"sunny\"}\n",
+    "exit": 0
+  },
+  {
+    "name": "served free",
+    "status": 200,
+    "body": "sunny",
+    "stdout": "served without payment\nsunny\n",
+    "exit": 0
+  },
+  {
+    "name": "served, with a receipt that does not decode",
+    "status": 200,
+    "rawReceipt": "not a receipt",
+    "body": "sunny",
+    "stdout": "served, with a receipt this buyer cannot read\nsunny\n",
+    "exit": 0
+  },
+  {
+    "name": "settlement pending",
+    "status": 502,
+    "receipt": {
+      "success": false,
+      "errorReason": "settlement_pending",
+      "transaction": "fa01716b171e58dfdc84b5075017a9d1ac20b0d745ed75627f3f80effa14317e",
+      "network": "gno:dev"
+    },
+    "stdout": "not confirmed yet: tx fa01716b171e58dfdc84b5075017a9d1ac20b0d745ed75627f3f80effa14317e (settlement_pending); the weather was withheld, and the payment may still go through\n",
+    "exit": 1
+  },
+  {
+    "name": "a copy of a payment",
+    "status": 502,
+    "receipt": {
+      "success": false,
+      "errorReason": "duplicate_settlement",
+      "transaction": "fa01716b171e58dfdc84b5075017a9d1ac20b0d745ed75627f3f80effa14317e",
+      "network": "gno:dev"
+    },
+    "stdout": "already settling: tx fa01716b171e58dfdc84b5075017a9d1ac20b0d745ed75627f3f80effa14317e (duplicate_settlement); the weather was withheld, and the payment may already have gone through\n",
+    "exit": 1
+  },
+  {
+    "name": "a copy of a payment, without its hash",
+    "status": 502,
+    "receipt": { "success": false, "errorReason": "duplicate_settlement", "transaction": "", "network": "gno:dev" },
+    "stdout": "already settling: (duplicate_settlement); the weather was withheld, and the payment may already have gone through\n",
+    "exit": 1
+  },
+  {
+    "name": "refused at settle, with a hash",
+    "status": 502,
+    "receipt": {
+      "success": false,
+      "errorReason": "broadcast_failed",
+      "transaction": "fa01716b171e58dfdc84b5075017a9d1ac20b0d745ed75627f3f80effa14317e",
+      "network": "gno:dev"
+    },
+    "stdout": "not paid (status 502): broadcast_failed; tx fa01716b171e58dfdc84b5075017a9d1ac20b0d745ed75627f3f80effa14317e\n",
+    "exit": 1
+  },
+  {
+    "name": "refused at settle, its reason padded",
+    "status": 502,
+    "receipt": {
+      "success": false,
+      "errorReason": "facilitator settle failed (503): the payment could not be checked against the chain\n",
+      "transaction": "",
+      "network": "gno:dev"
+    },
+    "stdout": "not paid (status 502): facilitator settle failed (503): the payment could not be checked against the chain\n",
+    "exit": 1
+  },
+  {
+    "name": "refused at verify",
+    "status": 502,
+    "challenge": { "x402Version": 2, "error": "invalid_exact_gno_transaction_simulation_failed", "accepts": [] },
+    "stdout": "not paid (status 502): invalid_exact_gno_transaction_simulation_failed\n",
+    "exit": 1
+  },
+  {
+    "name": "refused, with a receipt that does not decode",
+    "status": 502,
+    "rawReceipt": "not a receipt",
+    "challenge": { "x402Version": 2, "error": "invalid_exact_gno_transaction_simulation_failed", "accepts": [] },
+    "stdout": "not paid (status 502): invalid_exact_gno_transaction_simulation_failed\n",
+    "exit": 1
+  },
+  {
+    "name": "failed without a reason",
+    "status": 500,
+    "stdout": "not paid (status 500)\n",
+    "exit": 1
+  }
+]

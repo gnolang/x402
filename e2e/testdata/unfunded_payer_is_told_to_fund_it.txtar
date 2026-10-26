@@ -9,7 +9,7 @@ x402facilitator
 x402seller seller.json $test1_user_addr
 
 env 'X402_MNEMONIC=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art'
-! exec node $X402_EXAMPLE_BUYER
+! exec $X402_EXAMPLE_BUYER
 
 # It names the node it asked, the one X402_GNO_RPC names here.
 stdout 'not paid: g1r5v5srda7xfth3hn2s26txvrcrntldjughmckm has no account at http://127\.0\.0\.1:[0-9]+; fund it'

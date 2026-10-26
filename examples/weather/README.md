@@ -189,11 +189,13 @@ second, bursts of 100, for all pages together, whatever `-rate-per-second` and `
 
 ## Paying it
 
-`buy.mjs` pays it, and one command runs it without a clone. From Go, register the
-[Go mechanism](../../client/README.md#from-go) on upstream's Go client instead.
+`buy.mjs` pays it, and so does its Go twin [`x402-gno`](x402-gno/main.go), with the same
+arguments, environment and output. One command runs either without a clone. To pay from your own
+Go code, register the [Go mechanism](../../client/README.md#from-go) on upstream's Go client.
 
 > **Read [`buy.mjs`](https://github.com/gnolang/x402/blob/client/v0.5.1/examples/weather/buy.mjs)
-> before you run it.** It signs with the mnemonic you give it, so never
+> or [`x402-gno`](https://github.com/gnolang/x402/blob/v0.5.0/examples/weather/x402-gno/main.go)
+> before you run it.** Each signs with the mnemonic you give it, so never
 > give it one that holds anything. Make a throwaway key with it, or use a
 > [session key](../../client/README.md#paying-with-a-session-key), which the chain holds to its
 > spend limit and expiry. Testnet only.
@@ -218,28 +220,44 @@ node examples/weather/buy.mjs --new-key https://x402-demo.onyx.testnets.gno.land
 X402_MNEMONIC='<mnemonic>' node examples/weather/buy.mjs https://x402-demo.onyx.testnets.gno.land/weather
 ```
 
+From Go:
+
+```sh
+go run github.com/gnolang/x402/examples/weather/x402-gno@v0.5.0 --new-key https://x402-demo.onyx.testnets.gno.land/weather
+# fund the address it printed at https://faucet.gno.land, then run the command it printed:
+X402_MNEMONIC='<mnemonic>' go run github.com/gnolang/x402/examples/weather/x402-gno@v0.5.0 https://x402-demo.onyx.testnets.gno.land/weather
+```
+
+`go run` fetches the Go module at that release and builds the buyer: about 100 MB of modules the
+first time. It needs Go 1.26.5 or later, which Go 1.21 and later fetch by themselves unless
+`GOTOOLCHAIN` is `local`. `go install github.com/gnolang/x402/examples/weather/x402-gno@v0.5.0`
+keeps it as the `x402-gno` command. In a clone, `go run ./examples/weather/x402-gno` from the
+repository root runs the checkout's buyer. So does the pay command its `--new-key` prints, or that
+of a binary built in the clone, which runs from inside the clone only.
+
 `--new-key` prints a fresh 24-word mnemonic, the address it pays from and the command that pays
 the seller URL given after it with that mnemonic, ready to paste, then exits: it sends no request
 and writes no file, so the printed mnemonic is the only copy. Without a URL the command ends in a
 `<seller URL>` to fill in.
 
-To pay, it registers `ExactGnoScheme` with `@x402/core`'s stock client, admits ugnot to the
-client's spend controls with a 1 GNOT cap per request, and signs with the mnemonic in
-`X402_MNEMONIC`, or as gno's public test1 key when that is unset. With `X402_SESSION_MASTER` set
-to an account's address, `X402_MNEMONIC` is a session key that account registered, and the payment
-moves that account's coins within the session's limits.
+To pay, it registers the gno scheme with a stock x402 client, `@x402/core`'s or upstream's Go one,
+admits ugnot to the client's spend controls with a 1 GNOT cap per request, and signs with the
+mnemonic in `X402_MNEMONIC`, or as gno's public test1 key when that is unset. With
+`X402_SESSION_MASTER` set to an account's address, `X402_MNEMONIC` is a session key that account
+registered, and the payment moves that account's coins within the session's limits.
 [client/README.md](../../client/README.md#paying-with-a-session-key) shows how to register one. The
 paying account must be **funded** on the chain the offer names
 ([faucet.gno.land](https://faucet.gno.land) funds the public testnets).
 
 The buyer reads its account sequence from a node on the chain the offer names, so this leg needs a
 real node rather than the unreachable one a 402 tolerates. It connects once it has read the offer:
-to `X402_GNO_RPC` when that is set, else to the chain's public RPC when `buy.mjs` lists one
+to `X402_GNO_RPC` when that is set, else to the chain's public RPC when the buyer lists one
 (`onyx-1`), else to a local node at `http://127.0.0.1:26657`. Set `X402_GNO_RPC` for any other
 chain, to the node the facilitator uses.
 
 The loop is covered: the e2e suite runs this seller configuration and this same `buy.mjs` against
-an in-process node on every pull request, and asserts the seller's balance moved.
+an in-process node on every pull request, then `x402-gno` in its place, and asserts the seller's
+balance moved.
 
 ## What happens when you pay
 

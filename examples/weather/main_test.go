@@ -499,7 +499,7 @@ func TestThePageMakesAKeyForPayingThisPage(t *testing.T) {
 
 	_, page := browserPage(t, sellerURL)
 
-	assert.Contains(t, page, `--new-key</span> <span data-pay-url>`)
+	assert.Regexp(t, `npx github:gnolang/x402#client/v\d+\.\d+\.\d+ <span class="nowrap">--new-key</span> <span data-pay-url>`, page)
 }
 
 // The pay step shows the command the key step prints: the mnemonic, the
@@ -551,7 +551,8 @@ func TestThePageRunsTheBuyerPinnedToARelease(t *testing.T) {
 }
 
 // The buyer signs with whatever mnemonic it is given, so the page links its
-// source and warns against a key that holds anything before any command.
+// source, at the release the commands run, and warns against a key that holds
+// anything before any command.
 func TestThePageSaysToReadTheBuyerBeforeRunningIt(t *testing.T) {
 	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
 	t.Cleanup(gnofacilitator.Close)
@@ -559,11 +560,95 @@ func TestThePageSaysToReadTheBuyerBeforeRunningIt(t *testing.T) {
 
 	_, page := browserPage(t, sellerURL)
 
-	firstRun := strings.Index(page, "npx github:")
-	require.NotEqual(t, -1, firstRun, "the page offers no command")
-	before := page[:firstRun]
-	assert.Contains(t, before, `href="https://github.com/gnolang/x402/blob/main/examples/weather/buy.mjs"`)
+	run := regexp.MustCompile(`npx github:gnolang/x402#(client/v\d+\.\d+\.\d+)`).FindStringSubmatchIndex(page)
+	require.NotNil(t, run, "the page offers no command")
+	before, release := page[:run[0]], page[run[2]:run[3]]
+	assert.Contains(t, before, `href="https://github.com/gnolang/x402/blob/`+release+`/examples/weather/buy.mjs"`)
 	assert.Contains(t, before, "never give it a mnemonic that holds anything")
+}
+
+// goBuyerCommand matches a command that runs or installs the Go buyer, and the
+// version it names.
+var goBuyerCommand = regexp.MustCompile(`go (?:run|install) github\.com/gnolang/x402/examples/weather/x402-gno([^\s<]*)`)
+
+// The Go commands fetch the buyer from one release of the Go module, so the
+// source a visitor read is the one that runs.
+func TestThePageRunsTheGoBuyerPinnedToARelease(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	commands := goBuyerCommand.FindAllStringSubmatch(page, -1)
+	require.Len(t, commands, 3, "one command makes the key, one pays, one installs the buyer")
+	for _, command := range commands {
+		assert.Regexp(t, `^@v\d+\.\d+\.\d+$`, command[1])
+		assert.Equal(t, commands[0][1], command[1], "every Go command runs the same release")
+	}
+}
+
+// The Go buyer signs with whatever mnemonic it is given too, so the warning and
+// its source, at the release the commands run, come before its first command.
+func TestThePageSaysToReadTheGoBuyerBeforeRunningIt(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	run := regexp.MustCompile(`go run github\.com/gnolang/x402/examples/weather/x402-gno@(v\d+\.\d+\.\d+)`).FindStringSubmatchIndex(page)
+	require.NotNil(t, run, "the page offers no Go command")
+	before, release := page[:run[0]], page[run[2]:run[3]]
+	assert.Contains(t, before, `href="https://github.com/gnolang/x402/blob/`+release+`/examples/weather/x402-gno/main.go"`)
+	assert.Contains(t, before, "never give it a mnemonic that holds anything")
+}
+
+// The Go key step makes a key for paying this page, and the pay step shows the
+// command it prints. Copying the key step is what starts the page watching for
+// the payment.
+func TestTheGoCommandsPayThisPage(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	assert.Regexp(t, `<pre data-copy><code>go run github\.com/gnolang/x402/examples/weather/x402-gno@v\d+\.\d+\.\d+ <span class="nowrap">--new-key</span> <span data-pay-url>`, page)
+	assert.Regexp(t, `<code>X402_MNEMONIC='&lt;mnemonic&gt;' go run github\.com/gnolang/x402/examples/weather/x402-gno@v\d+\.\d+\.\d+ <span data-pay-url>`, page)
+}
+
+// The page's script shows one way of running the buyer at a time. The tabs wait
+// for it, so a page without it shows both ways, each under its own heading.
+func TestThePageOffersTheBuyerOnNodeAndOnGo(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	assert.Regexp(t, `<div class="runtimes" id="runtimes" role="tablist"[^>]* hidden>`, page)
+	for panel, heading := range map[string]string{"code-node": "With Node", "code-go": "With Go"} {
+		_, inside, found := strings.Cut(page, `<div class="runtime" id="`+panel+`">`)
+		require.True(t, found, "%s is gone, or starts hidden", panel)
+		assert.True(t, strings.HasPrefix(strings.TrimSpace(inside), "<h3>"+heading+"</h3>"), "%s opens on %q", panel, heading)
+	}
+}
+
+// Either way, the new key pays only once it is funded.
+func TestBothWaysToPayFromCodeSayToFundTheKey(t *testing.T) {
+	gnofacilitator := httptest.NewServer(facilitator.New(unreachableChain{}, exacttest.ChainID).Handler())
+	t.Cleanup(gnofacilitator.Close)
+	sellerURL, _ := weatherSeller(t, gnofacilitator.URL)
+
+	_, page := browserPage(t, sellerURL)
+
+	for _, panel := range []string{"code-node", "code-go"} {
+		_, inside, found := strings.Cut(page, `id="`+panel+`"`)
+		require.True(t, found, "%s is gone", panel)
+		inside, _, _ = strings.Cut(inside, "</ol>")
+		assert.Contains(t, inside, "<b>Fund its address</b>", "in %s", panel)
+	}
 }
 
 // A snippet is copied into someone's own code, often by a reader who landed on

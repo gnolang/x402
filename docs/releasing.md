@@ -9,7 +9,8 @@ Three components, three independent version lines. Releasing one does not touch 
 | `weather` | `weather/vX.Y.Z` | `ghcr.io/gnolang/x402-weather`, the demo seller's image for amd64 and arm64, attested; `latest` follows plain releases only |
 
 The Go mechanisms, `server/exact` and `client/exact`, are packages of the Go module, so they
-release with the facilitator's `vX.Y.Z`. `client/vX.Y.Z` releases the npm package alone.
+release with the facilitator's `vX.Y.Z`, and so does the weather example's Go buyer,
+`examples/weather/x402-gno`. `client/vX.Y.Z` releases the npm package alone.
 
 All three run from the manual `release.yml` workflow. Nothing releases on push or merge.
 
@@ -18,6 +19,13 @@ All three run from the manual `release.yml` workflow. Nothing releases on push o
 ```sh
 gh workflow run release.yml --ref main -f component=facilitator -f version=0.2.0
 ```
+
+Before the dispatch, a PR moves the `vX.Y.Z` that the
+`go run github.com/gnolang/x402/examples/weather/x402-gno@…` commands pin in
+`examples/weather/paywall.html`, `examples/weather/README.md` and `client/README.md` to the new
+version, with the `go install` line beside them and the tag in the weather page's and the weather
+README's links to `x402-gno`, so the buyer a reader is told to read is the one the commands run. The tag exists once
+the release runs.
 
 The run has two jobs. `facilitator-test` holds a read-only token and runs `go test ./...` and the
 e2e, after `npm ci` installs exactly the lockfile. Only when it passes does `facilitator` start:
@@ -39,8 +47,8 @@ gh workflow run release.yml --ref main -f component=client -f version=0.2.0
 
 The same PR moves the `client/vX.Y.Z` that the `npx github:gnolang/x402#…` commands pin in
 `examples/weather/paywall.html`, `examples/weather/README.md` and `client/README.md` to the new
-version, and the tag in the weather README's link to `buy.mjs`, so the script a reader is told to
-read is the one the commands run. The tag exists once the release runs, and from then on those
+version, and the tag in the weather page's and the weather README's links to `buy.mjs`, so the
+script a reader is told to read is the one the commands run. The tag exists once the release runs, and from then on those
 commands run the buyer that release carries.
 
 The workflow refuses the dispatch if `package.json` disagrees with `version`, or if that

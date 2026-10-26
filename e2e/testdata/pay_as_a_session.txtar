@@ -3,7 +3,7 @@
 # expiry. The payment moves the owner's coins, the agent never holds the owner's
 # key, and the chain enforces the cap whatever the agent's own code does.
 #
-# The buyer is the weather example's buy.mjs, as in pay_weather.
+# The buyer is the weather example's own, as in pay_weather.
 adduser seller
 adduser owner
 
@@ -20,7 +20,7 @@ x402seller seller.json $seller_user_addr
 
 env X402_MNEMONIC='dance carry grunt uphold cloth wire usage usage clock reduce surprise page destroy reopen multiply away defense promote person web cigar immense armed enough'
 env X402_SESSION_MASTER=$owner_user_addr
-exec node $X402_EXAMPLE_BUYER
+exec $X402_EXAMPLE_BUYER
 
 # The resource was served, and the settlement names the owner as the payer.
 stdout 'sunny'
@@ -37,7 +37,7 @@ stdout '999726000ugnot'
 # The session has spent 270000ugnot of its 500000, the price and the fee. A
 # second payment would bring the total to 540000, so the chain refuses it in the
 # facilitator's simulation at verify, before any broadcast.
-! exec node $X402_EXAMPLE_BUYER
+! exec $X402_EXAMPLE_BUYER
 stdout 'not paid \(status 402\): invalid_exact_gno_transaction_simulation_failed'
 
 # Nothing moved.

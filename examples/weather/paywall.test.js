@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it, vi } from "vitest";
 
-import { decodeHeader, encodeHeader, payWithAdena, start, statusLine } from "./paywall.js";
+import { decodeHeader, encodeHeader, payWithAdena, shellWord, start, statusLine } from "./paywall.js";
 
 const URL = "https://weather.example/weather";
 const PAYER = "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5";
@@ -512,6 +514,9 @@ function fakePage() {
       setAttribute(name, value) {
         attributes[name] = value;
       },
+      getAttribute(name) {
+        return attributes[name] ?? null;
+      },
       querySelector: () => code,
       append(...nodes) {
         this.children.push(...nodes);
@@ -535,7 +540,19 @@ function fakePage() {
     "paid-icon": element(),
     "paid-reading": element(),
     "send-link": element(),
+    runtimes: element(true),
+    "code-node": element(),
+    "code-go": element(),
   };
+  // A tab names the panel it shows in aria-controls.
+  const tab = (id, panel) => {
+    const e = element();
+    e.id = id;
+    e.tabIndex = 0;
+    e.attributes["aria-controls"] = panel;
+    return e;
+  };
+  const tabs = [tab("runtime-node", "code-node"), tab("runtime-go", "code-go")];
   const copyable = element();
   const urls = [element()];
   const payUrls = [element(), element()];
@@ -550,7 +567,9 @@ function fakePage() {
     },
     getElementById: (id) => elements[id],
     querySelectorAll: (selector) =>
-      ({ "pre[data-copy]": [copyable], "[data-url]": urls, "[data-pay-url]": payUrls })[selector] ?? [],
+      ({ "pre[data-copy]": [copyable], "[data-url]": urls, "[data-pay-url]": payUrls, "#runtimes [role=tab]": tabs })[
+        selector
+      ] ?? [],
     createElement: () => {
       const e = element();
       made.push(e);
@@ -574,7 +593,7 @@ function fakePage() {
     clearInterval,
     addEventListener() {},
   };
-  return { document, window, elements, urls, payUrls, copyable, storage, made };
+  return { document, window, elements, urls, payUrls, copyable, storage, made, tabs };
 }
 
 // shown is the text a sighted visitor reads in node, which leaves out what is
@@ -1077,6 +1096,127 @@ describe("start, this page's URL", () => {
 
       expect(urls.map((e) => e.textContent)).toEqual([word]);
     }
+  });
+});
+
+describe("shellWord", () => {
+  it("writes each URL in testdata/shell-words.json as the word it names", () => {
+    const words = JSON.parse(readFileSync(new globalThis.URL("./testdata/shell-words.json", import.meta.url), "utf8"));
+
+    expect(words.length).toBeGreaterThan(0);
+    for (const { url, word } of words) {
+      expect(shellWord(url)).toBe(word);
+    }
+  });
+});
+
+// The buyer runs on Node or on Go. The page's script shows one way at a time;
+// without it both show, each under its own heading.
+describe("start, the ways to run the buyer", () => {
+  const selected = (tabs) => tabs.filter((t) => t.attributes["aria-selected"] === "true").map((t) => t.id);
+  const shownPanels = (elements) => ["code-node", "code-go"].filter((id) => !elements[id].hidden);
+
+  it("shows the tabs, opening on Node", () => {
+    const { document, window, elements, tabs } = fakePage();
+
+    start(document, window);
+
+    expect(elements.runtimes.hidden).toBe(false);
+    expect(selected(tabs)).toEqual(["runtime-node"]);
+    expect(shownPanels(elements)).toEqual(["code-node"]);
+    expect(tabs.map((t) => t.tabIndex)).toEqual([0, -1]);
+  });
+
+  // A panel opens on text, not on a link, so Tab from its tab stops on the
+  // panel itself rather than skipping to the first link inside.
+  it("names each panel by its tab, and lets Tab reach it", () => {
+    const { document, window, elements } = fakePage();
+
+    start(document, window);
+
+    expect(elements["code-node"].attributes).toMatchObject({ role: "tabpanel", "aria-labelledby": "runtime-node" });
+    expect(elements["code-go"].attributes).toMatchObject({ role: "tabpanel", "aria-labelledby": "runtime-go" });
+    expect([elements["code-node"].tabIndex, elements["code-go"].tabIndex]).toEqual([0, 0]);
+  });
+
+  it("shows the Go commands when their tab is clicked", () => {
+    const { document, window, elements, tabs } = fakePage();
+    start(document, window);
+
+    tabs[1].listeners.click();
+
+    expect(selected(tabs)).toEqual(["runtime-go"]);
+    expect(shownPanels(elements)).toEqual(["code-go"]);
+    expect(tabs.map((t) => t.tabIndex)).toEqual([-1, 0]);
+  });
+
+  it("moves between the tabs with the arrow keys, Home and End", () => {
+    const { document, window, elements, tabs } = fakePage();
+    start(document, window);
+
+    for (const [from, key, to] of [
+      [0, "ArrowRight", 1],
+      [1, "ArrowRight", 0],
+      [0, "ArrowLeft", 1],
+      [1, "Home", 0],
+      [0, "End", 1],
+    ]) {
+      for (const t of tabs) {
+        t.focused = false;
+      }
+      const preventDefault = vi.fn();
+
+      tabs[from].listeners.keydown({ key, preventDefault });
+
+      expect(selected(tabs), `${key} from ${tabs[from].id}`).toEqual([tabs[to].id]);
+      expect(tabs[to].focused).toBe(true);
+      expect(shownPanels(elements)).toEqual([tabs[to].attributes["aria-controls"]]);
+      expect(preventDefault).toHaveBeenCalled();
+    }
+  });
+
+  it("leaves every other key to the browser", () => {
+    const { document, window, tabs } = fakePage();
+    start(document, window);
+    const preventDefault = vi.fn();
+
+    tabs[0].listeners.keydown({ key: "Tab", preventDefault });
+
+    expect(selected(tabs)).toEqual(["runtime-node"]);
+    expect(preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("opens on the way picked last, after a reload", () => {
+    const first = fakePage();
+    start(first.document, first.window);
+    first.tabs[1].listeners.click();
+    const reloaded = fakePage();
+    for (const [key, value] of first.storage) {
+      reloaded.storage.set(key, value);
+    }
+
+    start(reloaded.document, reloaded.window);
+
+    expect(selected(reloaded.tabs)).toEqual(["runtime-go"]);
+    expect(shownPanels(reloaded.elements)).toEqual(["code-go"]);
+  });
+
+  it("opens on Node when the browser refuses storage", () => {
+    const { document, window, tabs } = fakePage();
+    window.sessionStorage = {
+      getItem() {
+        throw new Error("SecurityError");
+      },
+      setItem() {
+        throw new Error("SecurityError");
+      },
+    };
+
+    start(document, window);
+    expect(selected(tabs)).toEqual(["runtime-node"]);
+    tabs[1].listeners.click();
+
+    expect(selected(tabs)).toEqual(["runtime-go"]);
   });
 });
 

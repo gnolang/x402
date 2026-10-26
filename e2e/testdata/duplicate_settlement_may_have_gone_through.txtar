@@ -15,7 +15,7 @@ gnoland start
 x402facilitator
 x402seller seller.json $seller_user_addr
 
-! exec node $X402_EXAMPLE_BUYER
+! exec $X402_EXAMPLE_BUYER
 
 # Withheld, named by its hash, and not reported as unpaid.
 ! stdout 'sunny'

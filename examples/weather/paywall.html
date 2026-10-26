@@ -168,6 +168,7 @@ pre code{font-size:inherit}
   .offer:has(#no-adena:not([hidden])) .net,#no-adena a[href^="https://adena.app"],.setup,.code-pay{display:none}
   /* Targets a finger can hit: 44px or more, the masthead's without moving its layout. */
   .copy{padding:14px 12px}
+  .runtimes button[role=tab]{padding-block:13px 12px}
   summary{padding-block:12px}
   .masthead a{padding-block:14px;margin-block:-14px}
 }
@@ -210,7 +211,7 @@ summary{width:fit-content;font-size:calc(13px + var(--x-grow)*.005);cursor:point
 .documentation h2{margin:44px 0 16px;font-size:28px;letter-spacing:-.04em;line-height:1.2}
 .documentation p{margin-top:16px;color:var(--x-muted)}
 /* Prose keeps to about 70 characters a line; code keeps the whole column. */
-.documentation > p,.caution p,.flow li > div,.steps p{max-width:36em}
+.documentation > p,.runtime > p,.caution p,.flow li > div,.steps p{max-width:36em}
 /* A URL in a sentence is one long word; it breaks rather than widen a phone's page. */
 .documentation p code{overflow-wrap:anywhere}
 .flow{margin:0;padding:0;list-style:none}
@@ -228,6 +229,15 @@ summary{width:fit-content;font-size:calc(13px + var(--x-grow)*.005);cursor:point
 .steps b,.steps code{color:var(--x-ink)}
 .steps p{margin:0}
 .nowrap{white-space:nowrap}
+/* The script shows one way of running the buyer at a time; without it both show, each under its
+   heading. The chosen tab's rule lies over the top rule of its steps. */
+.documentation h3{margin:36px 0 0;font-size:20px;font-weight:500;letter-spacing:-.02em;line-height:1.2}
+.runtimes{position:relative;display:flex;margin:28px 0 -1px}
+.runtimes button{padding:10px 18px 9px;border:0;border-bottom:2px solid transparent;background:none;color:var(--x-muted);font:12px/1.5 var(--x-mono);letter-spacing:.06em;text-transform:uppercase}
+.runtimes button:hover{color:var(--x-ink)}
+.runtimes button[aria-selected=true]{border-bottom-color:var(--x-ink);color:var(--x-ink)}
+.runtimes:not([hidden]) ~ .runtime > h3{display:none}
+.runtimes:not([hidden]) ~ .runtime > .steps{margin-top:0}
 footer{margin-top:40px;padding-top:15px;border-top:1px solid var(--x-line);color:var(--x-muted);font-size:12px}
 .documentation footer p{margin:0;color:inherit}
 
@@ -407,29 +417,59 @@ curl -si <span data-url>&lt;this page's URL&gt;</span></code></pre>
       </ol>
 
       <h2 id="code">Pay it from code</h2>
-      <p>A script or an agent pays the same way. <code>buy.mjs</code>, beside this seller in the repository, is one such client. One command runs it without a clone.</p>
+      <p>A script or an agent pays the same way. The repository holds one such buyer beside this seller, for Node and for Go, and one command runs it without a clone.</p>
       <div class="caution" role="note">
         <p class="mono">READ IT BEFORE YOU RUN IT</p>
-        <p><b>The script signs with the mnemonic you give it.</b> Read it first, and never give it a mnemonic that holds anything: use a throwaway key. A <a href="https://github.com/gnolang/x402/blob/main/client/README.md#paying-with-a-session-key">session key</a> works too, with <code>X402_SESSION_MASTER</code> set to your address; the chain holds it to its spend limit.</p>
+        <p><b>The buyer signs with the mnemonic you give it.</b> Read it first, and never give it a mnemonic that holds anything: use a throwaway key. A <a href="https://github.com/gnolang/x402/blob/main/client/README.md#paying-with-a-session-key">session key</a> works too, with <code>X402_SESSION_MASTER</code> set to your address; the chain holds it to its spend limit.</p>
       </div>
-      <ol class="steps">
-        <li><div><p><b>Read the script.</b> <a href="https://github.com/gnolang/x402/blob/main/examples/weather/buy.mjs">examples/weather/buy.mjs</a> is the whole buyer the commands below run.</p></div></li>
-        <li><div><p><b>Make a throwaway key.</b> This prints a new mnemonic, its address and the command that pays this page with it, and saves none of them.</p>
-          <pre data-copy><code>npx github:gnolang/x402#client/v0.5.1 <span class="nowrap">--new-key</span> <span data-pay-url>&lt;this page's URL&gt;</span></code></pre></div></li>
-        <li><div><p><b>Fund its address</b>{{with .Faucet}} at <a href="https://{{.}}">{{.}}</a>{{end}} with test GNOT on <code class="nowrap">{{.Network}}</code>: {{.Amount}} {{.Unit}} for the weather, and the network fee on top.</p></div></li>
-        <li><div><p><b>Pay</b> with the command step 2 printed. It looks like this, and prints the transaction and the weather.</p>
-          <pre><code>X402_MNEMONIC='&lt;mnemonic&gt;' npx github:gnolang/x402#client/v0.5.1 <span data-pay-url>&lt;this page's URL&gt;</span></code></pre></div></li>
-      </ol>
-      <p>Both commands need git and Node 22.18+ or 24.11+. Running the buyer from a clone, or against another node, is in the <a href="https://github.com/gnolang/x402/tree/main/examples/weather#paying-it">weather example's README</a>.</p>
-      <p class="warn">Testnet only. The mechanism is unaudited and pre-release; do not point it at real funds.</p>
-      <p>A stock x402 client pays in gno after two lines: register the scheme, and admit <code>ugnot</code> (a millionth of a GNOT) to its spend controls, capped per request.</p>
-      <pre class="snippet" data-copy><code tabindex="0">import { ExactGnoScheme } from "@gnoverse/x402-gno/exact/client";
+      <div class="runtimes" id="runtimes" role="tablist" aria-label="Run the buyer with" hidden>
+        <button type="button" role="tab" id="runtime-node" aria-controls="code-node">Node</button>
+        <button type="button" role="tab" id="runtime-go" aria-controls="code-go">Go</button>
+      </div>
+      <div class="runtime" id="code-node">
+        <h3>With Node</h3>
+        <ol class="steps">
+          <li><div><p><b>Read the script.</b> <a href="https://github.com/gnolang/x402/blob/client/v0.5.1/examples/weather/buy.mjs">examples/weather/buy.mjs</a> is the whole buyer the commands below run.</p></div></li>
+          <li><div><p><b>Make a throwaway key.</b> This prints a new mnemonic, its address and the command that pays this page with it, and saves none of them.</p>
+            <pre data-copy><code>npx github:gnolang/x402#client/v0.5.1 <span class="nowrap">--new-key</span> <span data-pay-url>&lt;this page's URL&gt;</span></code></pre></div></li>
+          {{template "fund" .}}
+          <li><div><p><b>Pay</b> with the command step 2 printed. It looks like this, and prints the transaction and the weather.</p>
+            <pre><code>X402_MNEMONIC='&lt;mnemonic&gt;' npx github:gnolang/x402#client/v0.5.1 <span data-pay-url>&lt;this page's URL&gt;</span></code></pre></div></li>
+        </ol>
+        <p>Both commands need git and Node 22.18+ or 24.11+. Running the buyer from a clone, or against another node, is in the <a href="https://github.com/gnolang/x402/tree/main/examples/weather#paying-it">weather example's README</a>.</p>
+        <p class="warn">Testnet only. The mechanism is unaudited and pre-release; do not point it at real funds.</p>
+        <p>A stock x402 client pays in gno after two lines: register the scheme, and admit <code>ugnot</code> (a millionth of a GNOT) to its spend controls, capped per request.</p>
+        <pre class="snippet" data-copy><code tabindex="0">import { ExactGnoScheme } from "@gnoverse/x402-gno/exact/client";
 
 const client = new x402Client()
   .register("gno:*", new ExactGnoScheme(wallet))
   .setSpendControls({
     allowedAssets: [{ network: "gno:*", asset: "ugnot", maxAmountPerPayment: "1000000" }],
   });</code></pre>
+      </div>
+      <div class="runtime" id="code-go">
+        <h3>With Go</h3>
+        <ol class="steps">
+          <li><div><p><b>Read the buyer.</b> <a href="https://github.com/gnolang/x402/blob/v0.5.0/examples/weather/x402-gno/main.go">examples/weather/x402-gno/main.go</a> is the whole buyer the commands below run.</p></div></li>
+          <li><div><p><b>Make a throwaway key.</b> This prints a new mnemonic, its address and the command that pays this page with it, and saves none of them.</p>
+            <pre data-copy><code>go run github.com/gnolang/x402/examples/weather/x402-gno@v0.5.0 <span class="nowrap">--new-key</span> <span data-pay-url>&lt;this page's URL&gt;</span></code></pre></div></li>
+          {{template "fund" .}}
+          <li><div><p><b>Pay</b> with the command step 2 printed. It looks like this, and prints the transaction and the weather.</p>
+            <pre><code>X402_MNEMONIC='&lt;mnemonic&gt;' go run github.com/gnolang/x402/examples/weather/x402-gno@v0.5.0 <span data-pay-url>&lt;this page's URL&gt;</span></code></pre></div></li>
+        </ol>
+        <p>Both commands need Go 1.26.5 or later, which Go 1.21 and later fetch by themselves unless <code>GOTOOLCHAIN</code> is <code>local</code>. The first run downloads about 100 MB of modules and builds the buyer. Running it from a clone, or against another node, is in the <a href="https://github.com/gnolang/x402/tree/main/examples/weather#paying-it">weather example's README</a>.</p>
+        <p>To keep the buyer as the <code>x402-gno</code> command, install it:</p>
+        <pre data-copy><code>go install github.com/gnolang/x402/examples/weather/x402-gno@v0.5.0</code></pre>
+        <p class="warn">Testnet only. The mechanism is unaudited and pre-release; do not point it at real funds.</p>
+        <p>A stock x402 client pays in gno once the scheme is registered for the network, with a node on that chain, and <code>ugnot</code> is admitted to its spend controls, capped per request.</p>
+        <pre class="snippet" data-copy><code tabindex="0">import clientexact "github.com/gnolang/x402/client/exact"
+
+client := x402.Newx402Client().
+    Register("{{.Network}}", clientexact.NewExactGnoScheme(signer, node)).
+    SetSpendControls(x402.SpendControls{AllowedAssets: []x402.SpendControlAsset{
+        {Network: "{{.Network}}", Asset: "ugnot", MaxAmountPerPayment: "1000000"},
+    }})</code></pre>
+      </div>
 
       <h2 id="sell">Sell an endpoint in gno</h2>
       <p class="warn">Testnet only. The mechanism is unaudited and pre-release; do not point it at real funds.</p>
@@ -472,3 +512,4 @@ handler := nethttpmw.X402Payment(nethttpmw.Config{
 start(document, window);
 </script>
 </html>
+{{define "fund"}}<li><div><p><b>Fund its address</b>{{with .Faucet}} at <a href="https://{{.}}">{{.}}</a>{{end}} with test GNOT on <code class="nowrap">{{.Network}}</code>: {{.Amount}} {{.Unit}} for the weather, and the network fee on top.</p></div></li>{{end}}

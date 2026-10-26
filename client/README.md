@@ -73,6 +73,11 @@ paid := x402http.WrapHTTPClientWithPayment(&http.Client{Timeout: time.Minute}, x
 res, err := paid.Get("https://x402-demo.onyx.testnets.gno.land/weather")
 ```
 
+[`examples/weather/x402-gno`](../examples/weather/x402-gno/main.go) is a working buyer built on
+it: `go run github.com/gnolang/x402/examples/weather/x402-gno@v0.5.0 <seller URL>` runs it without
+a clone. Read it first, since it signs with the mnemonic it is given;
+[Paying it](../examples/weather/README.md#paying-it) shows how to make a throwaway key with it.
+
 It signs the payment this package signs: for the same offer, key and chain state the two sign the
 same transaction with the same signature bytes, which a test holds them to. The one exception is a
 memo holding U+2028 or U+2029: tm2's sign doc escapes those, this package's does not, and the chain

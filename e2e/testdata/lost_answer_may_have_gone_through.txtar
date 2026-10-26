@@ -1,0 +1,37 @@
+# A paid request whose answer never arrives may still have paid: the seller had
+# the payment settled before the connection dropped. The buyer says so and names
+# the account to check, rather than reporting it unpaid, which would have its
+# reader pay a second time.
+#
+# dropPaidAnswer in seller.json has x402seller settle the paid request, then
+# close the connection without answering.
+adduser seller
+
+gnoland start
+
+x402facilitator
+x402seller seller.json $seller_user_addr
+
+! exec $X402_EXAMPLE_BUYER
+
+! stdout 'not paid'
+! stdout 'sunny'
+stdout 'not confirmed: the answer to the payment was lost \(.+\); it may have gone through, so check g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5 before paying again'
+
+# It went through, once.
+gnokey query bank/balances/$seller_user_addr
+stdout '1000250000ugnot'
+
+-- seller.json --
+{
+  "route": "GET /weather",
+  "price": { "asset": "ugnot", "amount": "250000" },
+  "description": "Weather data",
+  "mimeType": "application/json",
+  "body": {
+    "location": "Paris",
+    "forecast": "sunny",
+    "celsius": 24
+  },
+  "dropPaidAnswer": true
+}

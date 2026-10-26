@@ -114,6 +114,96 @@ describe("buy.mjs paying", () => {
   });
 });
 
+// Runs buy.mjs with args and env added to a clean environment, and returns what
+// it printed and its exit code.
+function runBuyer(args, env = {}) {
+  return new Promise((resolve) => {
+    execFile(
+      process.execPath,
+      [fileURLToPath(BUYER), ...args],
+      { env: { PATH: process.env.PATH, ...env }, maxBuffer: 64 * 1024 * 1024 },
+      (err, stdout) => resolve({ stdout, code: err ? err.code : 0 }),
+    );
+  });
+}
+
+// encoded is value as JSON in base64, the way x402 v2 carries a message in a
+// header.
+function encoded(value) {
+  return Buffer.from(JSON.stringify(value)).toString("base64");
+}
+
+describe("buy.mjs reading the seller's answer", () => {
+  let seller;
+  let answer;
+
+  // The seller answers every request with the answer under test.
+  beforeEach(async () => {
+    seller = createServer((_req, res) => {
+      const headers = {};
+      if (answer.receipt !== undefined) {
+        headers["PAYMENT-RESPONSE"] = encoded(answer.receipt);
+      }
+      if (answer.rawReceipt !== undefined) {
+        headers["PAYMENT-RESPONSE"] = answer.rawReceipt;
+      }
+      if (answer.challenge !== undefined) {
+        headers["PAYMENT-REQUIRED"] = encoded(answer.challenge);
+      }
+      res.writeHead(answer.status, headers);
+      res.end(answer.body ?? "");
+    });
+    await new Promise((resolve) => seller.listen(0, "127.0.0.1", resolve));
+  });
+
+  afterEach(async () => {
+    await new Promise((resolve) => seller.close(resolve));
+  });
+
+  function sellerURL() {
+    return `http://127.0.0.1:${seller.address().port}/weather`;
+  }
+
+  // A 402 would have the buyer pay, so refusals arrive under another status; the
+  // buyer reads the receipt and the challenge whatever the status.
+  const answers = JSON.parse(readFileSync(new URL("./testdata/answers.json", import.meta.url), "utf8"));
+  for (const a of answers) {
+    it(`says what it means: ${a.name}`, async () => {
+      answer = a;
+
+      const { stdout, code } = await runBuyer([sellerURL()]);
+
+      expect(stdout.slice(stdout.indexOf("\n") + 1)).toBe(a.stdout);
+      expect(code).toBe(a.exit);
+    });
+  }
+
+  // The receipt rides in the answer's head, so a payment that settled is named
+  // even when the body cannot be read whole; the buyer still fails, since the
+  // resource did not arrive.
+  it("names a settled payment whose answer is cut short", async () => {
+    const tx = "fa01716b171e58dfdc84b5075017a9d1ac20b0d745ed75627f3f80effa14317e";
+    const payer = "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5";
+    answer = { status: 200, receipt: { success: true, transaction: tx, payer, network: "gno:dev" }, body: "a".repeat(10 * 1024 * 1024 + 1) };
+
+    const { stdout, code } = await runBuyer([sellerURL()]);
+
+    expect(code).toBe(1);
+    expect(stdout).toContain(`paid: tx ${tx} by ${payer}\n`);
+    expect(stdout.endsWith("\nthe answer was cut short: it runs past 10485760 bytes\n")).toBe(true);
+    expect(stdout).not.toContain("not paid");
+  });
+
+  it("reads an empty seller argument as none given", async () => {
+    answer = { status: 200, body: "sunny" };
+
+    const { stdout, code } = await runBuyer([""], { X402_SELLER_URL: sellerURL() });
+
+    expect(stdout).toContain("served without payment\nsunny\n");
+    expect(code).toBe(0);
+  });
+});
+
 describe("buy.mjs --new-key", () => {
   let home;
   let node;
