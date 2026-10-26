@@ -16,6 +16,9 @@ All three run from the manual `release.yml` workflow. Nothing releases on push o
 
 ## Release the facilitator
 
+The facilitator's version is its git tag alone, so the release starts with a PR that moves the
+pins to the new version.
+
 1. In a PR merged before the release, move the `vX.Y.Z` that the
    `go run github.com/gnolang/x402/examples/weather/x402-gno@…` commands pin in
    `examples/weather/paywall.html`, `examples/weather/README.md` and `client/README.md` to the new

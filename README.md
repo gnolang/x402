@@ -12,8 +12,8 @@ those terms. The resource is any endpoint: no realm and no contract call are inv
 > Nothing here is audited, and releases may break each other while the interfaces, the reason
 > codes and the payload shape settle. Point it at testnets only, never at real funds.
 
-The ecosystem's own middleware handles the protocol, route matching, header encoding and the
-retry. This repository supplies the parts that know about gno:
+The ecosystem's own middleware and clients handle the protocol, route matching, header encoding
+and the retry. This repository supplies the parts that know about gno:
 
 | Part | Path | What it does |
 |---|---|---|
@@ -118,7 +118,9 @@ res, err := paid.Get("https://api.example.com/weather")
 `@x402/core` from 2.23 and upstream's Go client pay only in USD-pegged assets unless their spend
 controls list the asset, so the buyer lists ugnot. `maxAmountPerPayment` is the most one request
 may cost, in ugnot; the network fee is paid on top. The stock client's own code, unmodified, does
-the rest, from reading the 402 to the retry.
+the rest, from reading the 402 to the retry. `wallet` must be connected to a node on the chain the
+offer names, since the account state the payment signs over comes from that node
+([details](client/README.md#the-chain-id-comes-from-the-offer)).
 
 An agent can pay with a [session key](client/README.md#paying-with-a-session-key) instead of its
 owner's key, and the chain holds it to the spend limit and expiry the owner registered.
@@ -128,14 +130,9 @@ owner's key, and the chain holds it to the spend limit and expiry the owner regi
 The flow is x402's `authorization`: the facilitator verifies the payment, the seller's handler
 runs, the facilitator settles the payment, and only then does the buyer get the response.
 
-- **The payer pays the network fee.** `std.Fee` names no payer and the chain charges the first
-  signer, so the payer of the resource also pays the gas. Offers state this as
-  `extra.areFeesSponsored: false`.
-- **The facilitator holds no key.** It verifies offline and broadcasts a transaction the payer
-  already signed, so it cannot move funds anywhere the payer did not sign for.
-- **A failed resource is not charged for.** The middleware buffers the response and skips
-  settlement on any status ≥400. Skipping it does not void the payment, which stays signed and
-  valid.
+- **The payer pays the network fee.** `std.Fee` names no payer and the chain charges the first signer, so the payer of the resource also pays the gas. Offers state this as `extra.areFeesSponsored: false`.
+- **The facilitator holds no key.** It verifies offline and broadcasts a transaction the payer already signed, so it cannot move funds anywhere the payer did not sign for.
+- **A failed resource is not charged for.** The middleware buffers the response and skips settlement on any status ≥400. Skipping it does not void the payment, which stays signed and valid.
 - **A failed settlement withholds the response.** The buffered body is discarded.
 - **A payment no block executed in time is pending, not failed.** The facilitator answers
   `settlement_pending` with the transaction hash. The seller's SDK settles once more, which asks
@@ -144,8 +141,7 @@ runs, the facilitator settles the payment, and only then does the buyer get the 
 - **A payment settles once per facilitator.** A copy presented while it settles, or within five
   minutes after, is refused as `duplicate_settlement`. The record is in memory and per process,
   so a facilitator runs as one process per chain, never as replicas behind a balancer.
-- **Prices name their denomination.** gno has no default asset, so `"$0.001"` errors rather than
-  resolving to a token.
+- **Prices name their denomination.** gno has no default asset, so `"$0.001"` errors rather than resolving to a token.
 
 Two exposures stay open:
 
@@ -154,7 +150,8 @@ Two exposures stay open:
   transaction, whoever holds the `PAYMENT-SIGNATURE` header, the seller included, can broadcast
   it. A buyer refused service voids an unused payment by sending any other transaction from the
   paying account.
-- **A payer can consume the signed-over sequence between `/verify` and `/settle`.** gno has no
+- **A payer can consume the signed-over sequence between `/verify` and `/settle`.** Settlement
+  then fails after the seller's handler has run, so the seller does the work unpaid. gno has no
   pull-settlement primitive, so settlement is cooperative, the same exposure XRPL documents for
   its own `exact` mechanism.
 

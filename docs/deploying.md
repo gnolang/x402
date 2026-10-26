@@ -154,8 +154,9 @@ The process queries the node for its chain id, retrying for up to 10 s:
 
 So a chain/RPC mismatch is caught at boot whenever the node is reachable. A missing `-rpc` or
 `-chain-id`, a `-chain-id` outside CAIP-2's reference grammar, or a negative rate flag exits 2
-before listening. An `-rpc` the RPC client rejects exits 1. A malformed one it accepts fails the
-chain-id query like an unreachable node, so the process warns and starts.
+before listening.
+An `-rpc` the RPC client rejects exits 1. A malformed one it accepts fails the chain-id query like
+an unreachable node, so the process warns and starts.
 
 ## Shutdown
 

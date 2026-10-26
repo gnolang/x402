@@ -220,7 +220,8 @@ X402_MNEMONIC='<mnemonic>' node examples/weather/buy.mjs https://x402-demo.onyx.
 ```
 
 The Go buyer, [`x402-gno`](https://github.com/gnolang/x402/blob/v0.5.0/examples/weather/x402-gno/main.go),
-takes the same steps with `go run`. Read it first too:
+takes the same steps with `go run`. It needs Go 1.26.5 or later, which Go 1.21 and later fetch by
+themselves unless `GOTOOLCHAIN` is `local`. Read it first too:
 
 ```sh
 go run github.com/gnolang/x402/examples/weather/x402-gno@v0.5.0 --new-key https://x402-demo.onyx.testnets.gno.land/weather
@@ -228,11 +229,12 @@ X402_MNEMONIC='<mnemonic>' go run github.com/gnolang/x402/examples/weather/x402-
 ```
 
 `go run` fetches the Go module at that release and builds the buyer, about 100 MB of modules the
-first time. It needs Go 1.26.5 or later, which Go 1.21 and later fetch by themselves unless
-`GOTOOLCHAIN` is `local`. `go install github.com/gnolang/x402/examples/weather/x402-gno@v0.5.0`
-keeps it as the `x402-gno` command. In a clone, `go run ./examples/weather/x402-gno` from the
-repository root runs the checkout's buyer. The Go buyer's pin is the Go module's tag, `vX.Y.Z`;
-the npm buyer's is the client's, `client/vX.Y.Z`. The two release on separate lines.
+first time. `go install github.com/gnolang/x402/examples/weather/x402-gno@v0.5.0` keeps it as the
+`x402-gno` command. In a clone, `go run ./examples/weather/x402-gno` from the repository root runs
+the checkout's buyer, and the pay command its `--new-key` prints runs from inside the clone only.
+
+The Go buyer's pin is the Go module's tag, `vX.Y.Z`, and the npm buyer's is the client's,
+`client/vX.Y.Z`: the two release on separate lines.
 
 Each buyer registers the gno scheme on a stock x402 client, `@x402/core`'s or upstream's Go one,
 and admits ugnot with a cap of 1 GNOT per request. The paying account must be funded on the chain
