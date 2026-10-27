@@ -9,14 +9,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestTheClientLinksNoFacilitator: a buyer importing this package must not
-// link the facilitator, nor through it gno.land's node and its VM.
-func TestTheClientLinksNoFacilitator(t *testing.T) {
+// TestTheClientLinksNeitherTheFacilitatorNorTheVM: a buyer importing this
+// package must not link the facilitator, nor gno.land's node and its VM.
+func TestTheClientLinksNeitherTheFacilitatorNorTheVM(t *testing.T) {
 	out, err := exec.Command("go", "list", "-deps", ".").CombinedOutput()
 	require.NoError(t, err, "%s", out)
 	deps := strings.Fields(string(out))
 	require.Contains(t, deps, "github.com/gnolang/gno/tm2/pkg/std", "the listing names the package's real dependencies")
 	for _, dep := range deps {
 		assert.NotEqual(t, "github.com/gnolang/x402/facilitator/exact", dep)
+		assert.NotContains(t, dep, "/gnovm/")
 	}
 }

@@ -32,7 +32,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gnolang/gno/gno.land/pkg/gnoclient"
 	rpcclient "github.com/gnolang/gno/tm2/pkg/bft/rpc/client"
 	"github.com/gnolang/gno/tm2/pkg/crypto"
 	"github.com/gnolang/gno/tm2/pkg/crypto/bip39"
@@ -265,7 +264,7 @@ func pay(out io.Writer, sellerURL string, getenv func(string) string) (bool, err
 				return false, err
 			}
 			client.Register(x402.Network(network), clientexact.NewExactGnoScheme(signer,
-				clientexact.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc}), opts...))
+				clientexact.NewRPCNode(rpc), opts...))
 			allowed = append(allowed, x402.SpendControlAsset{Network: x402.Network(network), Asset: "ugnot", MaxAmountPerPayment: maxPrice})
 		}
 		client.SetSpendControls(x402.SpendControls{AllowedAssets: allowed})

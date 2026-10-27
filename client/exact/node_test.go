@@ -3,9 +3,9 @@ package exact_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
-	"github.com/gnolang/gno/gno.land/pkg/gnoclient"
 	abci "github.com/gnolang/gno/tm2/pkg/bft/abci/types"
 	rpcclient "github.com/gnolang/gno/tm2/pkg/bft/rpc/client"
 	ctypes "github.com/gnolang/gno/tm2/pkg/bft/rpc/core/types"
@@ -84,8 +84,8 @@ func answering(data string) abci.ResponseQuery {
 	return abci.ResponseQuery{ResponseBase: abci.ResponseBase{Data: []byte(data)}}
 }
 
-func nodeOver(rpc *stubRPC) *exact.GnoclientNode {
-	return exact.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc})
+func nodeOver(rpc *stubRPC) *exact.RPCNode {
+	return exact.NewRPCNode(rpc)
 }
 
 // TestTheGasPriceIsReadAsTheChainWritesIt decodes a live chain's answer, the
@@ -170,6 +170,29 @@ func TestAccountsAreReadAsTheChainWritesThem(t *testing.T) {
 	assert.Equal(t, uint64(3), sess.GetSequence())
 }
 
+// TestFieldsOnlyGnoLandDefinesAreIgnored: gno.land adds attributes to an
+// account and allowed paths to a session; a payment reads neither, and their
+// presence must not stop the number and sequence from decoding.
+func TestFieldsOnlyGnoLandDefinesAreIgnored(t *testing.T) {
+	master := crypto.MustAddressFromString(test1Address)
+	session := crypto.MustAddressFromString(payTo)
+	rpc := &stubRPC{answers: map[string]abci.ResponseQuery{
+		"auth/accounts/" + test1Address: answering(strings.Replace(accountJSON, `"attributes": "0"`, `"attributes": "1"`, 1)),
+		"auth/accounts/" + test1Address + "/session/" + payTo: answering(`{"BaseSessionAccount": {"BaseAccount": {"address": "` + payTo +
+			`", "coins": "", "public_key": null, "account_number": "34", "sequence": "3"}, "master_address": "` + test1Address +
+			`", "expires_at": "0"}, "allow_paths": ["gno.land/r/demo/"]}`),
+	}}
+	node := nodeOver(rpc)
+
+	acc, err := node.Account(context.Background(), master)
+	require.NoError(t, err)
+	assert.Equal(t, [2]uint64{12, 7}, [2]uint64{acc.GetAccountNumber(), acc.GetSequence()})
+
+	sess, err := node.SessionAccount(context.Background(), master, session)
+	require.NoError(t, err)
+	assert.Equal(t, [2]uint64{34, 3}, [2]uint64{sess.GetAccountNumber(), sess.GetSequence()})
+}
+
 // TestAnUnfundedAccountAndARevokedSessionReadDifferently: the remedies
 // differ — fund the address, or register the session again — so the errors
 // do too. An account the chain holds none of is std.UnknownAddressError; a
@@ -233,30 +256,29 @@ func TestTheNodeNamesTheChainItServes(t *testing.T) {
 	assert.Equal(t, "onyx-1", served)
 }
 
-// TestANodeWithNoRPCClientSaysSo: an adapter with no client to read through —
-// none given, a nil adapter, or a nil RPC client inside the interface, as a
-// failed rpcclient constructor returns one — reports upstream's own error
-// instead of panicking inside a buyer's request.
+// TestANodeWithNoRPCClientSaysSo: a node with no client to read through —
+// none given, a nil node, or a nil RPC client inside the interface, as a
+// failed rpcclient constructor returns one — reports that instead of
+// panicking inside a buyer's request.
 func TestANodeWithNoRPCClientSaysSo(t *testing.T) {
 	var failedDial *rpcclient.RPCClient
-	cases := map[string]*exact.GnoclientNode{
-		"no RPC client":       exact.NewGnoclientNode(&gnoclient.Client{}),
-		"no gnoclient":        exact.NewGnoclientNode(nil),
-		"a nil adapter":       nil,
-		"a nil client inside": exact.NewGnoclientNode(&gnoclient.Client{RPCClient: failedDial}),
+	cases := map[string]*exact.RPCNode{
+		"no RPC client":       exact.NewRPCNode(nil),
+		"a nil node":          nil,
+		"a nil client inside": exact.NewRPCNode(failedDial),
 	}
 	addr := address(signerFrom(t, test1Mnemonic))
 	for name, node := range cases {
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
 			_, err := node.NodeChainID(ctx)
-			require.ErrorIs(t, err, gnoclient.ErrMissingRPCClient)
+			require.ErrorContains(t, err, "no RPC client")
 			_, err = node.GasPrice(ctx)
-			require.ErrorIs(t, err, gnoclient.ErrMissingRPCClient)
+			require.ErrorContains(t, err, "no RPC client")
 			_, err = node.Account(ctx, addr)
-			require.ErrorIs(t, err, gnoclient.ErrMissingRPCClient)
+			require.ErrorContains(t, err, "no RPC client")
 			_, err = node.SessionAccount(ctx, addr, addr)
-			require.ErrorIs(t, err, gnoclient.ErrMissingRPCClient)
+			require.ErrorContains(t, err, "no RPC client")
 		})
 	}
 }

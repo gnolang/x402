@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gnolang/gno/gno.land/pkg/gnoclient"
 	rpcclient "github.com/gnolang/gno/tm2/pkg/bft/rpc/client"
 	"github.com/gnolang/gno/tm2/pkg/crypto"
 	"github.com/gnolang/gno/tm2/pkg/crypto/keys"
@@ -37,7 +36,7 @@ func ExampleNewExactGnoScheme() {
 	if err != nil {
 		panic(err)
 	}
-	node := exact.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc})
+	node := exact.NewRPCNode(rpc)
 
 	// A stock client pays only in USD-pegged assets until told otherwise, and
 	// ugnot is not one. MaxAmountPerPayment is the most one request may cost, in
@@ -85,7 +84,7 @@ func ExampleWithMaster() {
 	}
 
 	scheme := exact.NewExactGnoScheme(signer,
-		exact.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc}), exact.WithMaster(owner))
+		exact.NewRPCNode(rpc), exact.WithMaster(owner))
 	_ = x402.Newx402Client().
 		Register("gno:onyx-1", scheme).
 		SetSpendControls(x402.SpendControls{

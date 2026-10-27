@@ -54,7 +54,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gnolang/gno/gno.land/pkg/gnoclient"
 	rpcclient "github.com/gnolang/gno/tm2/pkg/bft/rpc/client"
 	"github.com/gnolang/gno/tm2/pkg/crypto/keys"
 	x402 "github.com/x402-foundation/x402/go/v2"
@@ -66,7 +65,7 @@ import (
 kb, _ := keys.NewKeyBaseFromDir(gnokeyHome) // the keys gnokey keeps
 signer, _ := clientexact.KeybaseSigner(kb, "buyer", password)
 rpc, _ := rpcclient.NewHTTPClient("https://rpc.onyx.testnets.gno.land:443")
-node := clientexact.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc})
+node := clientexact.NewRPCNode(rpc)
 
 client := x402.Newx402Client().
 	Register("gno:onyx-1", clientexact.NewExactGnoScheme(signer, node)). // ← teaches the client gno

@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gnolang/gno/gno.land/pkg/gnoclient"
 	"github.com/gnolang/gno/gno.land/pkg/integration"
 	rpcclient "github.com/gnolang/gno/tm2/pkg/bft/rpc/client"
 	"github.com/gnolang/gno/tm2/pkg/crypto"
@@ -92,7 +91,7 @@ func goBuyerCmd(ts *testscript.TestScript, neg bool, args []string) {
 		ts.Check(err)
 		opts = append(opts, clientexact.WithMaster(owner))
 	}
-	node := clientexact.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc})
+	node := clientexact.NewRPCNode(rpc)
 
 	// No cap: refused scenarios price a payment past the payer's balance so that
 	// the chain refuses it, which a cap would pre-empt.

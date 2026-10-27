@@ -126,8 +126,8 @@ type Signer interface {
 // Node is the chain access a payment needs before it is signed: which chain the
 // node serves, the number and sequence of the account the signature is verified
 // against, and the gas price the fee follows. Nothing is broadcast through it;
-// the seller's facilitator broadcasts the payment. Implemented by the gnoclient
-// adapter NewGnoclientNode and by fakes in tests.
+// the seller's facilitator broadcasts the payment. Implemented by RPCNode and by
+// fakes in tests.
 type Node interface {
 	// NodeChainID is the chain id the node reports for itself.
 	NodeChainID(ctx context.Context) (string, error)
