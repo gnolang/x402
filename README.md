@@ -101,9 +101,12 @@ const res = await paid("https://api.example.com/weather");
 From Go, register [`client/exact`](client/exact) on upstream's Go client:
 
 ```go
-import clientexact "github.com/gnolang/x402/client/exact"
+import (
+	clientexact "github.com/gnolang/x402/client/exact"
+	"github.com/gnolang/x402/client/exact/keybase"
+)
 
-signer, _ := clientexact.KeybaseSigner(kb, "buyer", password)                // a key gnokey keeps
+signer, _ := keybase.Signer(kb, "buyer", password)                          // a key gnokey keeps
 node, _ := clientexact.NewRPCNode("https://rpc.onyx.testnets.gno.land:443") // a node on onyx-1
 
 client := x402.Newx402Client().

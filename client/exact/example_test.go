@@ -12,6 +12,7 @@ import (
 	x402http "github.com/x402-foundation/x402/go/v2/http"
 
 	"github.com/gnolang/x402/client/exact"
+	"github.com/gnolang/x402/client/exact/keybase"
 )
 
 // A buyer pays the onyx testnet's demo seller from a key gnokey keeps. The
@@ -23,7 +24,7 @@ func ExampleNewExactGnoScheme() {
 	if err != nil {
 		panic(err)
 	}
-	signer, err := exact.KeybaseSigner(kb, "buyer", "the key's password")
+	signer, err := keybase.Signer(kb, "buyer", "the key's password")
 	if err != nil {
 		panic(err)
 	}
@@ -67,7 +68,7 @@ func ExampleWithMaster() {
 	if _, err := kb.CreateAccount("session", "<the session key's mnemonic>", "", "", 0, 0); err != nil {
 		panic(err)
 	}
-	signer, err := exact.KeybaseSigner(kb, "session", "")
+	signer, err := keybase.Signer(kb, "session", "")
 	if err != nil {
 		panic(err)
 	}

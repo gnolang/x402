@@ -40,6 +40,7 @@ import (
 	x402http "github.com/x402-foundation/x402/go/v2/http"
 
 	clientexact "github.com/gnolang/x402/client/exact"
+	"github.com/gnolang/x402/client/exact/keybase"
 )
 
 // gno's well-known test1 mnemonic, the default for a local test chain.
@@ -205,7 +206,7 @@ func pay(out io.Writer, sellerURL string, getenv func(string) string) (bool, err
 	if err != nil {
 		return false, err
 	}
-	signer, err := clientexact.KeybaseSigner(kb, "buyer", "")
+	signer, err := keybase.Signer(kb, "buyer", "")
 	if err != nil {
 		return false, err
 	}

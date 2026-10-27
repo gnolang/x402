@@ -1,4 +1,8 @@
-package exact
+// Package keybase signs x402 gno payments with a key a tm2 keybase holds, as
+// gnokey keeps them. It is apart from client/exact so a buyer that signs
+// elsewhere, such as through the gnokey command, does not link the keybase
+// and the Ledger and database code it brings.
+package keybase
 
 import (
 	"fmt"
@@ -6,9 +10,11 @@ import (
 
 	"github.com/gnolang/gno/tm2/pkg/crypto"
 	"github.com/gnolang/gno/tm2/pkg/crypto/keys"
+
+	"github.com/gnolang/x402/client/exact"
 )
 
-// KeybaseSigner returns the Signer for the key nameOrBech32 names in kb,
+// Signer returns the exact.Signer for the key nameOrBech32 names in kb,
 // unlocked with password: a key gnokey keeps in its home directory
 // (keys.NewKeyBaseFromDir) or one held in memory (keys.NewInMemory), a Ledger
 // key included.
@@ -19,7 +25,7 @@ import (
 // before anything is signed. A key the keybase holds only the public half of,
 // an offline or a multisig key, is refused here: it can never sign, and a
 // payment would otherwise read the chain first and fail after.
-func KeybaseSigner(kb keys.Keybase, nameOrBech32, password string) (Signer, error) {
+func Signer(kb keys.Keybase, nameOrBech32, password string) (exact.Signer, error) {
 	keybaseSigning.Lock()
 	info, err := kb.GetByNameOrAddress(nameOrBech32)
 	keybaseSigning.Unlock()

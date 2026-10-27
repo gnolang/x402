@@ -9,11 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestTheClientLinksNeitherTheFacilitatorNorTheVM: a buyer importing this
+// TestTheClientLinksNoFacilitatorNodeOrKeybase: a buyer importing this
 // package must not link the facilitator, nor gno.land's node and its VM, nor
 // rs/xid, whose init costs every importer about 13 ms of startup and comes in
-// with tm2's RPC client and result types.
-func TestTheClientLinksNeitherTheFacilitatorNorTheVM(t *testing.T) {
+// with tm2's RPC client and result types, nor tm2's keybase, which brings
+// Ledger support and a database with it for buyers that sign elsewhere.
+func TestTheClientLinksNoFacilitatorNodeOrKeybase(t *testing.T) {
 	out, err := exec.Command("go", "list", "-deps", ".").CombinedOutput()
 	require.NoError(t, err, "%s", out)
 	deps := strings.Fields(string(out))
@@ -22,5 +23,7 @@ func TestTheClientLinksNeitherTheFacilitatorNorTheVM(t *testing.T) {
 		assert.NotEqual(t, "github.com/gnolang/x402/facilitator/exact", dep)
 		assert.NotContains(t, dep, "/gnovm/")
 		assert.NotEqual(t, "github.com/rs/xid", dep)
+		assert.NotEqual(t, "github.com/gnolang/gno/tm2/pkg/crypto/keys", dep)
+		assert.NotContains(t, dep, "ledger")
 	}
 }
