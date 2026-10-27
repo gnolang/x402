@@ -190,12 +190,12 @@ own Go code, register the [Go mechanism](../../client/README.md#from-go) on upst
 These steps pay the hosted seller on onyx, and any other seller's URL works in its place. They
 need git and Node 22.18+ or 24.11+.
 
-1. Read [`buy.mjs`](https://github.com/gnolang/x402/blob/client/v0.5.4/examples/weather/buy.mjs),
+1. Read [`buy.mjs`](https://github.com/gnolang/x402/blob/client/v0.5.5/examples/weather/buy.mjs),
    the buyer these commands run.
 2. Make a throwaway key:
 
    ```sh
-   npx github:gnolang/x402#client/v0.5.4 --new-key https://x402.gno.dev/weather
+   npx github:gnolang/x402#client/v0.5.5 --new-key https://x402.gno.dev/weather
    ```
 
    It prints a fresh 24-word mnemonic, the address it pays from and the command that pays the
@@ -205,7 +205,7 @@ need git and Node 22.18+ or 24.11+.
 4. Run the command step 2 printed. It has this shape, with the mnemonic in place of `<mnemonic>`:
 
    ```sh
-   X402_MNEMONIC='<mnemonic>' npx github:gnolang/x402#client/v0.5.4 https://x402.gno.dev/weather
+   X402_MNEMONIC='<mnemonic>' npx github:gnolang/x402#client/v0.5.5 https://x402.gno.dev/weather
    ```
 
 npx fetches the repository at that tag, builds the client mechanism and runs the root package's
