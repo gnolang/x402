@@ -1,14 +1,20 @@
 package exact_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	abci "github.com/gnolang/gno/tm2/pkg/bft/abci/types"
-	rpcclient "github.com/gnolang/gno/tm2/pkg/bft/rpc/client"
 	ctypes "github.com/gnolang/gno/tm2/pkg/bft/rpc/core/types"
+	rpctypes "github.com/gnolang/gno/tm2/pkg/bft/rpc/lib/types"
 	"github.com/gnolang/gno/tm2/pkg/crypto"
 	p2pTypes "github.com/gnolang/gno/tm2/pkg/p2p/types"
 	"github.com/gnolang/gno/tm2/pkg/std"
@@ -52,40 +58,67 @@ const (
 }`
 )
 
-// stubRPC answers the calls the adapter makes — ABCI queries by path, and the
-// node's status — and nothing else: the embedded nil Client panics on any
-// other call, so a read that reaches the network some other way fails the
-// test loudly. A path it has no answer for answers with no data.
+// stubRPC is a node's JSON-RPC endpoint answering the two methods a payment
+// reads, status and abci_query by path, encoded as tm2's RPC server encodes
+// them. A path it has no answer for answers with no data, and any other call
+// fails the test.
 type stubRPC struct {
-	rpcclient.Client
-
 	answers map[string]abci.ResponseQuery
 	status  *ctypes.ResultStatus
-	err     error
-	paths   []string // the ABCI path each query named
+	rpcErr  error  // answer every call with this JSON-RPC error
+	raw     []byte // answer every call with these bytes instead
+
+	mu    sync.Mutex
+	paths []string // the ABCI path each query named
 }
 
-func (s *stubRPC) ABCIQuery(ctx context.Context, path string, _ []byte) (*ctypes.ResultABCIQuery, error) {
-	s.paths = append(s.paths, path)
-	if err := ctx.Err(); err != nil {
-		return nil, err
+func (s *stubRPC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if s.raw != nil {
+		_, _ = w.Write(s.raw)
+		return
 	}
-	if s.err != nil {
-		return nil, s.err
+	var result any
+	switch r.URL.Path {
+	case "/status":
+		result = s.status
+	case "/abci_query":
+		path, err := strconv.Unquote(r.URL.Query().Get("path"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		s.mu.Lock()
+		s.paths = append(s.paths, path)
+		s.mu.Unlock()
+		result = &ctypes.ResultABCIQuery{Response: s.answers[path]}
+	default:
+		http.NotFound(w, r)
+		return
 	}
-	return &ctypes.ResultABCIQuery{Response: s.answers[path]}, nil
+	res := rpctypes.NewRPCSuccessResponse(rpctypes.JSONRPCStringID(""), result)
+	if s.rpcErr != nil {
+		res = rpctypes.RPCInternalError(rpctypes.JSONRPCStringID(""), s.rpcErr)
+	}
+	_ = json.NewEncoder(w).Encode(res)
 }
 
-func (s *stubRPC) Status(context.Context, *int64) (*ctypes.ResultStatus, error) {
-	return s.status, s.err
+func (s *stubRPC) queried() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.paths
 }
 
 func answering(data string) abci.ResponseQuery {
 	return abci.ResponseQuery{ResponseBase: abci.ResponseBase{Data: []byte(data)}}
 }
 
-func nodeOver(rpc *stubRPC) *exact.RPCNode {
-	return exact.NewRPCNode(rpc)
+func nodeOver(t *testing.T, rpc *stubRPC) *exact.RPCNode {
+	t.Helper()
+	server := httptest.NewServer(rpc)
+	t.Cleanup(server.Close)
+	node, err := exact.NewRPCNode(server.URL)
+	require.NoError(t, err)
+	return node
 }
 
 // TestTheGasPriceIsReadAsTheChainWritesIt decodes a live chain's answer, the
@@ -93,11 +126,11 @@ func nodeOver(rpc *stubRPC) *exact.RPCNode {
 func TestTheGasPriceIsReadAsTheChainWritesIt(t *testing.T) {
 	rpc := &stubRPC{answers: map[string]abci.ResponseQuery{"auth/gasprice": answering(onyxGasPrice)}}
 
-	price, err := nodeOver(rpc).GasPrice(context.Background())
+	price, err := nodeOver(t, rpc).GasPrice(context.Background())
 
 	require.NoError(t, err)
 	assert.Equal(t, &std.GasPrice{Gas: 1000, Price: std.Coin{Denom: "ugnot", Amount: 1}}, price)
-	assert.Equal(t, []string{"auth/gasprice"}, rpc.paths)
+	assert.Equal(t, []string{"auth/gasprice"}, rpc.queried())
 }
 
 // TestANodeAnsweringNoGasPriceReportsNone: a chain that stored no price
@@ -108,7 +141,7 @@ func TestANodeAnsweringNoGasPriceReportsNone(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			rpc := &stubRPC{answers: map[string]abci.ResponseQuery{"auth/gasprice": answering(data)}}
 
-			price, err := nodeOver(rpc).GasPrice(context.Background())
+			price, err := nodeOver(t, rpc).GasPrice(context.Background())
 
 			require.NoError(t, err)
 			assert.Nil(t, price)
@@ -116,21 +149,29 @@ func TestANodeAnsweringNoGasPriceReportsNone(t *testing.T) {
 	}
 }
 
-// TestAGasPriceTheNodeCannotGiveIsAnError keeps three failures apart from a
-// chain reporting no price: a node that never answered, one that refused the
-// query, and an answer that is not a gas price. Pricing a payment at the
-// unpriced fee on any of them would guess where the chain did not say.
+// TestAGasPriceTheNodeCannotGiveIsAnError keeps five failures apart from a
+// chain reporting no price: a refused query, an RPC error, an answer too large
+// to read, an answer that is not a gas price, and a node that never answered.
+// Pricing a payment at the unpriced fee on any of them would guess where the
+// chain did not say.
 func TestAGasPriceTheNodeCannotGiveIsAnError(t *testing.T) {
-	unreachable := errors.New("dial tcp: connection refused")
 	refused := std.UnknownRequestError{}
 	cases := map[string]struct {
-		rpc  *stubRPC
-		want error
+		rpc     *stubRPC
+		wantIs  error
+		wantMsg string
 	}{
-		"no answer": {rpc: &stubRPC{err: unreachable}, want: unreachable},
 		"a refusal": {
-			rpc:  &stubRPC{answers: map[string]abci.ResponseQuery{"auth/gasprice": {ResponseBase: abci.ResponseBase{Error: refused}}}},
-			want: refused,
+			rpc:    &stubRPC{answers: map[string]abci.ResponseQuery{"auth/gasprice": {ResponseBase: abci.ResponseBase{Error: refused, Log: "unknown request"}}}},
+			wantIs: refused,
+		},
+		"an RPC error": {
+			rpc:     &stubRPC{rpcErr: errors.New("height must be at least 1")},
+			wantMsg: "height must be at least 1",
+		},
+		"an answer over a mebibyte": {
+			rpc:     &stubRPC{raw: bytes.Repeat([]byte(" "), 1<<20+1)},
+			wantMsg: "over 1048576 bytes",
 		},
 		"an answer that is no gas price": {
 			rpc: &stubRPC{answers: map[string]abci.ResponseQuery{"auth/gasprice": answering(`{"gas": "lots"}`)}},
@@ -138,14 +179,26 @@ func TestAGasPriceTheNodeCannotGiveIsAnError(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			_, err := nodeOver(tc.rpc).GasPrice(context.Background())
+			_, err := nodeOver(t, tc.rpc).GasPrice(context.Background())
 
 			require.Error(t, err)
-			if tc.want != nil {
-				assert.ErrorIs(t, err, tc.want)
+			if tc.wantIs != nil {
+				assert.ErrorIs(t, err, tc.wantIs)
 			}
+			assert.ErrorContains(t, err, tc.wantMsg)
 		})
 	}
+
+	t.Run("no answer", func(t *testing.T) {
+		server := httptest.NewServer(&stubRPC{})
+		node, err := exact.NewRPCNode(server.URL)
+		require.NoError(t, err)
+		server.Close()
+
+		_, err = node.GasPrice(context.Background())
+
+		require.Error(t, err)
+	})
 }
 
 // TestAccountsAreReadAsTheChainWritesThem decodes an account and a session
@@ -157,7 +210,7 @@ func TestAccountsAreReadAsTheChainWritesThem(t *testing.T) {
 		"auth/accounts/" + test1Address:                       answering(accountJSON),
 		"auth/accounts/" + test1Address + "/session/" + payTo: answering(sessionJSON),
 	}}
-	node := nodeOver(rpc)
+	node := nodeOver(t, rpc)
 
 	acc, err := node.Account(context.Background(), master)
 	require.NoError(t, err)
@@ -182,7 +235,7 @@ func TestFieldsOnlyGnoLandDefinesAreIgnored(t *testing.T) {
 			`", "coins": "", "public_key": null, "account_number": "34", "sequence": "3"}, "master_address": "` + test1Address +
 			`", "expires_at": "0"}, "allow_paths": ["gno.land/r/demo/"]}`),
 	}}
-	node := nodeOver(rpc)
+	node := nodeOver(t, rpc)
 
 	acc, err := node.Account(context.Background(), master)
 	require.NoError(t, err)
@@ -205,7 +258,7 @@ func TestAnUnfundedAccountAndARevokedSessionReadDifferently(t *testing.T) {
 			Error: std.SessionNotFoundError{}, Log: "session not found",
 		}},
 	}}
-	node := nodeOver(rpc)
+	node := nodeOver(t, rpc)
 
 	_, err := node.Account(context.Background(), master)
 	_, unknown := errors.AsType[std.UnknownAddressError](err)
@@ -225,7 +278,7 @@ func TestAReadStopsWhenItsCallerGivesUp(t *testing.T) {
 	cancel()
 	rpc := &stubRPC{answers: map[string]abci.ResponseQuery{"auth/accounts/" + test1Address: answering(accountJSON)}}
 
-	_, err := nodeOver(rpc).Account(ctx, crypto.MustAddressFromString(test1Address))
+	_, err := nodeOver(t, rpc).Account(ctx, crypto.MustAddressFromString(test1Address))
 
 	require.ErrorIs(t, err, context.Canceled)
 }
@@ -250,35 +303,45 @@ func TestAPaymentGivenUpDuringItsReadsIsNotSigned(t *testing.T) {
 func TestTheNodeNamesTheChainItServes(t *testing.T) {
 	rpc := &stubRPC{status: &ctypes.ResultStatus{NodeInfo: p2pTypes.NodeInfo{Network: "onyx-1"}}}
 
-	served, err := nodeOver(rpc).NodeChainID(context.Background())
+	served, err := nodeOver(t, rpc).NodeChainID(context.Background())
 
 	require.NoError(t, err)
 	assert.Equal(t, "onyx-1", served)
 }
 
-// TestANodeWithNoRPCClientSaysSo: a node with no client to read through —
-// none given, a nil node, or a nil RPC client inside the interface, as a
-// failed rpcclient constructor returns one — reports that instead of
-// panicking inside a buyer's request.
-func TestANodeWithNoRPCClientSaysSo(t *testing.T) {
-	var failedDial *rpcclient.RPCClient
-	cases := map[string]*exact.RPCNode{
-		"no RPC client":       exact.NewRPCNode(nil),
-		"a nil node":          nil,
-		"a nil client inside": exact.NewRPCNode(failedDial),
+// TestANodeIsReachedByItsHTTPAddress: the node is named by the http(s) URL its
+// RPC server listens at, a trailing slash included. A gnokey-style host:port,
+// a tcp:// address or a URL with no host names nothing a GET can reach, so
+// the node refuses it before any payment reads through it.
+func TestANodeIsReachedByItsHTTPAddress(t *testing.T) {
+	for _, remote := range []string{"", "127.0.0.1:26657", "tcp://127.0.0.1:26657", "ftp://rpc.example", "http://"} {
+		_, err := exact.NewRPCNode(remote)
+		assert.Error(t, err, "%q", remote)
 	}
+
+	rpc := &stubRPC{answers: map[string]abci.ResponseQuery{"auth/gasprice": answering(onyxGasPrice)}}
+	server := httptest.NewServer(rpc)
+	t.Cleanup(server.Close)
+	node, err := exact.NewRPCNode(server.URL + "/")
+	require.NoError(t, err)
+	_, err = node.GasPrice(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"auth/gasprice"}, rpc.queried())
+}
+
+// TestANilNodeSaysSo: a node a failed NewRPCNode left nil reports that instead
+// of panicking inside a buyer's request.
+func TestANilNodeSaysSo(t *testing.T) {
+	var node *exact.RPCNode
 	addr := address(signerFrom(t, test1Mnemonic))
-	for name, node := range cases {
-		t.Run(name, func(t *testing.T) {
-			ctx := context.Background()
-			_, err := node.NodeChainID(ctx)
-			require.ErrorContains(t, err, "no RPC client")
-			_, err = node.GasPrice(ctx)
-			require.ErrorContains(t, err, "no RPC client")
-			_, err = node.Account(ctx, addr)
-			require.ErrorContains(t, err, "no RPC client")
-			_, err = node.SessionAccount(ctx, addr, addr)
-			require.ErrorContains(t, err, "no RPC client")
-		})
-	}
+	ctx := context.Background()
+
+	_, err := node.NodeChainID(ctx)
+	require.Error(t, err)
+	_, err = node.GasPrice(ctx)
+	require.Error(t, err)
+	_, err = node.Account(ctx, addr)
+	require.Error(t, err)
+	_, err = node.SessionAccount(ctx, addr, addr)
+	require.Error(t, err)
 }

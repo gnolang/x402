@@ -5,9 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gnolang/gno/tm2/pkg/amino"
-	rpcclient "github.com/gnolang/gno/tm2/pkg/bft/rpc/client"
+	abci "github.com/gnolang/gno/tm2/pkg/bft/abci/types"
 	"github.com/gnolang/gno/tm2/pkg/crypto"
 	"github.com/gnolang/gno/tm2/pkg/std"
 )
@@ -15,51 +21,61 @@ import (
 // gasPricePath is the ABCI query for the gas price of the chain's last block.
 const gasPricePath = "auth/gasprice"
 
-var errNoRPCClient = errors.New("x402-gno: no RPC client to read the chain through")
+const readTimeout = 60 * time.Second
 
-// NewRPCNode returns the chain access a payment needs, read through rpc, a
-// node's RPC client. Nothing is signed or broadcast through it: the scheme's
-// Signer signs, and the seller's facilitator broadcasts. It holds no state
-// beyond rpc, so one instance is safe to share across concurrent payments.
+// maxAnswerBytes caps one answer from the node. The answers a payment reads, a
+// status, a gas price and one account, are each a few kilobytes.
+const maxAnswerBytes = 1 << 20
+
+var errNoNode = errors.New("x402-gno: no node to read the chain from")
+
+// NewRPCNode returns the chain access a payment needs, read from the node whose
+// RPC server listens at remote, an http(s) URL such as
+// https://rpc.onyx.testnets.gno.land:443. Nothing is signed or broadcast
+// through it: the scheme's Signer signs, and the seller's facilitator
+// broadcasts. It holds no state beyond the address and an HTTP client, so one
+// instance is safe to share across concurrent payments.
 //
-// The RPC client's timeout bounds every read, 60 seconds unless it was made
-// with rpcclient.WithRequestTimeout, and so does the context each read is
-// given. Nothing is signed until the reads have answered, so a read abandoned
-// costs nothing.
-func NewRPCNode(rpc rpcclient.Client) *RPCNode {
-	return &RPCNode{rpc: rpc}
+// Every read is bounded by 60 seconds and by the context it is given, and an
+// answer over 1 MiB is refused. Nothing is signed until the reads have
+// answered, so a read abandoned costs nothing.
+func NewRPCNode(remote string) (*RPCNode, error) {
+	u, err := url.Parse(remote)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return nil, fmt.Errorf("x402-gno: %q is not a node's RPC address: give its http(s) URL", remote)
+	}
+	return &RPCNode{
+		endpoint: strings.TrimSuffix(u.String(), "/"),
+		client:   &http.Client{Timeout: readTimeout},
+	}, nil
 }
 
-// RPCNode is the chain access NewRPCNode returns. It decodes accounts into
-// tm2's own types rather than gno.land's, so importing this package links
-// neither gno.land's node nor its VM.
+// RPCNode is the chain access NewRPCNode returns. It speaks the node's JSON-RPC
+// over plain HTTP and decodes accounts into tm2's own types, so importing this
+// package links neither tm2's RPC client nor gno.land's node.
 type RPCNode struct {
-	rpc rpcclient.Client
+	endpoint string
+	client   *http.Client
 }
 
 var _ Node = (*RPCNode)(nil)
 
-// client is the RPC client to read through, or errNoRPCClient when there is
-// none, a nil one inside the interface included.
-func (n *RPCNode) client() (rpcclient.Client, error) {
-	if n == nil || isNil(n.rpc) {
-		return nil, errNoRPCClient
-	}
-	return n.rpc, nil
-}
-
 // NodeChainID is the chain id the node reports for itself.
 func (n *RPCNode) NodeChainID(ctx context.Context) (string, error) {
-	rpc, err := n.client()
-	if err != nil {
-		return "", err
-	}
-	status, err := rpc.Status(ctx, nil)
+	result, err := n.call(ctx, "status", nil)
 	if err != nil {
 		return "", fmt.Errorf("query node status: %w", err)
 	}
-	if status == nil {
-		return "", errors.New("query node status: the node returned no result")
+	var status struct {
+		NodeInfo struct {
+			Network string `json:"network"`
+		} `json:"node_info"`
+	}
+	if err := json.Unmarshal(result, &status); err != nil {
+		return "", fmt.Errorf("query node status: %w", err)
+	}
+	if status.NodeInfo.Network == "" {
+		return "", errors.New("query node status: the node's status names no chain")
 	}
 	return status.NodeInfo.Network, nil
 }
@@ -68,21 +84,62 @@ func (n *RPCNode) NodeChainID(ctx context.Context) (string, error) {
 // the chain refused returns the chain's own abci.Error, wrapped, so a caller
 // can tell what the chain decided by its type.
 func (n *RPCNode) query(ctx context.Context, path string) ([]byte, error) {
-	rpc, err := n.client()
-	if err != nil {
-		return nil, err
-	}
-	res, err := rpc.ABCIQuery(ctx, path, []byte{})
+	result, err := n.call(ctx, "abci_query", url.Values{"path": {strconv.Quote(path)}})
 	if err != nil {
 		return nil, fmt.Errorf("query %s: %w", path, err)
 	}
-	if res == nil {
-		return nil, fmt.Errorf("query %s: the node returned no result", path)
+	var answer struct {
+		Response abci.ResponseQuery `json:"response"`
 	}
-	if res.Response.Error != nil {
-		return nil, fmt.Errorf("query %s: %s: %w", path, res.Response.Log, res.Response.Error)
+	if err := amino.UnmarshalJSON(result, &answer); err != nil {
+		return nil, fmt.Errorf("query %s: decode the answer: %w", path, err)
 	}
-	return res.Response.Data, nil
+	if answer.Response.Error != nil {
+		return nil, fmt.Errorf("query %s: %s: %w", path, answer.Response.Log, answer.Response.Error)
+	}
+	return answer.Response.Data, nil
+}
+
+// call makes one JSON-RPC call in its URI form, GET <endpoint>/<method>?<params>,
+// and returns the answer's result.
+func (n *RPCNode) call(ctx context.Context, method string, params url.Values) (json.RawMessage, error) {
+	if n == nil {
+		return nil, errNoNode
+	}
+	target := n.endpoint + "/" + method
+	if len(params) > 0 {
+		target += "?" + params.Encode()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return nil, err
+	}
+	res, err := n.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%s at %s: %w", method, n.endpoint, err)
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(res.Body, maxAnswerBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("%s at %s: %w", method, n.endpoint, err)
+	}
+	if len(body) > maxAnswerBytes {
+		return nil, fmt.Errorf("%s at %s: the answer is over %d bytes", method, n.endpoint, maxAnswerBytes)
+	}
+	var envelope struct {
+		Result json.RawMessage `json:"result"`
+		Error  *struct {
+			Message string `json:"message"`
+			Data    string `json:"data"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return nil, fmt.Errorf("%s at %s: status %d, not a JSON-RPC answer", method, n.endpoint, res.StatusCode)
+	}
+	if envelope.Error != nil {
+		return nil, fmt.Errorf("%s at %s: %s", method, n.endpoint, strings.TrimSpace(envelope.Error.Message+" "+envelope.Error.Data))
+	}
+	return envelope.Result, nil
 }
 
 // Account reads addr's account. An address the chain holds no account for is

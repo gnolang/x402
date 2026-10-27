@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	rpcclient "github.com/gnolang/gno/tm2/pkg/bft/rpc/client"
 	"github.com/gnolang/gno/tm2/pkg/crypto"
 	"github.com/gnolang/gno/tm2/pkg/crypto/keys"
 	x402 "github.com/x402-foundation/x402/go/v2"
@@ -31,12 +30,10 @@ func ExampleNewExactGnoScheme() {
 
 	// The node the payment reads its account state and gas price from, on the
 	// chain the scheme is registered for.
-	rpc, err := rpcclient.NewHTTPClient("https://rpc.onyx.testnets.gno.land:443",
-		rpcclient.WithRequestTimeout(10*time.Second))
+	node, err := exact.NewRPCNode("https://rpc.onyx.testnets.gno.land:443")
 	if err != nil {
 		panic(err)
 	}
-	node := exact.NewRPCNode(rpc)
 
 	// A stock client pays only in USD-pegged assets until told otherwise, and
 	// ugnot is not one. MaxAmountPerPayment is the most one request may cost, in
@@ -78,13 +75,12 @@ func ExampleWithMaster() {
 	if err != nil {
 		panic(err)
 	}
-	rpc, err := rpcclient.NewHTTPClient("https://rpc.onyx.testnets.gno.land:443")
+	node, err := exact.NewRPCNode("https://rpc.onyx.testnets.gno.land:443")
 	if err != nil {
 		panic(err)
 	}
 
-	scheme := exact.NewExactGnoScheme(signer,
-		exact.NewRPCNode(rpc), exact.WithMaster(owner))
+	scheme := exact.NewExactGnoScheme(signer, node, exact.WithMaster(owner))
 	_ = x402.Newx402Client().
 		Register("gno:onyx-1", scheme).
 		SetSpendControls(x402.SpendControls{

@@ -10,7 +10,9 @@ import (
 )
 
 // TestTheClientLinksNeitherTheFacilitatorNorTheVM: a buyer importing this
-// package must not link the facilitator, nor gno.land's node and its VM.
+// package must not link the facilitator, nor gno.land's node and its VM, nor
+// rs/xid, whose init costs every importer about 13 ms of startup and comes in
+// with tm2's RPC client and result types.
 func TestTheClientLinksNeitherTheFacilitatorNorTheVM(t *testing.T) {
 	out, err := exec.Command("go", "list", "-deps", ".").CombinedOutput()
 	require.NoError(t, err, "%s", out)
@@ -19,5 +21,6 @@ func TestTheClientLinksNeitherTheFacilitatorNorTheVM(t *testing.T) {
 	for _, dep := range deps {
 		assert.NotEqual(t, "github.com/gnolang/x402/facilitator/exact", dep)
 		assert.NotContains(t, dep, "/gnovm/")
+		assert.NotEqual(t, "github.com/rs/xid", dep)
 	}
 }

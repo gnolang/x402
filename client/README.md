@@ -54,7 +54,6 @@ import (
 	"net/http"
 	"time"
 
-	rpcclient "github.com/gnolang/gno/tm2/pkg/bft/rpc/client"
 	"github.com/gnolang/gno/tm2/pkg/crypto/keys"
 	x402 "github.com/x402-foundation/x402/go/v2"
 	x402http "github.com/x402-foundation/x402/go/v2/http"
@@ -64,8 +63,7 @@ import (
 
 kb, _ := keys.NewKeyBaseFromDir(gnokeyHome) // the keys gnokey keeps
 signer, _ := clientexact.KeybaseSigner(kb, "buyer", password)
-rpc, _ := rpcclient.NewHTTPClient("https://rpc.onyx.testnets.gno.land:443")
-node := clientexact.NewRPCNode(rpc)
+node, _ := clientexact.NewRPCNode("https://rpc.onyx.testnets.gno.land:443")
 
 client := x402.Newx402Client().
 	Register("gno:onyx-1", clientexact.NewExactGnoScheme(signer, node)). // ← teaches the client gno
@@ -99,8 +97,8 @@ such a memo. The Go mechanism differs in these ways:
 - **The node must serve the offer's chain.** A payment signs over the account number and sequence
   its node reports, so an offer for any other chain is refused before anything is signed. Register
   one scheme per gno network, each with a node on that network, rather than one under `gno:*`.
-- **Reads are not retried.** The RPC client's timeout bounds each one, 60 s unless
-  `rpcclient.WithRequestTimeout` sets another, and nothing is signed until all have answered.
+- **Reads are not retried.** Each is bounded by 60 s and by its context, an answer over 1 MiB is
+  refused, and nothing is signed until all have answered.
 - **The spend cap holds in the scheme too.** Upstream's Go client hands the scheme the cap its
   spend controls resolved for the asset, and a price above it is refused unsigned, even when a
   payment is asked for directly rather than chosen from a 402.
