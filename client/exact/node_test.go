@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -344,4 +345,90 @@ func TestANilNodeSaysSo(t *testing.T) {
 	require.Error(t, err)
 	_, err = node.SessionAccount(ctx, addr, addr)
 	require.Error(t, err)
+}
+
+// TestAnAnswerForNoAccountOrAnotherIsAnError: a node that answers with no
+// account, or with another account than the one asked for, would have the
+// payment signed over a number and sequence the chain does not hold for the
+// payer.
+func TestAnAnswerForNoAccountOrAnotherIsAnError(t *testing.T) {
+	master := crypto.MustAddressFromString(test1Address)
+	session := crypto.MustAddressFromString(payTo)
+	accountPath := "auth/accounts/" + test1Address
+	sessionPath := accountPath + "/session/" + payTo
+	cases := map[string]struct{ path, data string }{
+		"a null account":                 {accountPath, `{"BaseAccount": null}`},
+		"an empty account":               {accountPath, `{"BaseAccount": {}}`},
+		"another account":                {accountPath, strings.Replace(accountJSON, test1Address, payTo, 1)},
+		"a null session":                 {sessionPath, `{"BaseSessionAccount": null}`},
+		"another session":                {sessionPath, strings.Replace(sessionJSON, `"address": "`+payTo, `"address": "`+test1Address, 1)},
+		"a session under another master": {sessionPath, strings.Replace(sessionJSON, `"master_address": "`+test1Address, `"master_address": "`+payTo, 1)},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			node := nodeOver(t, &stubRPC{answers: map[string]abci.ResponseQuery{tc.path: answering(tc.data)}})
+
+			var err error
+			if tc.path == accountPath {
+				_, err = node.Account(context.Background(), master)
+			} else {
+				_, err = node.SessionAccount(context.Background(), master, session)
+			}
+
+			require.Error(t, err)
+		})
+	}
+}
+
+// TestAnAnswerWithNoResultGivesNoVerdict: a node, or a proxy in front of it,
+// that answers with no result has not said the account is unfunded, the
+// session revoked or the chain unpriced. Reading it as any of those would tell
+// the buyer to fund an address, or price the fee at its ceiling.
+func TestAnAnswerWithNoResultGivesNoVerdict(t *testing.T) {
+	addr := crypto.MustAddressFromString(test1Address)
+	for name, raw := range map[string]string{
+		"a null result":    `{"jsonrpc": "2.0", "id": "", "result": null}`,
+		"no result":        `{"jsonrpc": "2.0", "id": ""}`,
+		"a gateway's page": `<html><body>502 Bad Gateway</body></html>`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			node := nodeOver(t, &stubRPC{raw: []byte(raw)})
+			ctx := context.Background()
+
+			_, err := node.Account(ctx, addr)
+			require.Error(t, err)
+			_, unknown := errors.AsType[std.UnknownAddressError](err)
+			assert.False(t, unknown, "no answer is not an unfunded account")
+
+			_, err = node.SessionAccount(ctx, addr, addr)
+			require.Error(t, err)
+			_, notFound := errors.AsType[std.SessionNotFoundError](err)
+			assert.False(t, notFound, "no answer is not a revoked session")
+
+			price, err := node.GasPrice(ctx)
+			require.Error(t, err)
+			assert.Nil(t, price)
+		})
+	}
+}
+
+// TestANodePasswordStaysOutOfErrors: a node reached with credentials in its
+// URL fails without printing them, since a read's error reaches logs and, in
+// an agent, a model.
+func TestANodePasswordStaysOutOfErrors(t *testing.T) {
+	server := httptest.NewServer(&stubRPC{rpcErr: errors.New("refused")})
+	remote, err := url.Parse(server.URL)
+	require.NoError(t, err)
+	remote.User = url.UserPassword("buyer", "s3cret")
+	node, err := exact.NewRPCNode(remote.String())
+	require.NoError(t, err)
+
+	_, err = node.GasPrice(context.Background())
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "s3cret", "a refused read")
+
+	server.Close()
+	_, err = node.GasPrice(context.Background())
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "s3cret", "an unreachable node")
 }

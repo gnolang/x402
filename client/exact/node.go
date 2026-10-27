@@ -46,6 +46,7 @@ func NewRPCNode(remote string) (*RPCNode, error) {
 	}
 	return &RPCNode{
 		endpoint: strings.TrimSuffix(u.String(), "/"),
+		shown:    strings.TrimSuffix(u.Redacted(), "/"),
 		client:   &http.Client{Timeout: readTimeout},
 	}, nil
 }
@@ -55,6 +56,7 @@ func NewRPCNode(remote string) (*RPCNode, error) {
 // package links neither tm2's RPC client nor gno.land's node.
 type RPCNode struct {
 	endpoint string
+	shown    string // endpoint with any password masked, for errors
 	client   *http.Client
 }
 
@@ -116,15 +118,16 @@ func (n *RPCNode) call(ctx context.Context, method string, params url.Values) (j
 	}
 	res, err := n.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%s at %s: %w", method, n.endpoint, err)
+		// The client's error names the URL, with any password masked.
+		return nil, fmt.Errorf("%s: %w", method, err)
 	}
 	defer res.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(res.Body, maxAnswerBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("%s at %s: %w", method, n.endpoint, err)
+		return nil, fmt.Errorf("%s at %s: %w", method, n.shown, err)
 	}
 	if len(body) > maxAnswerBytes {
-		return nil, fmt.Errorf("%s at %s: the answer is over %d bytes", method, n.endpoint, maxAnswerBytes)
+		return nil, fmt.Errorf("%s at %s: the answer is over %d bytes", method, n.shown, maxAnswerBytes)
 	}
 	var envelope struct {
 		Result json.RawMessage `json:"result"`
@@ -134,10 +137,15 @@ func (n *RPCNode) call(ctx context.Context, method string, params url.Values) (j
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil {
-		return nil, fmt.Errorf("%s at %s: status %d, not a JSON-RPC answer", method, n.endpoint, res.StatusCode)
+		return nil, fmt.Errorf("%s at %s: status %d, not a JSON-RPC answer", method, n.shown, res.StatusCode)
 	}
 	if envelope.Error != nil {
-		return nil, fmt.Errorf("%s at %s: %s", method, n.endpoint, strings.TrimSpace(envelope.Error.Message+" "+envelope.Error.Data))
+		return nil, fmt.Errorf("%s at %s: %s", method, n.shown, strings.TrimSpace(envelope.Error.Message+" "+envelope.Error.Data))
+	}
+	// A node always answers these methods with a result, so one without is no
+	// verdict: read as one, it would be an unfunded account or an unpriced chain.
+	if len(envelope.Result) == 0 || string(envelope.Result) == "null" {
+		return nil, fmt.Errorf("%s at %s: status %d, the answer holds no result", method, n.shown, res.StatusCode)
 	}
 	return envelope.Result, nil
 }
@@ -162,6 +170,11 @@ func (n *RPCNode) Account(ctx context.Context, addr crypto.Address) (std.Account
 	if err := amino.UnmarshalJSON(gnoAccount.BaseAccount, &acc); err != nil {
 		return nil, fmt.Errorf("decode the account of %s: %w", addr, err)
 	}
+	// An answer for no account, or for another, would have the payment signed
+	// over a number and sequence the chain does not hold for addr.
+	if acc.Address != addr {
+		return nil, fmt.Errorf("decode the account of %s: the node answered for %q", addr, acc.Address)
+	}
 	return &acc, nil
 }
 
@@ -183,6 +196,9 @@ func (n *RPCNode) SessionAccount(ctx context.Context, master, session crypto.Add
 	var acc std.BaseSessionAccount
 	if err := amino.UnmarshalJSON(gnoSession.BaseSessionAccount, &acc); err != nil {
 		return nil, fmt.Errorf("decode session %s of %s: %w", session, master, err)
+	}
+	if acc.Address != session || acc.MasterAddress != master {
+		return nil, fmt.Errorf("decode session %s of %s: the node answered for session %q of %q", session, master, acc.Address, acc.MasterAddress)
 	}
 	return &acc, nil
 }
