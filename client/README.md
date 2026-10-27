@@ -77,7 +77,7 @@ res, err := paid.Get("https://x402-demo.onyx.testnets.gno.land/weather")
 ```
 
 [`examples/weather/x402-gno`](../examples/weather/x402-gno/main.go) is a working buyer built on
-it: `go run github.com/gnolang/x402/examples/weather/x402-gno@v0.6.0 <seller URL>` runs it without
+it: `go run github.com/gnolang/x402/examples/weather/x402-gno@v0.7.0 <seller URL>` runs it without
 a clone. It too signs with the mnemonic it is given, so read it first.
 
 The Go and JavaScript mechanisms sign the same transaction with the same signature bytes for the
