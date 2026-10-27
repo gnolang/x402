@@ -12,7 +12,7 @@
 // output is reproducible.
 import { GnoWallet } from "@gnolang/gno-js-client";
 
-import { ExactGnoScheme } from "@gnoverse/x402-gno/exact/client";
+import { ExactGnoScheme } from "@gnolang/x402/exact/client";
 
 // gno's well-known test1 key, the payer.
 const TEST1 =

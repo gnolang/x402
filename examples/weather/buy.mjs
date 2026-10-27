@@ -25,7 +25,7 @@ import { generateEntropy } from "@gnolang/tm2-js-client";
 import { x402Client, x402HTTPClient } from "@x402/core/client";
 import { decodePaymentRequiredHeader, decodePaymentResponseHeader } from "@x402/core/http";
 
-import { ExactGnoScheme } from "@gnoverse/x402-gno/exact/client";
+import { ExactGnoScheme } from "@gnolang/x402/exact/client";
 
 // gno's well-known test1 mnemonic, the default for a local test chain.
 const TEST1 =

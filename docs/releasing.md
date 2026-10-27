@@ -5,7 +5,7 @@ Three components, three independent version lines. Releasing one does not touch 
 | Component | Tag | Produces |
 |---|---|---|
 | `facilitator` | `vX.Y.Z` | archives + GitHub release + `ghcr.io/gnolang/gnofacilitator`, attested. Also the Go module version. |
-| `client` | `client/vX.Y.Z` | `@gnoverse/x402-gno` on npm, with provenance |
+| `client` | `client/vX.Y.Z` | `@gnolang/x402` on npm, with provenance |
 | `weather` | `weather/vX.Y.Z` | `ghcr.io/gnolang/x402-weather`, the demo seller's image for amd64 and arm64, attested; `latest` follows plain releases only |
 
 The Go mechanisms, `server/exact` and `client/exact`, are packages of the Go module, so they
@@ -143,10 +143,11 @@ it refuses every publish.
 3. Optional: under **Required reviewers**, list who approves a client publish. Every client
    run then waits for one of them; **Prevent self-review** makes that a second person.
 4. Once `release.yml` on `main` names the environment, on npmjs.com, as an owner of
-   `@gnoverse/x402-gno`, open the package's **Settings → Trusted publishing**, edit the GitHub
-   Actions publisher and set **Environment name** to `npm`. Where the page offers no edit,
-   delete the publisher and add it again with the same organization (`gnolang`), repository
-   (`x402`), workflow filename (`release.yml`) and allowed actions, plus the environment.
+   `@gnolang/x402`, open the package's **Settings → Trusted publishing** and add a GitHub
+   Actions publisher with organization `gnolang`, repository `x402`, workflow filename
+   `release.yml` and environment `npm`. npm attaches a publisher only to a package already on
+   the registry, so a new package's first version is published by hand first, by a member of
+   the `gnolang` npm organization. A new publisher must complete its first publish within two days.
 
 A mismatch surfaces as `E404 package not found` or `ENEEDAUTH`, neither of which reflects the
 real cause: check the organization and repository, the workflow filename, the environment name

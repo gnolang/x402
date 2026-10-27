@@ -10,13 +10,13 @@ single `bank.MsgSend`.
 
 ## From JavaScript
 
-Install it with `npm i @gnoverse/x402-gno`, or build it from the repository root with `make js`.
+Install it with `npm i @gnolang/x402`, or build it from the repository root with `make js`.
 Register it on a stock client and admit ugnot to the client's spend controls:
 
 ```js
 import { x402Client } from "@x402/core/client";
 import { wrapFetchWithPayment } from "@x402/fetch";
-import { ExactGnoScheme } from "@gnoverse/x402-gno/exact/client";
+import { ExactGnoScheme } from "@gnolang/x402/exact/client";
 
 const client = new x402Client();
 client.register("gno:*", new ExactGnoScheme(wallet)); // ← teaches the client gno
@@ -40,7 +40,7 @@ denomination, so an offer priced in another one is paid once an entry lists it. 
 ugnot whatever the price is in.
 
 [`examples/weather/buy.mjs`](../examples/weather/buy.mjs) is a working buyer, and the package
-installs it as the `x402-gno` command: `npx github:gnolang/x402#client/v0.5.2 <seller URL>` runs it
+installs it as the `x402-gno` command: `npx github:gnolang/x402#client/v0.5.3 <seller URL>` runs it
 without a clone. It signs with the mnemonic it is given, so read it first;
 [Paying it](../examples/weather/README.md#paying-it) shows how to make a throwaway key with it.
 
