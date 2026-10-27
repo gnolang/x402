@@ -339,21 +339,44 @@ func TestANodeIsReachedByItsAddress(t *testing.T) {
 	assert.Equal(t, []string{"auth/gasprice", "auth/gasprice", "auth/gasprice"}, rpc.queried())
 }
 
-// TestANilNodeSaysSo: a node a failed NewRPCNode left nil reports that instead
-// of panicking inside a buyer's request.
-func TestANilNodeSaysSo(t *testing.T) {
-	var node *exact.RPCNode
+// TestANodeNewRPCNodeDidNotMakeSaysSo: a node a failed NewRPCNode left nil, or
+// one declared without it, reports that instead of panicking inside a buyer's
+// request.
+func TestANodeNewRPCNodeDidNotMakeSaysSo(t *testing.T) {
 	addr := address(signerFrom(t, test1Mnemonic))
 	ctx := context.Background()
+	for name, node := range map[string]*exact.RPCNode{"nil": nil, "zero": {}} {
+		t.Run(name, func(t *testing.T) {
+			_, err := node.NodeChainID(ctx)
+			require.Error(t, err)
+			_, err = node.GasPrice(ctx)
+			require.Error(t, err)
+			_, err = node.Account(ctx, addr)
+			require.Error(t, err)
+			_, err = node.SessionAccount(ctx, addr, addr)
+			require.Error(t, err)
+		})
+	}
+}
 
-	_, err := node.NodeChainID(ctx)
-	require.Error(t, err)
-	_, err = node.GasPrice(ctx)
-	require.Error(t, err)
-	_, err = node.Account(ctx, addr)
-	require.Error(t, err)
-	_, err = node.SessionAccount(ctx, addr, addr)
-	require.Error(t, err)
+// TestAStatusThatNamesNoChainIsAnError: a payment is signed for the chain the
+// node serves, so a status that names none leaves nothing to check the offer
+// against.
+func TestAStatusThatNamesNoChainIsAnError(t *testing.T) {
+	_, err := nodeOver(t, &stubRPC{status: &ctypes.ResultStatus{}}).NodeChainID(context.Background())
+
+	require.ErrorContains(t, err, "names no chain")
+}
+
+// TestAnErrorWithNoMessageStillSaysWhatFailed: a node, or a proxy in front of
+// it, that answers with an empty JSON-RPC error still gives the buyer an error
+// that names the failure.
+func TestAnErrorWithNoMessageStillSaysWhatFailed(t *testing.T) {
+	node := nodeOver(t, &stubRPC{raw: []byte(`{"jsonrpc": "2.0", "id": "", "error": {"code": -32603, "message": "", "data": ""}}`)})
+
+	_, err := node.GasPrice(context.Background())
+
+	require.ErrorContains(t, err, "an error with no message")
 }
 
 // TestAnAnswerForNoAccountOrAnotherIsAnError: a node that answers with no

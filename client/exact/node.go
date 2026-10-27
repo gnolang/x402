@@ -1,6 +1,7 @@
 package exact
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -119,7 +120,7 @@ func (n *RPCNode) query(ctx context.Context, path string) ([]byte, error) {
 // call makes one JSON-RPC call in its URI form, GET <endpoint>/<method>?<params>,
 // and returns the answer's result.
 func (n *RPCNode) call(ctx context.Context, method string, params url.Values) (json.RawMessage, error) {
-	if n == nil {
+	if n == nil || n.client == nil {
 		return nil, errNoNode
 	}
 	target := n.endpoint + "/" + method
@@ -154,7 +155,8 @@ func (n *RPCNode) call(ctx context.Context, method string, params url.Values) (j
 		return nil, fmt.Errorf("%s at %s: status %d, not a JSON-RPC answer", method, n.shown, res.StatusCode)
 	}
 	if envelope.Error != nil {
-		return nil, fmt.Errorf("%s at %s: %s", method, n.shown, strings.TrimSpace(envelope.Error.Message+" "+envelope.Error.Data))
+		reason := strings.TrimSpace(envelope.Error.Message + " " + envelope.Error.Data)
+		return nil, fmt.Errorf("%s at %s: %s", method, n.shown, cmp.Or(reason, "an error with no message"))
 	}
 	// A node always answers these methods with a result, so one without is no
 	// verdict: read as one, it would be an unfunded account or an unpriced chain.
