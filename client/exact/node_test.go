@@ -315,7 +315,12 @@ func TestTheNodeNamesTheChainItServes(t *testing.T) {
 // a tcp:// address or a URL with no host names nothing a GET can reach, so
 // the node refuses it before any payment reads through it.
 func TestANodeIsReachedByItsHTTPAddress(t *testing.T) {
-	for _, remote := range []string{"", "127.0.0.1:26657", "tcp://127.0.0.1:26657", "ftp://rpc.example", "http://"} {
+	for _, remote := range []string{
+		"", "127.0.0.1:26657", "tcp://127.0.0.1:26657", "ftp://rpc.example", "http://",
+		// A read appends its method to the address, which a query or a
+		// fragment would swallow.
+		"https://rpc.example/?apikey=k", "https://rpc.example/?", "https://rpc.example/#frag",
+	} {
 		_, err := exact.NewRPCNode(remote)
 		assert.Error(t, err, "%q", remote)
 	}
@@ -431,4 +436,10 @@ func TestANodePasswordStaysOutOfErrors(t *testing.T) {
 	_, err = node.GasPrice(context.Background())
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), "s3cret", "an unreachable node")
+
+	for _, refused := range []string{"ftp://buyer:s3cret@rpc.example", "buyer:s3cret@rpc.example:26657"} {
+		_, err = exact.NewRPCNode(refused)
+		require.Error(t, err, "%q", refused)
+		assert.NotContains(t, err.Error(), "s3cret", "a refused address")
+	}
 }

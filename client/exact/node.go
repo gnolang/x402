@@ -40,9 +40,16 @@ var errNoNode = errors.New("x402-gno: no node to read the chain from")
 // answer over 1 MiB is refused. Nothing is signed until the reads have
 // answered, so a read abandoned costs nothing.
 func NewRPCNode(remote string) (*RPCNode, error) {
+	// The remote is left out of the error: a refused one may carry a password
+	// where no URL parser finds it to mask.
 	u, err := url.Parse(remote)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return nil, fmt.Errorf("x402-gno: %q is not a node's RPC address: give its http(s) URL", remote)
+		return nil, errors.New("x402-gno: a node's RPC address is an http(s) URL with a host")
+	}
+	// Each read appends its method to the address, which a query or a fragment
+	// would swallow.
+	if u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return nil, errors.New("x402-gno: a node's RPC address takes no query or fragment")
 	}
 	return &RPCNode{
 		endpoint: strings.TrimSuffix(u.String(), "/"),
