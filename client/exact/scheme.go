@@ -38,7 +38,7 @@ import (
 	x402 "github.com/x402-foundation/x402/go/v2"
 	"github.com/x402-foundation/x402/go/v2/types"
 
-	facilitatorexact "github.com/gnolang/x402/facilitator/exact"
+	"github.com/gnolang/x402/internal/scheme"
 )
 
 const schemeExact = "exact"
@@ -126,8 +126,8 @@ type Signer interface {
 // Node is the chain access a payment needs before it is signed: which chain the
 // node serves, the number and sequence of the account the signature is verified
 // against, and the gas price the fee follows. Nothing is broadcast through it;
-// the seller's facilitator broadcasts the payment. Implemented by the gnoclient
-// adapter NewGnoclientNode and by fakes in tests.
+// the seller's facilitator broadcasts the payment. Implemented by RPCNode and by
+// fakes in tests.
 type Node interface {
 	// NodeChainID is the chain id the node reports for itself.
 	NodeChainID(ctx context.Context) (string, error)
@@ -340,8 +340,8 @@ func readTerms(req types.PaymentRequirements) (terms, error) {
 	// §6.1 reserves both keys: an offer naming a transfer method or a flow this
 	// mechanism does not implement is not one it may sign a payment for. A key
 	// set to null names nothing, as upstream's SDKs read it.
-	if v := req.Extra["assetTransferMethod"]; v != nil && v != facilitatorexact.AssetTransferMethod {
-		return terms{}, refuse("assetTransferMethod %v is not %s", v, facilitatorexact.AssetTransferMethod)
+	if v := req.Extra["assetTransferMethod"]; v != nil && v != scheme.AssetTransferMethod {
+		return terms{}, refuse("assetTransferMethod %v is not %s", v, scheme.AssetTransferMethod)
 	}
 	if v := req.Extra["paymentFlow"]; v != nil && v != string(x402.PaymentFlowAuthorization) {
 		return terms{}, refuse("paymentFlow %v is not %s", v, x402.PaymentFlowAuthorization)
@@ -374,7 +374,7 @@ func refuse(format string, args ...any) error {
 // "gno:*", which names a pattern rather than a chain.
 func chainIDOf(network string) (string, bool) {
 	ns, chainID, _ := strings.Cut(network, ":")
-	if ns != namespace || facilitatorexact.ValidChainID(chainID) != nil {
+	if ns != namespace || scheme.ValidChainID(chainID) != nil {
 		return "", false
 	}
 	return chainID, true
@@ -396,8 +396,8 @@ func boundMemo(extra map[string]any) (string, error) {
 	if !ok {
 		return "", refuse("extra.memo is %T, want string", v)
 	}
-	if len(memo) > facilitatorexact.MaxMemoBytes {
-		return "", refuse("extra.memo is %d bytes, exceeding the %d-byte maximum", len(memo), facilitatorexact.MaxMemoBytes)
+	if len(memo) > scheme.MaxMemoBytes {
+		return "", refuse("extra.memo is %d bytes, exceeding the %d-byte maximum", len(memo), scheme.MaxMemoBytes)
 	}
 	return memo, nil
 }

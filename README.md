@@ -103,8 +103,8 @@ From Go, register [`client/exact`](client/exact) on upstream's Go client:
 ```go
 import clientexact "github.com/gnolang/x402/client/exact"
 
-signer, _ := clientexact.KeybaseSigner(kb, "buyer", password)           // a key gnokey keeps
-node := clientexact.NewGnoclientNode(&gnoclient.Client{RPCClient: rpc}) // a node on onyx-1
+signer, _ := clientexact.KeybaseSigner(kb, "buyer", password)                // a key gnokey keeps
+node, _ := clientexact.NewRPCNode("https://rpc.onyx.testnets.gno.land:443") // a node on onyx-1
 
 client := x402.Newx402Client().
 	Register("gno:onyx-1", clientexact.NewExactGnoScheme(signer, node)).

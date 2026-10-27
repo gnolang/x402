@@ -4,5 +4,6 @@
 !go.mod
 !go.sum
 !facilitator/
+!internal/
 !server/
 !examples/weather/
