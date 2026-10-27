@@ -23,6 +23,7 @@ RUN go mod download
 # Only the packages the seller is built from, so an edit elsewhere in the
 # repository leaves the build cache warm.
 COPY facilitator/ facilitator/
+COPY internal/ internal/
 COPY server/ server/
 COPY examples/weather/ examples/weather/
 # Declared after the download, so both platforms share its layer.
