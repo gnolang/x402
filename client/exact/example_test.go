@@ -51,7 +51,7 @@ func ExampleNewExactGnoScheme() {
 	// buyer forever.
 	paying := x402http.WrapHTTPClientWithPayment(&http.Client{Timeout: time.Minute}, x402http.Newx402HTTPClient(client))
 
-	res, err := paying.Get("https://x402-demo.onyx.testnets.gno.land/weather")
+	res, err := paying.Get("https://x402.gno.dev/weather")
 	if err != nil {
 		panic(err)
 	}

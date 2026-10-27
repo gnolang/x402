@@ -25,7 +25,7 @@ and the retry. This repository supplies the parts that know about gno:
 
 ## Try it
 
-<https://x402-demo.onyx.testnets.gno.land/weather> sells sample weather for 0.25 GNOT (250000ugnot)
+<https://x402.gno.dev/weather> sells sample weather for 0.25 GNOT (250000ugnot)
 on the onyx testnet (`gno:onyx-1`). A browser with the [Adena](https://adena.app) wallet pays from
 the page, and a terminal pays with the two commands in
 [examples/weather](examples/weather#paying-it).

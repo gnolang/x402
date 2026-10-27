@@ -6,7 +6,7 @@ seller is not a realm, makes no contract call and does not know a chain exists: 
 gno-specific in [`main.go`](main.go) is a network string, one registered scheme and the page a
 browser gets.
 
-A hosted copy runs on the onyx testnet at <https://x402-demo.onyx.testnets.gno.land/weather>, at
+A hosted copy runs on the onyx testnet at <https://x402.gno.dev/weather>, at
 0.25 GNOT (250000ugnot) a reading. A terminal [pays it](#paying-it) with two commands.
 
 ## Local demo
@@ -195,7 +195,7 @@ need git and Node 22.18+ or 24.11+.
 2. Make a throwaway key:
 
    ```sh
-   npx github:gnolang/x402#client/v0.5.4 --new-key https://x402-demo.onyx.testnets.gno.land/weather
+   npx github:gnolang/x402#client/v0.5.4 --new-key https://x402.gno.dev/weather
    ```
 
    It prints a fresh 24-word mnemonic, the address it pays from and the command that pays the
@@ -205,7 +205,7 @@ need git and Node 22.18+ or 24.11+.
 4. Run the command step 2 printed. It has this shape, with the mnemonic in place of `<mnemonic>`:
 
    ```sh
-   X402_MNEMONIC='<mnemonic>' npx github:gnolang/x402#client/v0.5.4 https://x402-demo.onyx.testnets.gno.land/weather
+   X402_MNEMONIC='<mnemonic>' npx github:gnolang/x402#client/v0.5.4 https://x402.gno.dev/weather
    ```
 
 npx fetches the repository at that tag, builds the client mechanism and runs the root package's
@@ -215,8 +215,8 @@ case run the buyer from a clone, from the repository root:
 
 ```sh
 make js               # build the client mechanism buy.mjs imports
-node examples/weather/buy.mjs --new-key https://x402-demo.onyx.testnets.gno.land/weather
-X402_MNEMONIC='<mnemonic>' node examples/weather/buy.mjs https://x402-demo.onyx.testnets.gno.land/weather
+node examples/weather/buy.mjs --new-key https://x402.gno.dev/weather
+X402_MNEMONIC='<mnemonic>' node examples/weather/buy.mjs https://x402.gno.dev/weather
 ```
 
 The Go buyer, [`x402-gno`](https://github.com/gnolang/x402/blob/v0.7.0/examples/weather/x402-gno/main.go),
@@ -224,8 +224,8 @@ takes the same steps with `go run`. It needs Go 1.26.5 or later, which Go 1.21 a
 themselves unless `GOTOOLCHAIN` is `local`. Read it first too:
 
 ```sh
-go run github.com/gnolang/x402/examples/weather/x402-gno@v0.7.0 --new-key https://x402-demo.onyx.testnets.gno.land/weather
-X402_MNEMONIC='<mnemonic>' go run github.com/gnolang/x402/examples/weather/x402-gno@v0.7.0 https://x402-demo.onyx.testnets.gno.land/weather
+go run github.com/gnolang/x402/examples/weather/x402-gno@v0.7.0 --new-key https://x402.gno.dev/weather
+X402_MNEMONIC='<mnemonic>' go run github.com/gnolang/x402/examples/weather/x402-gno@v0.7.0 https://x402.gno.dev/weather
 ```
 
 `go run` fetches the Go module at that release and builds the buyer, about 100 MB of modules the
