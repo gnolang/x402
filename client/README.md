@@ -40,7 +40,7 @@ denomination, so an offer priced in another one is paid once an entry lists it. 
 ugnot whatever the price is in.
 
 [`examples/weather/buy.mjs`](../examples/weather/buy.mjs) is a working buyer, and the package
-installs it as the `x402-gno` command: `npx github:gnolang/x402#client/v0.5.3 <seller URL>` runs it
+installs it as the `x402-gno` command: `npx github:gnolang/x402#client/v0.5.4 <seller URL>` runs it
 without a clone. It signs with the mnemonic it is given, so read it first;
 [Paying it](../examples/weather/README.md#paying-it) shows how to make a throwaway key with it.
 
