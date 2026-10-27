@@ -450,16 +450,16 @@ const client = new x402Client()
       <div class="runtime" id="code-go">
         <h3>With Go</h3>
         <ol class="steps">
-          <li><div><p><b>Read the buyer.</b> <a href="https://github.com/gnolang/x402/blob/v0.6.0/examples/weather/x402-gno/main.go">examples/weather/x402-gno/main.go</a> is the whole buyer the commands below run.</p></div></li>
+          <li><div><p><b>Read the buyer.</b> <a href="https://github.com/gnolang/x402/blob/v0.7.0/examples/weather/x402-gno/main.go">examples/weather/x402-gno/main.go</a> is the whole buyer the commands below run.</p></div></li>
           <li><div><p><b>Make a throwaway key.</b> This prints a new mnemonic, its address and the command that pays this page with it, and saves none of them.</p>
-            <pre data-copy><code>go run github.com/gnolang/x402/examples/weather/x402-gno@v0.6.0 <span class="nowrap">--new-key</span> <span data-pay-url>&lt;this page's URL&gt;</span></code></pre></div></li>
+            <pre data-copy><code>go run github.com/gnolang/x402/examples/weather/x402-gno@v0.7.0 <span class="nowrap">--new-key</span> <span data-pay-url>&lt;this page's URL&gt;</span></code></pre></div></li>
           {{template "fund" .}}
           <li><div><p><b>Pay</b> with the command step 2 printed. It looks like this, and prints the transaction and the weather.</p>
-            <pre><code>X402_MNEMONIC='&lt;mnemonic&gt;' go run github.com/gnolang/x402/examples/weather/x402-gno@v0.6.0 <span data-pay-url>&lt;this page's URL&gt;</span></code></pre></div></li>
+            <pre><code>X402_MNEMONIC='&lt;mnemonic&gt;' go run github.com/gnolang/x402/examples/weather/x402-gno@v0.7.0 <span data-pay-url>&lt;this page's URL&gt;</span></code></pre></div></li>
         </ol>
         <p>Both commands need Go 1.26.5 or later, which Go 1.21 and later fetch by themselves unless <code>GOTOOLCHAIN</code> is <code>local</code>. The first run downloads about 100 MB of modules and builds the buyer. Running it from a clone, or against another node, is in the <a href="https://github.com/gnolang/x402/tree/main/examples/weather#paying-it">weather example's README</a>.</p>
         <p>To keep the buyer as the <code>x402-gno</code> command, install it:</p>
-        <pre data-copy><code>go install github.com/gnolang/x402/examples/weather/x402-gno@v0.6.0</code></pre>
+        <pre data-copy><code>go install github.com/gnolang/x402/examples/weather/x402-gno@v0.7.0</code></pre>
         <p class="warn">Testnet only. The mechanism is unaudited and pre-release; do not point it at real funds.</p>
         <p>A stock x402 client pays in gno once the scheme is registered for the network, with a node on that chain, and <code>ugnot</code> is admitted to its spend controls, capped per request.</p>
         <pre class="snippet" data-copy><code tabindex="0">import clientexact "github.com/gnolang/x402/client/exact"
