@@ -73,7 +73,7 @@ client := x402.Newx402Client().
 	}})
 
 paid := x402http.WrapHTTPClientWithPayment(&http.Client{Timeout: time.Minute}, x402http.Newx402HTTPClient(client))
-res, err := paid.Get("https://x402-demo.onyx.testnets.gno.land/weather")
+res, err := paid.Get("https://x402.gno.dev/weather")
 ```
 
 [`examples/weather/x402-gno`](../examples/weather/x402-gno/main.go) is a working buyer built on
