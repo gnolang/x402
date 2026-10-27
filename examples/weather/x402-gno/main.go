@@ -40,6 +40,7 @@ import (
 	x402http "github.com/x402-foundation/x402/go/v2/http"
 
 	clientexact "github.com/gnolang/x402/client/exact"
+	"github.com/gnolang/x402/client/exact/keybase"
 )
 
 // gno's well-known test1 mnemonic, the default for a local test chain.
@@ -101,13 +102,17 @@ func run(args []string, getenv func(string) string, out io.Writer) int {
 }
 
 // rpcFor returns the node to read the account from for a payment on network,
-// "gno:<chain id>". A node reports its address in tm2's own form, which names
-// the transport rather than the scheme an HTTP client needs.
+// "gno:<chain id>", as an http(s) URL. A node reports its address in tm2's own
+// form, which names the transport rather than the scheme an HTTP client needs,
+// and gnokey's -remote takes a bare host:port.
 func rpcFor(network string, getenv func(string) string) string {
 	chain, _ := strings.CutPrefix(network, "gno:")
 	rpc := cmp.Or(getenv("X402_GNO_RPC"), publicRPC[chain], localRPC)
 	if addr, ok := strings.CutPrefix(rpc, "tcp://"); ok {
 		return "http://" + addr
+	}
+	if !strings.Contains(rpc, "://") {
+		return "http://" + rpc
 	}
 	return rpc
 }
@@ -205,7 +210,7 @@ func pay(out io.Writer, sellerURL string, getenv func(string) string) (bool, err
 	if err != nil {
 		return false, err
 	}
-	signer, err := clientexact.KeybaseSigner(kb, "buyer", "")
+	signer, err := keybase.Signer(kb, "buyer", "")
 	if err != nil {
 		return false, err
 	}

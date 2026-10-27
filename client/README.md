@@ -59,10 +59,11 @@ import (
 	x402http "github.com/x402-foundation/x402/go/v2/http"
 
 	clientexact "github.com/gnolang/x402/client/exact"
+	"github.com/gnolang/x402/client/exact/keybase"
 )
 
 kb, _ := keys.NewKeyBaseFromDir(gnokeyHome) // the keys gnokey keeps
-signer, _ := clientexact.KeybaseSigner(kb, "buyer", password)
+signer, _ := keybase.Signer(kb, "buyer", password)
 node, _ := clientexact.NewRPCNode("https://rpc.onyx.testnets.gno.land:443")
 
 client := x402.Newx402Client().
@@ -87,7 +88,8 @@ escapes those and the JavaScript one does not, so the chain refuses the JavaScri
 such a memo. The Go mechanism differs in these ways:
 
 - **The signer is any key.** `Signer` is a public key and a sign method, so a `crypto.PrivKey` is
-  one, and `KeybaseSigner` adapts a key gnokey keeps, a Ledger key included.
+  one, and [`keybase.Signer`](exact/keybase) adapts a key gnokey keeps, a Ledger key included. It
+  is a package of its own, so a buyer that signs elsewhere links no keybase and no Ledger code.
 - **The key can sign somewhere else.** `clientexact.Prepare` builds and checks a payment without
   signing it, so a buyer can show a person the price first, or have gnokey or a device sign.
   `Payment.Payload` verifies that signature, over either rendering of the sign doc the chain
@@ -222,7 +224,7 @@ The Go mechanism wraps those in `ErrInvalidRequirements`, and also refuses:
 - an amount past what one coin holds;
 - a price above the spend cap, as `ErrExceedsSpendCap`, and a fee above 1 GNOT, as
   `ErrExcessiveFee`;
-- a multisig key, and an offline one in `KeybaseSigner`, since neither can make a payment that
+- a multisig key, and an offline one in `keybase.Signer`, since neither can make a payment that
   settles. These two refuse the buyer's own key rather than the offer, so they do not wrap
   `ErrInvalidRequirements`.
 

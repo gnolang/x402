@@ -98,7 +98,7 @@ func TestASessionPaymentIsTheTypeScriptMechanismsByteForByte(t *testing.T) {
 // facilitator's interop fixture, a payment @gnolang/gno-js-client 2 signed for
 // test1 at account 0, sequence 0 on chain dev. That SDK signed the fee in its
 // gas_wanted/gas_fee rendering, which the chain still accepts. Signing that same
-// sign doc through KeybaseSigner reproduces the SDK's signature byte for byte,
+// sign doc through keybase.Signer reproduces the SDK's signature byte for byte,
 // so the key a mnemonic yields and what it signs agree across the two SDKs.
 func TestKeybaseSignerSignsWhatTheJSSDKSigned(t *testing.T) {
 	signed := decode(t, fixture(t, "..", "..", "facilitator", "exact", "testdata", "gnojs_signed_send.b64"))

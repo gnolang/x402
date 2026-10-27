@@ -310,13 +310,14 @@ func TestTheNodeNamesTheChainItServes(t *testing.T) {
 	assert.Equal(t, "onyx-1", served)
 }
 
-// TestANodeIsReachedByItsHTTPAddress: the node is named by the http(s) URL its
-// RPC server listens at, a trailing slash included. A gnokey-style host:port,
-// a tcp:// address or a URL with no host names nothing a GET can reach, so
-// the node refuses it before any payment reads through it.
-func TestANodeIsReachedByItsHTTPAddress(t *testing.T) {
+// TestANodeIsReachedByItsAddress: the node is named by the http(s) URL its
+// RPC server listens at, a trailing slash included, by the tcp:// address a
+// node's configuration gives it, or by the bare host:port gnokey's -remote
+// takes. An address with no host, or another scheme, names nothing a GET can
+// reach, so the node refuses it before any payment reads through it.
+func TestANodeIsReachedByItsAddress(t *testing.T) {
 	for _, remote := range []string{
-		"", "127.0.0.1:26657", "tcp://127.0.0.1:26657", "ftp://rpc.example", "http://",
+		"", "ftp://rpc.example", "http://", "http://:26657", ":26657", "tcp://", "tcp://:26657",
 		// A read appends its method to the address, which a query or a
 		// fragment would swallow.
 		"https://rpc.example/?apikey=k", "https://rpc.example/?", "https://rpc.example/#frag",
@@ -328,28 +329,54 @@ func TestANodeIsReachedByItsHTTPAddress(t *testing.T) {
 	rpc := &stubRPC{answers: map[string]abci.ResponseQuery{"auth/gasprice": answering(onyxGasPrice)}}
 	server := httptest.NewServer(rpc)
 	t.Cleanup(server.Close)
-	node, err := exact.NewRPCNode(server.URL + "/")
-	require.NoError(t, err)
-	_, err = node.GasPrice(context.Background())
-	require.NoError(t, err)
-	assert.Equal(t, []string{"auth/gasprice"}, rpc.queried())
+	hostPort := strings.TrimPrefix(server.URL, "http://")
+	for _, remote := range []string{server.URL + "/", "tcp://" + hostPort, hostPort} {
+		node, err := exact.NewRPCNode(remote)
+		require.NoError(t, err, "%q", remote)
+		_, err = node.GasPrice(context.Background())
+		require.NoError(t, err, "%q", remote)
+	}
+	assert.Equal(t, []string{"auth/gasprice", "auth/gasprice", "auth/gasprice"}, rpc.queried())
 }
 
-// TestANilNodeSaysSo: a node a failed NewRPCNode left nil reports that instead
-// of panicking inside a buyer's request.
-func TestANilNodeSaysSo(t *testing.T) {
-	var node *exact.RPCNode
+// TestANodeNewRPCNodeDidNotMakeSaysSo: a node a failed NewRPCNode left nil, or
+// one declared without it, reports that instead of panicking inside a buyer's
+// request.
+func TestANodeNewRPCNodeDidNotMakeSaysSo(t *testing.T) {
 	addr := address(signerFrom(t, test1Mnemonic))
 	ctx := context.Background()
+	for name, node := range map[string]*exact.RPCNode{"nil": nil, "zero": {}} {
+		t.Run(name, func(t *testing.T) {
+			_, err := node.NodeChainID(ctx)
+			require.Error(t, err)
+			_, err = node.GasPrice(ctx)
+			require.Error(t, err)
+			_, err = node.Account(ctx, addr)
+			require.Error(t, err)
+			_, err = node.SessionAccount(ctx, addr, addr)
+			require.Error(t, err)
+		})
+	}
+}
 
-	_, err := node.NodeChainID(ctx)
-	require.Error(t, err)
-	_, err = node.GasPrice(ctx)
-	require.Error(t, err)
-	_, err = node.Account(ctx, addr)
-	require.Error(t, err)
-	_, err = node.SessionAccount(ctx, addr, addr)
-	require.Error(t, err)
+// TestAStatusThatNamesNoChainIsAnError: a payment is signed for the chain the
+// node serves, so a status that names none leaves nothing to check the offer
+// against.
+func TestAStatusThatNamesNoChainIsAnError(t *testing.T) {
+	_, err := nodeOver(t, &stubRPC{status: &ctypes.ResultStatus{}}).NodeChainID(context.Background())
+
+	require.ErrorContains(t, err, "names no chain")
+}
+
+// TestAnErrorWithNoMessageStillSaysWhatFailed: a node, or a proxy in front of
+// it, that answers with an empty JSON-RPC error still gives the buyer an error
+// that names the failure.
+func TestAnErrorWithNoMessageStillSaysWhatFailed(t *testing.T) {
+	node := nodeOver(t, &stubRPC{raw: []byte(`{"jsonrpc": "2.0", "id": "", "error": {"code": -32603, "message": "", "data": ""}}`)})
+
+	_, err := node.GasPrice(context.Background())
+
+	require.ErrorContains(t, err, "an error with no message")
 }
 
 // TestAnAnswerForNoAccountOrAnotherIsAnError: a node that answers with no
@@ -437,7 +464,7 @@ func TestANodePasswordStaysOutOfErrors(t *testing.T) {
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), "s3cret", "an unreachable node")
 
-	for _, refused := range []string{"ftp://buyer:s3cret@rpc.example", "buyer:s3cret@rpc.example:26657"} {
+	for _, refused := range []string{"ftp://buyer:s3cret@rpc.example", "buyer:s3cret@:26657"} {
 		_, err = exact.NewRPCNode(refused)
 		require.Error(t, err, "%q", refused)
 		assert.NotContains(t, err.Error(), "s3cret", "a refused address")

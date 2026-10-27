@@ -14,6 +14,7 @@ import (
 	"github.com/x402-foundation/x402/go/v2/types"
 
 	"github.com/gnolang/x402/client/exact"
+	"github.com/gnolang/x402/client/exact/keybase"
 )
 
 const (
@@ -65,7 +66,7 @@ func signerFrom(t *testing.T, mnemonic string) exact.Signer {
 	kb := keys.NewInMemory()
 	_, err := kb.CreateAccount("buyer", mnemonic, "", "", 0, 0)
 	require.NoError(t, err)
-	signer, err := exact.KeybaseSigner(kb, "buyer", "")
+	signer, err := keybase.Signer(kb, "buyer", "")
 	require.NoError(t, err)
 	return signer
 }

@@ -113,7 +113,7 @@ var ErrExcessiveFee = errors.New("x402-gno: network fee too high")
 // Signer holds the key a payment is signed with: the paying account's own key,
 // or a session key the paying account registered (see WithMaster).
 //
-// A crypto.PrivKey is one. KeybaseSigner adapts a key gnokey keeps, a Ledger
+// A crypto.PrivKey is one. Package keybase adapts a key gnokey keeps, a Ledger
 // key included.
 type Signer interface {
 	// PubKey is the key the chain verifies the signature against.

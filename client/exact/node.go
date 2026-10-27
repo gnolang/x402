@@ -1,6 +1,7 @@
 package exact
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -30,21 +31,28 @@ const maxAnswerBytes = 1 << 20
 var errNoNode = errors.New("x402-gno: no node to read the chain from")
 
 // NewRPCNode returns the chain access a payment needs, read from the node whose
-// RPC server listens at remote, an http(s) URL such as
-// https://rpc.onyx.testnets.gno.land:443. Nothing is signed or broadcast
-// through it: the scheme's Signer signs, and the seller's facilitator
-// broadcasts. It holds no state beyond the address and an HTTP client, so one
-// instance is safe to share across concurrent payments.
+// RPC server listens at remote: an http(s) URL such as
+// https://rpc.onyx.testnets.gno.land:443, a tcp:// address as a node's
+// configuration writes it, or a bare host:port as gnokey's -remote takes it,
+// the last two read over plain http. Nothing is signed or broadcast through
+// it: the scheme's Signer signs, and the seller's facilitator broadcasts. It
+// holds no state beyond the address and an HTTP client, so one instance is
+// safe to share across concurrent payments.
 //
 // Every read is bounded by 60 seconds and by the context it is given, and an
 // answer over 1 MiB is refused. Nothing is signed until the reads have
 // answered, so a read abandoned costs nothing.
 func NewRPCNode(remote string) (*RPCNode, error) {
+	if rest, ok := strings.CutPrefix(remote, "tcp://"); ok {
+		remote = "http://" + rest
+	} else if !strings.Contains(remote, "://") {
+		remote = "http://" + remote
+	}
 	// The remote is left out of the error: a refused one may carry a password
 	// where no URL parser finds it to mask.
 	u, err := url.Parse(remote)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return nil, errors.New("x402-gno: a node's RPC address is an http(s) URL with a host")
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+		return nil, errors.New("x402-gno: a node's RPC address is an http(s) URL, a tcp:// address or a host:port, with a host")
 	}
 	// Each read appends its method to the address, which a query or a fragment
 	// would swallow.
@@ -112,7 +120,7 @@ func (n *RPCNode) query(ctx context.Context, path string) ([]byte, error) {
 // call makes one JSON-RPC call in its URI form, GET <endpoint>/<method>?<params>,
 // and returns the answer's result.
 func (n *RPCNode) call(ctx context.Context, method string, params url.Values) (json.RawMessage, error) {
-	if n == nil {
+	if n == nil || n.client == nil {
 		return nil, errNoNode
 	}
 	target := n.endpoint + "/" + method
@@ -147,7 +155,8 @@ func (n *RPCNode) call(ctx context.Context, method string, params url.Values) (j
 		return nil, fmt.Errorf("%s at %s: status %d, not a JSON-RPC answer", method, n.shown, res.StatusCode)
 	}
 	if envelope.Error != nil {
-		return nil, fmt.Errorf("%s at %s: %s", method, n.shown, strings.TrimSpace(envelope.Error.Message+" "+envelope.Error.Data))
+		reason := strings.TrimSpace(envelope.Error.Message + " " + envelope.Error.Data)
+		return nil, fmt.Errorf("%s at %s: %s", method, n.shown, cmp.Or(reason, "an error with no message"))
 	}
 	// A node always answers these methods with a result, so one without is no
 	// verdict: read as one, it would be an unfunded account or an unpriced chain.

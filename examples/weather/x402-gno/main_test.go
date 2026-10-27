@@ -346,6 +346,7 @@ func TestRPCForPicksTheNodeOfTheOffersChain(t *testing.T) {
 		"any other chain":           {"gno:dev", "", "http://127.0.0.1:26657"},
 		"X402_GNO_RPC set":          {"gno:onyx-1", "http://node.test:26657", "http://node.test:26657"},
 		"a node in tm2's own form":  {"gno:dev", "tcp://127.0.0.1:26657", "http://127.0.0.1:26657"},
+		"a node in gnokey's form":   {"gno:dev", "127.0.0.1:26657", "http://127.0.0.1:26657"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -17,6 +17,7 @@ import (
 	x402http "github.com/x402-foundation/x402/go/v2/http"
 
 	clientexact "github.com/gnolang/x402/client/exact"
+	"github.com/gnolang/x402/client/exact/keybase"
 )
 
 // TestAGoClientPaysAGnoSeller is the Go buyer's half of the claim: upstream's
@@ -80,7 +81,7 @@ func goBuyerCmd(ts *testscript.TestScript, neg bool, args []string) {
 	kb := keys.NewInMemory()
 	_, err := kb.CreateAccount("buyer", mnemonic, "", "", 0, 0)
 	ts.Check(err)
-	signer, err := clientexact.KeybaseSigner(kb, "buyer", "")
+	signer, err := keybase.Signer(kb, "buyer", "")
 	ts.Check(err)
 	node, err := clientexact.NewRPCNode(httpURL(ts.Getenv("X402_GNO_RPC")))
 	ts.Check(err)

@@ -1,4 +1,4 @@
-package exact_test
+package keybase_test
 
 import (
 	"sync"
@@ -11,20 +11,31 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/gnolang/x402/client/exact"
+	"github.com/gnolang/x402/client/exact/keybase"
 )
 
-// TestKeybaseSignerSignsWithTheKeyItNames: the signer's public key is the
+const (
+	// test1Mnemonic is gno's well-known test1 key. Nothing here is broadcast.
+	test1Mnemonic = "source bonus chronic canvas draft south burst lottery vacant surface solve popular case indicate oppose farm nothing bullet exhibit title speed wink action roast"
+
+	// test1Address is the address test1Mnemonic derives.
+	test1Address = "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5"
+
+	// sessionMnemonic is a second public key, never funded.
+	sessionMnemonic = "dance carry grunt uphold cloth wire usage usage clock reduce surprise page destroy reopen multiply away defense promote person web cigar immense armed enough"
+)
+
+// TestTheSignerSignsWithTheKeyItNames: the signer's public key is the
 // keybase's, found by name or by address, and what it signs verifies against
 // that key.
-func TestKeybaseSignerSignsWithTheKeyItNames(t *testing.T) {
+func TestTheSignerSignsWithTheKeyItNames(t *testing.T) {
 	kb := keys.NewInMemory()
 	info, err := kb.CreateAccount("buyer", test1Mnemonic, "", "", 0, 0)
 	require.NoError(t, err)
 
 	for _, name := range []string{"buyer", test1Address} {
 		t.Run(name, func(t *testing.T) {
-			signer, err := exact.KeybaseSigner(kb, name, "")
+			signer, err := keybase.Signer(kb, name, "")
 			require.NoError(t, err)
 
 			signature, err := signer.Sign([]byte("sign bytes"))
@@ -35,60 +46,62 @@ func TestKeybaseSignerSignsWithTheKeyItNames(t *testing.T) {
 	}
 }
 
-// TestKeybaseSignerRefusesAKeyTheKeybaseDoesNotHold: a missing key is an
+// TestTheSignerRefusesAKeyTheKeybaseDoesNotHold: a missing key is an
 // error when the signer is made, before any payment is attempted with it.
-func TestKeybaseSignerRefusesAKeyTheKeybaseDoesNotHold(t *testing.T) {
-	_, err := exact.KeybaseSigner(keys.NewInMemory(), "buyer", "")
+func TestTheSignerRefusesAKeyTheKeybaseDoesNotHold(t *testing.T) {
+	_, err := keybase.Signer(keys.NewInMemory(), "buyer", "")
 
 	require.Error(t, err)
 }
 
-// TestKeybaseSignerSignsNothingWithTheWrongPassword: a key kept encrypted
+// TestTheSignerSignsNothingWithTheWrongPassword: a key kept encrypted
 // signs only with its password, so the first payment made with the wrong one
 // fails rather than producing a signature.
-func TestKeybaseSignerSignsNothingWithTheWrongPassword(t *testing.T) {
+func TestTheSignerSignsNothingWithTheWrongPassword(t *testing.T) {
 	kb := keys.NewInMemory()
 	_, err := kb.CreateAccount("buyer", test1Mnemonic, "", "right", 0, 0)
 	require.NoError(t, err)
 
-	wrong, err := exact.KeybaseSigner(kb, "buyer", "wrong")
+	wrong, err := keybase.Signer(kb, "buyer", "wrong")
 	require.NoError(t, err)
 	_, err = wrong.Sign([]byte("sign bytes"))
 	require.Error(t, err)
 
-	right, err := exact.KeybaseSigner(kb, "buyer", "right")
+	right, err := keybase.Signer(kb, "buyer", "right")
 	require.NoError(t, err)
 	_, err = right.Sign([]byte("sign bytes"))
 	require.NoError(t, err)
 }
 
-// TestKeybaseSignerRefusesAKeyThatCannotSign: a keybase may hold only a key's
+// TestTheSignerRefusesAKeyThatCannotSign: a keybase may hold only a key's
 // public half, an offline key or a multisig key. Neither can ever sign, so the
 // signer refuses it when it is made, rather than let a payment read the chain
 // and fail after, or tell the buyer to fund an address it cannot pay from.
-func TestKeybaseSignerRefusesAKeyThatCannotSign(t *testing.T) {
-	pub := signerFrom(t, test1Mnemonic).PubKey()
+func TestTheSignerRefusesAKeyThatCannotSign(t *testing.T) {
 	kb := keys.NewInMemory()
-	_, err := kb.CreateOffline("watch-only", pub)
+	info, err := keys.NewInMemory().CreateAccount("buyer", test1Mnemonic, "", "", 0, 0)
+	require.NoError(t, err)
+	pub := info.GetPubKey()
+	_, err = kb.CreateOffline("watch-only", pub)
 	require.NoError(t, err)
 	_, err = kb.CreateMulti("shared", multisig.NewPubKeyMultisigThreshold(1, []crypto.PubKey{pub}))
 	require.NoError(t, err)
 
-	_, err = exact.KeybaseSigner(kb, "watch-only", "")
+	_, err = keybase.Signer(kb, "watch-only", "")
 	require.ErrorContains(t, err, "offline key, which cannot sign")
-	_, err = exact.KeybaseSigner(kb, "shared", "")
+	_, err = keybase.Signer(kb, "shared", "")
 	require.ErrorContains(t, err, "multi key, which cannot sign")
 }
 
-// TestKeybaseSignerSignsConcurrentlyFromAKeybaseOnDisk: gnokey's keybase on
+// TestTheSignerSignsConcurrentlyFromAKeybaseOnDisk: gnokey's keybase on
 // disk locks its database for each signature, so payments signing at once
 // take their turns rather than failing all but one.
-func TestKeybaseSignerSignsConcurrentlyFromAKeybaseOnDisk(t *testing.T) {
+func TestTheSignerSignsConcurrentlyFromAKeybaseOnDisk(t *testing.T) {
 	kb, err := keys.NewKeyBaseFromDir(t.TempDir())
 	require.NoError(t, err)
 	_, err = kb.CreateAccount("buyer", test1Mnemonic, "", "pw", 0, 0)
 	require.NoError(t, err)
-	signer, err := exact.KeybaseSigner(kb, "buyer", "pw")
+	signer, err := keybase.Signer(kb, "buyer", "pw")
 	require.NoError(t, err)
 
 	var wg sync.WaitGroup
@@ -103,10 +116,10 @@ func TestKeybaseSignerSignsConcurrentlyFromAKeybaseOnDisk(t *testing.T) {
 	}
 }
 
-// TestAKeybaseSignerMadeDuringASignatureWaitsForIt: finding a key opens
+// TestASignerMadeDuringASignatureWaitsForIt: finding a key opens
 // gnokey's keybase on disk too, so a signer made while another key of the same
 // home signs waits its turn rather than fail with the database locked.
-func TestAKeybaseSignerMadeDuringASignatureWaitsForIt(t *testing.T) {
+func TestASignerMadeDuringASignatureWaitsForIt(t *testing.T) {
 	disk, err := keys.NewKeyBaseFromDir(t.TempDir())
 	require.NoError(t, err)
 	_, err = disk.CreateAccount("buyer", test1Mnemonic, "", "pw", 0, 0)
@@ -114,7 +127,7 @@ func TestAKeybaseSignerMadeDuringASignatureWaitsForIt(t *testing.T) {
 	_, err = disk.CreateAccount("session", sessionMnemonic, "", "pw", 0, 0)
 	require.NoError(t, err)
 	kb := &pausedKeybase{Keybase: disk, signing: make(chan struct{}), resume: make(chan struct{})}
-	buyer, err := exact.KeybaseSigner(kb, "buyer", "pw")
+	buyer, err := keybase.Signer(kb, "buyer", "pw")
 	require.NoError(t, err)
 
 	signed, made := make(chan struct{}), make(chan struct{})
@@ -126,7 +139,7 @@ func TestAKeybaseSignerMadeDuringASignatureWaitsForIt(t *testing.T) {
 	<-kb.signing
 	go func() {
 		defer close(made)
-		_, makeErr = exact.KeybaseSigner(kb, "session", "pw")
+		_, makeErr = keybase.Signer(kb, "session", "pw")
 	}()
 
 	assert.Never(t, closed(made), 200*time.Millisecond, 10*time.Millisecond)
