@@ -56,7 +56,7 @@ accident and needs no build tag to stay out of the way.
   whose purpose isn't obvious.
 - `gofmt` runs over `.`, not a named tree, so a new Go directory is covered without
   editing anything.
-- `e2e/buyer.mjs` imports the client as `@gnoverse/x402-gno/exact/client`, through the
+- `e2e/buyer.mjs` imports the client as `@gnolang/x402/exact/client`, through the
   manifest's `exports` map, so the payment test exercises the map. Keep that import; never
   point it at a built path.
 

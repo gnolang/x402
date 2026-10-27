@@ -81,13 +81,13 @@ Its network is `gno:onyx-1`, so a seller using it sets `Network` to that. You ca
 Install the [client mechanism](client/README.md) from npm:
 
 ```sh
-npm i @gnoverse/x402-gno
+npm i @gnolang/x402
 ```
 
 Register it on a stock x402 client and admit ugnot to the client's spend controls:
 
 ```js
-import { ExactGnoScheme } from "@gnoverse/x402-gno/exact/client";
+import { ExactGnoScheme } from "@gnolang/x402/exact/client";
 
 const client = new x402Client()
   .register("gno:*", new ExactGnoScheme(wallet))
