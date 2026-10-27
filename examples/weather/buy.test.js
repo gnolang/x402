@@ -86,14 +86,14 @@ describe("buy.mjs paying", () => {
     await Promise.all([seller, node].map((server) => new Promise((resolve) => server.close(resolve))));
   });
 
-  // Runs the buyer against the seller with X402_GNO_RPC naming the node, and
-  // waits for it to exit.
-  async function buy() {
+  // Runs the buyer against the seller with X402_GNO_RPC naming the node, by
+  // default as a URL, and waits for it to exit.
+  async function buy(rpc = `http://127.0.0.1:${node.address().port}`) {
     await new Promise((resolve) => {
       execFile(
         process.execPath,
         [fileURLToPath(BUYER), `http://127.0.0.1:${seller.address().port}/weather`],
-        { env: { PATH: process.env.PATH, X402_GNO_RPC: `http://127.0.0.1:${node.address().port}` } },
+        { env: { PATH: process.env.PATH, X402_GNO_RPC: rpc } },
         resolve,
       );
     });
@@ -109,6 +109,18 @@ describe("buy.mjs paying", () => {
 
   it("reads the account from X402_GNO_RPC when it is set, whatever chain the offer names", async () => {
     await buy();
+
+    expect(seen).toContain("node");
+  });
+
+  it("reaches a node X402_GNO_RPC names in tm2's tcp:// form", async () => {
+    await buy(`tcp://127.0.0.1:${node.address().port}`);
+
+    expect(seen).toContain("node");
+  });
+
+  it("reaches a node X402_GNO_RPC names in gnokey's host:port form", async () => {
+    await buy(`127.0.0.1:${node.address().port}`);
 
     expect(seen).toContain("node");
   });

@@ -244,7 +244,7 @@ the offer names. Both buyers read these environment variables:
 |---|---|
 | `X402_MNEMONIC` | the mnemonic that signs. Unset, the buyer signs as gno's public test1 key |
 | `X402_SESSION_MASTER` | an account's address. `X402_MNEMONIC` is then a [session key](../../client/README.md#paying-with-a-session-key) that account registered, and the payment moves that account's coins within the session's limits |
-| `X402_GNO_RPC` | the node the buyer reads its account sequence from, on the chain the offer names. Unset, it is the chain's public RPC where the buyer knows one (`onyx-1`), else `http://127.0.0.1:26657` |
+| `X402_GNO_RPC` | the node the buyer reads its account sequence from, on the chain the offer names: a URL, a `tcp://` address or gnokey's `host:port`. Unset, it is the chain's public RPC where the buyer knows one (`onyx-1`), else `http://127.0.0.1:26657` |
 | `X402_SELLER_URL` | the seller URL when the command names none. Unset, it is `http://localhost:8401/weather` |
 
 Set `X402_GNO_RPC` for any other chain, to the node the facilitator uses.

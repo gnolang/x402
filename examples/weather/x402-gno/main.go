@@ -102,13 +102,17 @@ func run(args []string, getenv func(string) string, out io.Writer) int {
 }
 
 // rpcFor returns the node to read the account from for a payment on network,
-// "gno:<chain id>". A node reports its address in tm2's own form, which names
-// the transport rather than the scheme an HTTP client needs.
+// "gno:<chain id>", as an http(s) URL. A node reports its address in tm2's own
+// form, which names the transport rather than the scheme an HTTP client needs,
+// and gnokey's -remote takes a bare host:port.
 func rpcFor(network string, getenv func(string) string) string {
 	chain, _ := strings.CutPrefix(network, "gno:")
 	rpc := cmp.Or(getenv("X402_GNO_RPC"), publicRPC[chain], localRPC)
 	if addr, ok := strings.CutPrefix(rpc, "tcp://"); ok {
 		return "http://" + addr
+	}
+	if !strings.Contains(rpc, "://") {
+		return "http://" + rpc
 	}
 	return rpc
 }

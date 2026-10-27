@@ -46,11 +46,12 @@ const PUBLIC_RPC = new Map([["onyx-1", "https://rpc.onyx.testnets.gno.land:443"]
 const LOCAL_RPC = "http://127.0.0.1:26657";
 
 // rpcFor returns the node to read the account from for a payment on network,
-// "gno:<chain id>". A node reports its address in tm2's own form, which names
-// the transport rather than the scheme an HTTP client needs.
+// "gno:<chain id>", as an http(s) URL. A node reports its address in tm2's own
+// form, which names the transport rather than the scheme an HTTP client needs,
+// and gnokey's -remote takes a bare host:port.
 function rpcFor(network) {
   const rpc = process.env.X402_GNO_RPC ?? PUBLIC_RPC.get(network.replace(/^gno:/, "")) ?? LOCAL_RPC;
-  return rpc.replace(/^tcp:\/\//, "http://");
+  return rpc.includes("://") ? rpc.replace(/^tcp:\/\//, "http://") : `http://${rpc}`;
 }
 
 // --new-key writes nothing and sends no request: the mnemonic it prints is the
