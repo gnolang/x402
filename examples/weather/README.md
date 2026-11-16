@@ -219,17 +219,17 @@ node examples/weather/buy.mjs --new-key https://x402.gno.dev/weather
 X402_MNEMONIC='<mnemonic>' node examples/weather/buy.mjs https://x402.gno.dev/weather
 ```
 
-The Go buyer, [`x402-gno`](https://github.com/gnolang/x402/blob/v0.7.0/examples/weather/x402-gno/main.go),
+The Go buyer, [`x402-gno`](https://github.com/gnolang/x402/blob/v0.7.1/examples/weather/x402-gno/main.go),
 takes the same steps with `go run`. It needs Go 1.26.5 or later, which Go 1.21 and later fetch by
 themselves unless `GOTOOLCHAIN` is `local`. Read it first too:
 
 ```sh
-go run github.com/gnolang/x402/examples/weather/x402-gno@v0.7.0 --new-key https://x402.gno.dev/weather
-X402_MNEMONIC='<mnemonic>' go run github.com/gnolang/x402/examples/weather/x402-gno@v0.7.0 https://x402.gno.dev/weather
+go run github.com/gnolang/x402/examples/weather/x402-gno@v0.7.1 --new-key https://x402.gno.dev/weather
+X402_MNEMONIC='<mnemonic>' go run github.com/gnolang/x402/examples/weather/x402-gno@v0.7.1 https://x402.gno.dev/weather
 ```
 
 `go run` fetches the Go module at that release and builds the buyer, about 100 MB of modules the
-first time. `go install github.com/gnolang/x402/examples/weather/x402-gno@v0.7.0` keeps it as the
+first time. `go install github.com/gnolang/x402/examples/weather/x402-gno@v0.7.1` keeps it as the
 `x402-gno` command. In a clone, `go run ./examples/weather/x402-gno` from the repository root runs
 the checkout's buyer, and the pay command its `--new-key` prints runs from inside the clone only.
 
