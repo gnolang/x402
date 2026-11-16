@@ -81,9 +81,8 @@ it: `go run github.com/gnolang/x402/examples/weather/x402-gno@v0.7.1 <seller URL
 a clone. It too signs with the mnemonic it is given, so read it first.
 
 The Go and JavaScript mechanisms sign the same transaction with the same signature bytes for the
-same offer, key and chain state, and a test holds them to it. The encoded bytes sent can still
-differ: for a payer's own key, amino writes the zero `session_addr` the JavaScript encoding leaves
-out. The one exception to matching signatures is a memo holding U+2028 or U+2029: tm2's sign doc
+same offer, key and chain state, and a test holds them to it, down to the encoded bytes sent. The
+one exception to matching signatures is a memo holding U+2028 or U+2029: tm2's sign doc
 escapes those and the JavaScript one does not, so the chain refuses the JavaScript signature over
 such a memo. The Go mechanism differs in these ways:
 

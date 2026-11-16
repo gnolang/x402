@@ -17,7 +17,7 @@ go 1.26.5
 replace github.com/gnolang/x402 => ..
 
 require (
-	github.com/gnolang/gno v1.5.1-0.20260928125126-5cdbc25fcde0
+	github.com/gnolang/gno v1.7.1
 	github.com/gnolang/x402 v0.0.0
 	github.com/rogpeppe/go-internal v1.15.0
 	github.com/stretchr/testify v1.11.1
