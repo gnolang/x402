@@ -63,22 +63,16 @@ func decode(t *testing.T, raw []byte) std.Tx {
 // docs — the same chain id, account number, sequence, fee, message and memo,
 // rendered the same way.
 //
-// The bytes as sent differ in one place, so the second assertion compares
-// through amino. amino writes a signature's session_addr even when it is the
-// zero address, as that address's bech32 string, where the TypeScript encoding
-// leaves the field out. Both decode to the same transaction, the signature
-// covers neither, and the facilitator relays whichever bytes the buyer sent;
-// only the transaction's hash differs, and a buyer reads that from the
-// settlement. Should amino come to skip the zero address, as std.Signature's
-// own comment says it does, the assertion still holds.
+// The bytes as sent are identical too: both leave a master signature's zero
+// session_addr off the wire, the one encoding a chain that accepts only the
+// canonical form admits.
 func TestAPaymentIsTheTypeScriptMechanismsByteForByte(t *testing.T) {
 	theirs := fixture(t, "testdata", tsMasterFixture)
 
 	ours := rawOf(t, pay(t, exact.NewExactGnoScheme(signerFrom(t, test1Mnemonic), newFakeNode()), interopOffer()))
 
 	assert.Equal(t, decode(t, theirs).Signatures[0].Signature, decode(t, ours).Signatures[0].Signature)
-	assert.Equal(t, amino.MustMarshal(decode(t, theirs)), ours,
-		"the payment is the TypeScript one, as amino encodes a transaction")
+	assert.Equal(t, theirs, ours, "the payment is the TypeScript one, byte for byte")
 }
 
 // TestASessionPaymentIsTheTypeScriptMechanismsByteForByte is the same for a
